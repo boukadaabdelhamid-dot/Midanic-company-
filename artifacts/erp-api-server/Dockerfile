@@ -1,17 +1,28 @@
-FROM node:20-alpine AS build
-ARG RAILWAY_GIT_COMMIT_SHA
-RUN apk add --no-cache git
-RUN git clone --depth 1 https://github.com/boukadaabdelhamid-dot/plattino.git /repo
-WORKDIR /repo
-RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
-RUN pnpm install --frozen-lockfile=false --filter @workspace/api-server... --filter @workspace/db
-ENV NODE_ENV=production
-RUN pnpm --filter @workspace/api-server run build
+FROM node:22-alpine AS build
 
-FROM node:20-alpine AS runtime
-RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
+RUN npm install -g pnpm@10
+WORKDIR /app
+
+# Railway must use the repository root as the build context.  Build from the
+# checked-out Midanic source instead of cloning a different repository.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY lib ./lib
+COPY artifacts/erp-api-server ./artifacts/erp-api-server
+COPY vendor ./vendor
+
+RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
-COPY --from=build /repo /app
-WORKDIR /app/artifacts/api-server
-EXPOSE 3000
-CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
+RUN pnpm --filter @workspace/erp-api-server run build
+
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+# The ERP bundle intentionally externalizes pg and a few native/runtime
+# packages, so retain the pnpm dependency tree in the runtime image.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/artifacts/erp-api-server/dist ./artifacts/erp-api-server/dist
+COPY --from=build /app/package.json ./package.json
+
+EXPOSE 8080
+CMD ["node", "--enable-source-maps", "/app/artifacts/erp-api-server/dist/index.mjs"]

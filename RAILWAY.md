@@ -1,6 +1,9 @@
 # Deploying to Railway
 
-This project deploys as a **single Railway service** — the Express API server also serves the pre-built React frontend, so both share the same origin and no CORS configuration is needed.
+This project is deployed as four Railway services from the same GitHub
+repository: Platform API, ERP API, ERP Web, and Web Store. Create each service
+with the repository root (`/`) as its build context and set the Dockerfile path
+shown below. Do not use the old single-service configuration.
 
 ---
 
@@ -14,20 +17,30 @@ This project deploys as a **single Railway service** — the Express API server 
 ## Step 1 — Create a new Railway project
 
 1. Go to [railway.app/new](https://railway.app/new) and click **Deploy from GitHub repo**
-2. Select your repository — Railway will detect the `Dockerfile` automatically
+2. Select `boukadaabdelhamid-dot/Midanic-company-`.
+3. Add four services from the same repository. For each service, use `/` as
+   the Root Directory and the matching Dockerfile path:
+
+   | Service | Dockerfile |
+   |---|---|
+   | Platform API + Platform Web | `/Dockerfile` |
+   | ERP API | `/artifacts/erp-api-server/Dockerfile` |
+   | ERP Web | `/artifacts/erp/Dockerfile` |
+   | Web Store | `/artifacts/web-store/Dockerfile` |
 
 ---
 
 ## Step 2 — Add a PostgreSQL database
 
-1. In your Railway project, click **+ New** → **Database** → **PostgreSQL**
-2. Railway will provision a Postgres instance and add `DATABASE_URL` to the service's shared variables automatically
+1. In your Railway project, click **+ New** → **Database** → **PostgreSQL**.
+2. Share the resulting `DATABASE_URL` with Platform API and ERP API.
+3. Platform owns the `public` schema; ERP creates and uses the `erp` schema.
 
 ---
 
 ## Step 3 — Set environment variables
 
-In your service's **Variables** tab, add:
+For **Platform API**, add:
 
 | Variable | Value | Notes |
 |----------|-------|-------|
@@ -36,6 +49,31 @@ In your service's **Variables** tab, add:
 | `DATABASE_URL` | *(auto-injected by Railway PostgreSQL)* | No action needed if you added the DB add-on |
 | `ADMIN_EMAIL` | Your administrator email | Used once to create the first `super_admin` account |
 | `ADMIN_PASSWORD` | A strong password (12+ characters) | Used once to create the first `super_admin` account |
+
+For **ERP API**, add:
+
+| Variable | Required | Notes |
+|---|---:|---|
+| `NODE_ENV` | Yes | `production` |
+| `DATABASE_URL` | Yes | Same Railway PostgreSQL URL |
+| `SESSION_SECRET` or `JWT_SECRET` | Yes | Strong random secret |
+| `ALLOWED_ORIGINS` | Yes | ERP Web and Web Store public URLs, comma-separated |
+| `FRONTEND_URL` | Recommended | Public ERP Web URL |
+| `WEB_STORE_URL` | Recommended | Public Web Store URL |
+| `APP_URL` | Recommended | Public ERP Web URL |
+
+For **ERP Web**, set the Docker build variable:
+
+| Variable | Value |
+|---|---|
+| `VITE_API_URL` | Public ERP API URL |
+
+For **Web Store**, set:
+
+| Variable | Value |
+|---|---|
+| `VITE_API_URL` | Public ERP API URL |
+| `VITE_STORE_SLUG` | The public store slug, for example `principal` |
 
 > **Tip:** Generate a strong secret with: `openssl rand -hex 32`
 
@@ -49,7 +87,7 @@ only needed for first-account bootstrap.
 
 ---
 
-## Step 4 — Run database migrations (first deploy only)
+## Step 4 — Database initialization
 
 After the first successful deploy, open the service's **Shell** tab and run:
 
@@ -59,14 +97,10 @@ cd /app
 # a one-off Railway run command:
 ```
 
-Because the Docker image only ships the compiled bundle (not the source), run migrations **before** the first deploy from your local machine or Replit:
-
-```bash
-# On Replit / local, with DATABASE_URL set to your Railway Postgres URL:
-DATABASE_URL="<your-railway-postgres-url>" pnpm --filter @workspace/db run push
-```
-
-You can find the Railway Postgres URL in the database service's **Variables** tab under `DATABASE_URL`.
+The Platform API applies its bundled migrations during startup. The ERP API
+creates and reconciles its `erp` schema during startup. Deploy Platform API
+before ERP API on a fresh database, then verify both health checks. Do not run
+the old `lib/db` migration command against the ERP schema.
 
 ---
 
@@ -74,10 +108,12 @@ You can find the Railway Postgres URL in the database service's **Variables** ta
 
 Push a commit to your GitHub main branch — Railway will rebuild and redeploy automatically.
 
-The health-check endpoint is at:
+The health-check endpoints are:
 ```
 GET /api/healthz   →  { "status": "ok" }
 ```
+
+The same endpoint is used by both API services.
 
 ---
 
@@ -101,7 +137,10 @@ To verify the image builds and runs correctly before pushing to Railway:
 
 ```bash
 # Build
-docker build -t midanic .
+docker build -f Dockerfile -t midanic-platform .
+docker build -f artifacts/erp-api-server/Dockerfile -t midanic-erp-api .
+docker build -f artifacts/erp/Dockerfile -t midanic-erp-web .
+docker build -f artifacts/web-store/Dockerfile -t midanic-store .
 
 # Run (supply your own DATABASE_URL)
 docker run -p 8080:8080 \
