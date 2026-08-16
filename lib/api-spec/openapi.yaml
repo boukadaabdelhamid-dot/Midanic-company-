@@ -1,0 +1,1126 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Midanic SaaS Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: products
+    description: Product catalog
+  - name: blog
+    description: Blog posts
+  - name: news
+    description: News articles
+  - name: downloads
+    description: Software downloads
+  - name: contact
+    description: Contact & inquiries
+  - name: profile
+    description: User profile
+  - name: stats
+    description: Public statistics
+  - name: storage
+    description: Object storage upload and serving endpoints.
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ── AUTH ─────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshInput"
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout and revoke refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshInput"
+      responses:
+        "204":
+          description: Logged out successfully
+
+  # ── PRODUCTS ─────────────────────────────────────────────────────────────────
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all published products
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: featured
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /products/{slug}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a single product by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /products/{slug}/versions:
+    get:
+      operationId: listProductVersions
+      tags: [products]
+      summary: List versions for a product
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Version list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductVersion"
+
+  /products/{slug}/downloads:
+    get:
+      operationId: listProductDownloads
+      tags: [products]
+      summary: List public download files for a product
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Download files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DownloadFile"
+
+  # ── DOWNLOADS ─────────────────────────────────────────────────────────────────
+  /downloads:
+    get:
+      operationId: listDownloads
+      tags: [downloads]
+      summary: List all public download files
+      responses:
+        "200":
+          description: Download files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DownloadFile"
+
+  # ── BLOG ─────────────────────────────────────────────────────────────────────
+  /blog:
+    get:
+      operationId: listBlogPosts
+      tags: [blog]
+      summary: List published blog posts
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Blog posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogListResponse"
+
+  /blog/{slug}:
+    get:
+      operationId: getBlogPost
+      tags: [blog]
+      summary: Get a blog post by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── NEWS ─────────────────────────────────────────────────────────────────────
+  /news:
+    get:
+      operationId: listNews
+      tags: [news]
+      summary: List published news articles
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: News articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsListResponse"
+
+  /news/{slug}:
+    get:
+      operationId: getNewsArticle
+      tags: [news]
+      summary: Get a news article by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: News article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsArticle"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── CONTACT & INQUIRIES ────────────────────────────────────────────────────
+  /contact:
+    post:
+      operationId: submitContact
+      tags: [contact]
+      summary: Submit a contact message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactInput"
+      responses:
+        "201":
+          description: Contact message received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /trial-request:
+    post:
+      operationId: requestTrial
+      tags: [contact]
+      summary: Request a trial license
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrialRequestInput"
+      responses:
+        "201":
+          description: Trial request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /demo-request:
+    post:
+      operationId: requestDemo
+      tags: [contact]
+      summary: Request a product demo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRequestInput"
+      responses:
+        "201":
+          description: Demo request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /newsletter/subscribe:
+    post:
+      operationId: subscribeNewsletter
+      tags: [contact]
+      summary: Subscribe to newsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterInput"
+      responses:
+        "201":
+          description: Subscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "409":
+          description: Already subscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── PROFILE (authenticated) ───────────────────────────────────────────────
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /profile/change-password:
+    post:
+      operationId: changePassword
+      tags: [profile]
+      summary: Change user password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid current password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /profile/change-email:
+    patch:
+      operationId: changeEmail
+      tags: [profile]
+      summary: Change the authenticated administrator email
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeEmailInput"
+      responses:
+        "200":
+          description: Email changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Invalid email or current password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /profile/language:
+    patch:
+      operationId: updateLanguage
+      tags: [profile]
+      summary: Update user preferred language
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LanguageUpdate"
+      responses:
+        "200":
+          description: Language updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── STATS (public wow endpoints) ─────────────────────────────────────────
+  /stats/summary:
+    get:
+      operationId: getPublicStats
+      tags: [stats]
+      summary: Get public platform statistics
+      responses:
+        "200":
+          description: Platform stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStats"
+
+  /stats/featured-products:
+    get:
+      operationId: getFeaturedProducts
+      tags: [stats]
+      summary: Get featured/top products
+      responses:
+        "200":
+          description: Featured products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+
+  /storage/uploads/request-url:
+    post:
+      tags: [storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to generate upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /storage/objects/{objectPath}:
+    get:
+      tags: [storage]
+      operationId: getStorageObject
+      summary: Serve a private object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SuccessResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # ── AUTH SCHEMAS ──────────────────────────────────────────────────────────
+    RegisterInput:
+      type: object
+      required: [email, password, firstName, lastName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        firstName:
+          type: string
+        lastName:
+          type: string
+        companyName:
+          type: string
+        language:
+          type: string
+          enum: [en, fr, ar]
+          default: en
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    RefreshInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+
+    TokenResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+
+    # ── USER/PROFILE SCHEMAS ─────────────────────────────────────────────────
+    UserProfile:
+      type: object
+      required: [id, email, firstName, lastName, role, language, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, admin, support, billing, customer]
+        language:
+          type: string
+          enum: [en, fr, ar]
+        companyName:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        twoFactorEnabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        companyName:
+          type: string
+        phone:
+          type: string
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+
+    ChangeEmailInput:
+      type: object
+      required: [currentPassword, newEmail]
+      properties:
+        currentPassword:
+          type: string
+        newEmail:
+          type: string
+          format: email
+
+    LanguageUpdate:
+      type: object
+      required: [language]
+      properties:
+        language:
+          type: string
+          enum: [en, fr, ar]
+
+    # ── PRODUCT SCHEMAS ──────────────────────────────────────────────────────
+    Product:
+      type: object
+      required: [id, name, slug, description, category, published, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        shortDescription:
+          type: ["string", "null"]
+        category:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        videoUrl:
+          type: ["string", "null"]
+        featured:
+          type: boolean
+        published:
+          type: boolean
+        trialDays:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ProductDetail:
+      type: object
+      required: [id, name, slug, description, category, published, createdAt, versions, downloads]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        shortDescription:
+          type: ["string", "null"]
+        category:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        videoUrl:
+          type: ["string", "null"]
+        featured:
+          type: boolean
+        published:
+          type: boolean
+        trialDays:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVersion"
+        downloads:
+          type: array
+          items:
+            $ref: "#/components/schemas/DownloadFile"
+
+    ProductVersion:
+      type: object
+      required: [id, productId, version, releaseNotes, releasedAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        version:
+          type: string
+        releaseNotes:
+          type: ["string", "null"]
+        isLatest:
+          type: boolean
+        releasedAt:
+          type: string
+          format: date-time
+
+    DownloadFile:
+      type: object
+      required: [id, productId, fileName, fileSize, platform, downloadUrl, createdAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        versionId:
+          type: ["integer", "null"]
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        platform:
+          type: string
+          enum: [windows, mac, linux, android, ios, web]
+        version:
+          type: ["string", "null"]
+        downloadUrl:
+          type: string
+        downloadCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── BLOG SCHEMAS ─────────────────────────────────────────────────────────
+    BlogPost:
+      type: object
+      required: [id, title, slug, content, published, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: ["string", "null"]
+        content:
+          type: string
+        coverImageUrl:
+          type: ["string", "null"]
+        authorName:
+          type: ["string", "null"]
+        published:
+          type: boolean
+        publishedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    BlogListResponse:
+      type: object
+      required: [posts, total, page, limit]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlogPost"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ── NEWS SCHEMAS ─────────────────────────────────────────────────────────
+    NewsArticle:
+      type: object
+      required: [id, title, slug, content, published, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: ["string", "null"]
+        content:
+          type: string
+        coverImageUrl:
+          type: ["string", "null"]
+        published:
+          type: boolean
+        publishedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    NewsListResponse:
+      type: object
+      required: [articles, total, page, limit]
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsArticle"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ── CONTACT SCHEMAS ───────────────────────────────────────────────────────
+    ContactInput:
+      type: object
+      required: [name, email, subject, message]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        subject:
+          type: string
+        message:
+          type: string
+
+    TrialRequestInput:
+      type: object
+      required: [name, email, companyName, productId]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        companyName:
+          type: string
+        phone:
+          type: string
+        productId:
+          type: integer
+        message:
+          type: string
+
+    DemoRequestInput:
+      type: object
+      required: [name, email, companyName, productId]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        companyName:
+          type: string
+        phone:
+          type: string
+        productId:
+          type: integer
+        preferredDate:
+          type: string
+        message:
+          type: string
+
+    NewsletterInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+
+    # ── STATS SCHEMAS ─────────────────────────────────────────────────────────
+    PublicStats:
+      type: object
+      required: [totalProducts, totalClients, totalDownloads, totalCountries]
+      properties:
+        totalProducts:
+          type: integer
+        totalClients:
+          type: integer
+        totalDownloads:
+          type: integer
+        totalCountries:
+          type: integer
+        yearsInBusiness:
+          type: integer

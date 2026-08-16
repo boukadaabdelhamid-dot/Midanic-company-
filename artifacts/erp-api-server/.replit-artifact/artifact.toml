@@ -1,0 +1,31 @@
+kind = "api"
+previewPath = "/erp-api"
+title = "Midanic ERP API"
+version = "1.0.0"
+id = "3B4_FFSkEVBkAeYMFRJ2e"
+
+[[services]]
+localPort = 8082
+name = "ERP API"
+paths = ["/erp-api"]
+
+[services.development]
+run = "pnpm --filter @workspace/erp-api-server run dev"
+
+[services.production]
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/erp-api-server", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["node", "--enable-source-maps", "artifacts/erp-api-server/dist/index.mjs"]
+
+[services.production.run.env]
+PORT = "8082"
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/erp-api/healthz"

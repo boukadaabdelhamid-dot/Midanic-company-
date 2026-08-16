@@ -1,0 +1,17 @@
+- [Expo Web navigation timing](expo-web-navigation-timing.md) — defer protected-route redirects until the root navigation state is mounted.
+- [ERP product history permissions](erp-product-history-permissions.md) — product history is admin-only; mobile must disable history tabs for non-admin staff.
+- [Mobile ERP parity constraints](mobile-erp-parity-constraints.md) — setup-screen previews cannot validate authenticated ERP screens without a configured server session.
+- [Mobile product form parity](mobile-product-form-parity.md) — product dialogs follow generated API support; unsupported ERP-only operations stay out of Mobile.
+- [Mobile product columns](mobile-products-columns.md) — ERP separates Exposé, État, and Vitrine, but current API has no independent Vitrine field.
+- [Mobile sheet scrolling](mobile-sheet-scroll.md) — long bottom-sheet lists need bounded flex layout to scroll correctly on small screens.
+- [Mobile image upload](mobile-image-upload.md) — Expo Web needs a Blob in multipart FormData; native uses the URI descriptor.
+- [Mobile customer balance](mobile-customer-balance.md) — customer list balance may arrive as `current_balance`, omitted from the generated summary type.
+- [Mobile store-session synchronization](mobile-store-session-jwt-sync.md) — changing the active store must persist both the local store ID and the JWT returned by the selection endpoint.
+- [Mobile contact history coverage](mobile-contact-history-coverage.md) — customer history includes orders/returns/operations; supplier returns need an API endpoint not currently exposed.
+- [Mobile payroll coverage](mobile-payroll-coverage.md) — employee Paie uses the existing generated payroll hooks and stays under the payroll permission section.
+- [Mobile profitability reports](mobile-profitability-reports.md) — profitability reports use the existing admin report hooks for period and entity breakdowns.
+- [Mobile real-time dashboard](mobile-realtime-dashboard.md) — Temps réel mirrors ERP order KPIs with live polling, not a WebSocket-only empty screen.
+- [Mobile dashboard date filters](mobile-dashboard-date-filters.md) — custom dashboard periods use native start/end date pickers with the existing date-range API parameters.
+- [Expo Web date fields](expo-web-date-fields.md) — community native DateTimePicker needs an HTML date-input path when Mobile is previewed in a browser.
+- [Mobile drawer accordion](mobile-drawer-accordion.md) — sidebar group headings collapse to one open section while preserving route and permission behavior.
+- [Mobile home tile layout](mobile-home-tile-layout.md) — Accueil uses two-column colored square cards with light 3D depth and direct module navigation.

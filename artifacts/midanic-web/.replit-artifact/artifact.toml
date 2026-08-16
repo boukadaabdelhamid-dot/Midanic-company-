@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Midanic Platform"
+version = "1.0.0"
+id = "artifacts/midanic-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22990
+
+[services.development]
+run = "pnpm --filter @workspace/midanic-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/midanic-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/midanic-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22990"
+BASE_PATH = "/"

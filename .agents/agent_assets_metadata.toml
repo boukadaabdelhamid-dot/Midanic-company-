@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "wU9fYP2ckjIrYrSeGj59f"
+uri = "file://release/Medanic-Windows-Build-Kit-v1.0.0.zip"
+type = "unspecified"
+title = "Medanic Windows Build Kit v1.0.0"
+description = "حزمة بناء برنامج مدرسة السياقة فقط. شغّل BUILD_EXE.bat على Windows لإنتاج dist\\Medanic.exe، ثم انشر ملف Medanic.exe فقط للزبائن."

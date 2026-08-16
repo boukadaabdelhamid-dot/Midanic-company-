@@ -1,0 +1,53 @@
+Auth library initialized
+(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Serving frontend static files
+Database migration failed — server will not start
+Database migration failure details: {
+  name: 'error',
+  message: 'relation "drizzle.__drizzle_migrations" does not exist',
+  stack: 'error: relation "drizzle.__drizzle_migrations" does not exist\n' +
+    '    at <anonymous> (/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool/index.js:45:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n' +
+    '    at async runMigrations (/lib/db/src/index.ts:155:20)'
+}
+Starting Container
+Auth library initialized
+(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Serving frontend static files
+Database migration failed — server will not start
+Database migration failure details: {
+  name: 'error',
+  message: 'relation "drizzle.__drizzle_migrations" does not exist',
+  stack: 'error: relation "drizzle.__drizzle_migrations" does not exist\n' +
+    '    at <anonymous> (/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool/index.js:45:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n' +
+    '    at async runMigrations (/lib/db/src/index.ts:155:20)'
+}
+Auth library initialized
+(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Serving frontend static files
+Database migration failed — server will not start
+Database migration failure details: {
+  name: 'error',
+  message: 'relation "drizzle.__drizzle_migrations" does not exist',
+  stack: 'error: relation "drizzle.__drizzle_migrations" does not exist\n' +
+    '    at <anonymous> (/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool/index.js:45:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n' +
+    '    at async runMigrations (/lib/db/src/index.ts:155:20)'
+}
+Auth library initialized
+(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Serving frontend static files
+Database migration failed — server will not start
+Database migration failure details: {
+  name: 'error',
+  message: 'relation "drizzle.__drizzle_migrations" does not exist',
+  stack: 'error: relation "drizzle.__drizzle_migrations" does not exist\n' +
+    '    at <anonymous> (/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool/index.js:45:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n' +
+    '    at async runMigrations (/lib/db/src/index.ts:155:20)'
+}

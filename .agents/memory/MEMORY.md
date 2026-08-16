@@ -1,0 +1,14 @@
+- [Zod v4 codegen resolution](zod-v4-codegen.md) — Orval 8.23+ generates v4 syntax; zod@3.x ships v4 under 'zod/v4'; fix requires tsconfig paths alias + esbuild plugin (not alias option)
+- [esbuild alias prefix matching](esbuild-alias-prefix.md) — esbuild alias does prefix matching, so alias {zod→zod/v4} also remaps zod/v4→zod/v4/v4; use an onResolve plugin with /^zod$/ filter instead
+- [i18next package firewall](i18next-version.md) — Replit package firewall only serves i18next v26+; design subagent may request v23.x which fails; always use ^26.0.0 in midanic-web
+- [API production bundle dependencies](api-production-bundle-dependencies.md) — Docker runtime copies only dist; dependencies used by the API must be bundled or explicitly copied into the final image
+- [Legacy database migration bootstrap](legacy-database-migration-bootstrap.md) — Existing push-managed databases need idempotent schema reconciliation before timestamp-based migrations
+- [External deployment uploads](external-deployment-uploads.md) — Replit Object Storage sidecar is unavailable outside Replit; production needs a durable non-sidecar upload path
+- [Desktop license protection](desktop-license-protection.md) — Customer builds must fail closed when the local license guard is missing; never silently bypass activation
+- [Separate product repositories](separate-product-repositories.md) — Keep desktop-client as an independent Git repository; never push its files through the platform repository remote
+- [Midanic API routing](midanic-api-routing.md) — The web artifact needs a dev proxy for /api; production relies on path routing to the separate API artifact and must be verified after publishing
+- [R2 browser upload CORS](r2-browser-upload-cors.md) — Direct browser PUT uploads require an explicit CORS policy on the Cloudflare R2 bucket
+- [Admin settings persistence](admin-settings-persistence.md) — Store panel appearance in PostgreSQL and background images as object-storage URLs, never browser-only or binary DB data
+- [ERP control plane](erp-control-plane.md) — Midanic Super Admin is the source of truth for ERP tenant lifecycle, trial access, suspension, and support entry
+- [Idempotent core catalog](idempotent-core-catalog.md) — Never gate later product seed data on the original admin seed; long-lived databases need safe catalog repair on startup
+- [ERP API isolation](erp-api-isolation.md) — The full ERP source API must run as a separate artifact on PostgreSQL schema `erp`, never against Midanic's public schema

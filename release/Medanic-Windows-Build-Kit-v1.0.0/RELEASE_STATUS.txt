@@ -1,0 +1,21 @@
+Medanic Windows Build Kit v1.0.0
+================================
+
+STATUS: NOT A CUSTOMER RELEASE
+
+This archive is a Windows build kit, not the final customer installer.
+It contains source files required to build Medanic.exe with PyInstaller.
+
+Why it is not ready for customers:
+- Medanic.exe was not built in this archive.
+- The current build environment is Linux, not Windows.
+- The final EXE must be built and tested on Windows before publication.
+
+Build on Windows:
+1. Open this folder on a Windows machine.
+2. Run BUILD_EXE.bat.
+3. Confirm that dist\Medanic.exe is created.
+4. Test a fresh machine and the 30-day trial flow.
+5. Publish only dist\Medanic.exe to customers.
+
+Do not publish this archive or its Python source files to customers.
