@@ -17,8 +17,9 @@ import {
 } from 'recharts';
 import {
   Users, Package, Key, Ticket, TrendingUp,
-  AlertTriangle, CalendarClock, Sparkles,
+  AlertTriangle, CalendarClock, Sparkles, BriefcaseBusiness, ExternalLink,
 } from 'lucide-react';
+import { type MyErpAccess } from '@/lib/admin-api';
 import { useGetPublicStats } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -67,14 +68,16 @@ export default function AdminOverview() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [monthly, setMonthly] = useState<MonthlyLicenseCount[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [erpAccess, setErpAccess] = useState<MyErpAccess | null>(null);
   const { data: publicStats } = useGetPublicStats();
   const { toast } = useToast();
 
   useEffect(() => {
-    Promise.all([adminApi.getStats(), adminApi.getMonthlyLicenses()])
-      .then(([s, m]) => {
+    Promise.all([adminApi.getStats(), adminApi.getMonthlyLicenses(), adminApi.getMyErpAccess()])
+      .then(([s, m, erp]) => {
         setStats(s);
         setMonthly(m.data);
+        setErpAccess(erp);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -109,6 +112,33 @@ export default function AdminOverview() {
       {error && (
         <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
       )}
+
+      {/* ── ERP Quick Access ─────────────────────────────────────────────── */}
+      <Card className={erpAccess?.canAccess ? 'border-primary/40 bg-primary/[0.03]' : ''}>
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
+              <BriefcaseBusiness className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-semibold">Midanic ERP</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {erpAccess?.canAccess
+                  ? (erpAccess.companyName ? `${erpAccess.companyName} · ` : '') + 'Your ERP workspace is ready.'
+                  : erpAccess?.message ?? 'Loading ERP access…'}
+              </p>
+            </div>
+          </div>
+          {erpAccess?.canAccess && erpAccess.launchUrl && (
+            <Button asChild className="shrink-0 gap-2">
+              <a href={erpAccess.launchUrl} target="_blank" rel="noopener noreferrer">
+                Open ERP
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Primary KPIs ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
