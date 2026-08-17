@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, pgEnum, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, pgEnum, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -8,6 +8,7 @@ export const langEnum = pgEnum("lang", ["ar", "en"]);
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
+  platformUserId: integer("platform_user_id"),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),

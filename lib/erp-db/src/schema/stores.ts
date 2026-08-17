@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, primaryKey, numeric, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, primaryKey, numeric, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -6,6 +6,7 @@ import { usersTable } from "./users";
 
 export const storesTable = pgTable("stores", {
   id: serial("id").primaryKey(),
+  platformTenantId: integer("platform_tenant_id"),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
   slug: text("slug").notNull().unique(),
@@ -20,7 +21,9 @@ export const storesTable = pgTable("stores", {
   ai: text("ai"),
   defaultComptoirCustomerId: integer("default_comptoir_customer_id").references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  platformTenantIdUnique: uniqueIndex("stores_platform_tenant_id_uq").on(t.platformTenantId),
+}));
 
 export const userStoresTable = pgTable("user_stores", {
   userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }).notNull(),

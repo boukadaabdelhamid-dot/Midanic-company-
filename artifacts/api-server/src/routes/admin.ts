@@ -70,6 +70,45 @@ function serializeAdminSettings(settings: typeof adminSettingsTable.$inferSelect
 // All admin routes require authentication and super_admin role
 router.use("/admin", requireAuth, requireRole("super_admin"));
 
+// Platform is the control plane. This bridge lets its Super Admin UI operate
+// ERP resources without exposing ERP's database or service credentials to the
+// browser. ERP validates the same service secret before honoring the request.
+router.use("/admin/erp-control", async (req, res): Promise<void> => {
+  const erpUrl = process.env["ERP_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!erpUrl || !secret) {
+    res.status(503).json({ error: "ERP control bridge is not configured" });
+    return;
+  }
+  const suffix = req.url.replace(/^\/?/, "");
+  const allowed = /^(erp|products|product-types|categories|stores|orders|cart|settings|erp-settings|employees|customers|suppliers|inventory|transfers|caisses)(\/|$)/i.test(suffix);
+  if (!allowed) {
+    res.status(403).json({ error: "ERP resource is not exposed through Platform control" });
+    return;
+  }
+  try {
+    const headers: Record<string, string> = {
+      "X-Platform-Service-Secret": secret,
+      "X-Platform-User-Id": String(req.user?.userId ?? 0),
+      "Content-Type": "application/json",
+    };
+    const storeId = req.header("X-Store-Id");
+    if (storeId) headers["X-Store-Id"] = storeId;
+    const upstream = await fetch(`${erpUrl}/api/${suffix}`, {
+      method: req.method,
+      headers,
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : JSON.stringify(req.body ?? {}),
+    });
+    res.status(upstream.status);
+    const contentType = upstream.headers.get("content-type");
+    if (contentType) res.setHeader("content-type", contentType);
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch (err) {
+    req.log.error(err);
+    res.status(502).json({ error: "ERP control bridge unavailable" });
+  }
+});
+
 // ── ADMIN APPEARANCE SETTINGS ──────────────────────────────────────────────
 router.get("/admin/settings", async (_req, res): Promise<void> => {
   let [settings] = await db.select().from(adminSettingsTable).limit(1);

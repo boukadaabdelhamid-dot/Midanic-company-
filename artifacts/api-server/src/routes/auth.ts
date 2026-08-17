@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, erpTenantsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   RegisterBody,
@@ -18,6 +18,7 @@ import {
   revokeRefreshToken,
   validateRefreshToken,
   formatUserProfile,
+  generateErpSsoToken,
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/auth";
 
@@ -121,6 +122,87 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     stores: [],
     currentStoreId: null,
   });
+});
+
+router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      status: erpTenantsTable.status,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
+    .limit(1);
+
+  const trialExpired = !!tenant?.trialEndsAt &&
+    tenant.trialEndsAt.getTime() <= Date.now() &&
+    tenant.status === "active";
+  const status = trialExpired ? "expired" : tenant?.status;
+  if (!tenant || !["active", "converted"].includes(status ?? "")) {
+    res.status(403).json({ error: "ERP access is not active", status: status ?? "none" });
+    return;
+  }
+
+  const token = generateErpSsoToken({
+    userId: req.user!.userId,
+    email: req.user!.email,
+    role: req.user!.role,
+    tenantId: tenant.id,
+  });
+  res.json({ token, expiresIn: 120, tenantId: tenant.id });
+});
+
+router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      status: erpTenantsTable.status,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.ownerUserId, userId))
+    .orderBy(erpTenantsTable.createdAt)
+    .limit(1);
+  const trialExpired = !!tenant?.trialEndsAt &&
+    tenant.trialEndsAt.getTime() <= Date.now() &&
+    tenant.status === "active";
+  const status = trialExpired ? "expired" : tenant?.status ?? "none";
+  res.json({
+    userId,
+    tenantId: tenant?.id ?? null,
+    status,
+    canAccess: status === "active" || status === "converted",
+  });
+});
+
+router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const tenantId = Number(req.params.tenantId);
+  const [tenant] = await db.select({
+    id: erpTenantsTable.id,
+    status: erpTenantsTable.status,
+    trialEndsAt: erpTenantsTable.trialEndsAt,
+  }).from(erpTenantsTable).where(eq(erpTenantsTable.id, tenantId)).limit(1);
+  const trialExpired = !!tenant?.trialEndsAt &&
+    tenant.trialEndsAt.getTime() <= Date.now() &&
+    tenant.status === "active";
+  const status = trialExpired ? "expired" : tenant?.status ?? "none";
+  res.json({ tenantId, status, canAccess: status === "active" || status === "converted" });
 });
 
 router.post("/auth/refresh", async (req, res): Promise<void> => {

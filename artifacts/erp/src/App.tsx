@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, MutationCache, QueryCache } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,6 +10,7 @@ import { useMe } from "@/hooks/use-me";
 import { PermissionsProvider, usePermissions, type PermSection } from "@/hooks/use-permissions";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useRealtimeWS } from "@/hooks/use-realtime-ws";
+import { getApiBase } from "@/lib/api-base";
 import { Layout } from "@/components/layout/Layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
@@ -119,6 +120,36 @@ function ProtectedHome() {
   return <Layout><Home /></Layout>;
 }
 
+function SsoExchange() {
+  const { setToken } = useAuth();
+  const { setStores } = useStoreContext();
+  const [message, setMessage] = useState("جاري تسجيل الدخول عبر Midanic…");
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) {
+      setMessage("رابط الدخول الموحد غير صالح.");
+      return;
+    }
+    fetch(`${getApiBase()}/api/auth/sso/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "SSO failed");
+        setToken(body.token);
+        setStores(body.stores ?? [], body.currentStoreId ?? null);
+        window.history.replaceState({}, "", `${import.meta.env.BASE_URL}home`);
+        window.location.href = `${import.meta.env.BASE_URL}home`.replace(/\/+/g, "/");
+      })
+      .catch(() => setMessage("تعذر تسجيل الدخول الموحد. قد يكون الوصول موقوفاً من Platform."));
+  }, [setToken, setStores]);
+
+  return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">{message}</div>;
+}
+
 function Router() {
   const { token } = useAuth();
   // Single WS connection scoped to the whole app — keeps transfer list,
@@ -128,6 +159,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/sso" component={SsoExchange} />
       <Route path="/select-store" component={SelectStore} />
       <Route path="/">
         {token ? <Redirect to="/home" /> : <Redirect to="/login" />}

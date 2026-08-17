@@ -15,7 +15,23 @@ function resolveJwtSecret(): string {
 
 const JWT_SECRET: string = resolveJwtSecret();
 
-export type JwtPayload = { id: number; email: string; role: string; currentStoreId?: number | null };
+export type JwtPayload = {
+  id: number;
+  email: string;
+  role: string;
+  currentStoreId?: number | null;
+  platformUserId?: number;
+  platformTenantId?: number;
+};
+
+export type PlatformSsoPayload = {
+  userId: number;
+  tenantId: number;
+  email: string;
+  role: string;
+  aud: "erp";
+  purpose: "sso";
+};
 
 export function signToken(payload: JwtPayload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "4h" });
@@ -25,12 +41,60 @@ export function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
 }
 
+export function verifyPlatformSsoToken(token: string): PlatformSsoPayload {
+  const secret = process.env["PLATFORM_SSO_SECRET"] ?? process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
+  if (!secret) throw new Error("PLATFORM_SSO_SECRET must be configured for SSO.");
+  const payload = jwt.verify(token, secret, { audience: "erp" }) as PlatformSsoPayload;
+  if (payload.purpose !== "sso" || !Number.isInteger(payload.userId) || !Number.isInteger(payload.tenantId)) {
+    throw new Error("Invalid Platform SSO payload");
+  }
+  return payload;
+}
+
 export interface AuthRequest extends Request {
   user?: JwtPayload;
   currentStoreId?: number;
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+const accessCache = new Map<number, { expiresAt: number; canAccess: boolean }>();
+
+async function enforcePlatformAccess(user: JwtPayload): Promise<boolean> {
+  if (!user.platformUserId) return process.env["NODE_ENV"] !== "production";
+  const now = Date.now();
+  const cached = accessCache.get(user.platformUserId);
+  if (cached && cached.expiresAt > now) return cached.canAccess;
+  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!baseUrl || !secret) return process.env["NODE_ENV"] !== "production";
+  try {
+    const response = await fetch(`${baseUrl}/api/internal/erp/access/${user.platformUserId}`, {
+      headers: { "X-Platform-Service-Secret": secret },
+    });
+    if (!response.ok) throw new Error(`Platform access check failed: ${response.status}`);
+    const body = await response.json() as { canAccess?: boolean };
+    const canAccess = body.canAccess === true;
+    accessCache.set(user.platformUserId, { expiresAt: now + 30_000, canAccess });
+    return canAccess;
+  } catch {
+    return false;
+  }
+}
+
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+  const serviceSecret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (serviceSecret && req.header("X-Platform-Service-Secret") === serviceSecret) {
+    const serviceUserId = Number(req.header("X-Platform-User-Id") ?? "0");
+    const storeId = Number(req.header("X-Store-Id") ?? "0");
+    req.user = {
+      id: serviceUserId > 0 ? serviceUserId : 0,
+      email: "platform-service@midanic.internal",
+      role: "admin",
+      currentStoreId: storeId > 0 ? storeId : null,
+    };
+    if (storeId > 0) req.currentStoreId = storeId;
+    next();
+    return;
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -39,6 +103,10 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   try {
     const token = authHeader.slice(7);
     req.user = verifyToken(token);
+    if (!(await enforcePlatformAccess(req.user))) {
+      res.status(403).json({ error: "Platform access is inactive", code: "PLATFORM_ACCESS_INACTIVE" });
+      return;
+    }
     if (typeof req.user.currentStoreId === "number") {
       req.currentStoreId = req.user.currentStoreId;
     }

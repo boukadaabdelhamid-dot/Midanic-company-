@@ -3,11 +3,79 @@ import bcrypt from "bcryptjs";
 import { eq, and, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "crypto";
 import { db, schema } from "../lib/db";
-import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, type AuthRequest } from "../lib/auth";
+import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verifyPlatformSsoToken, type AuthRequest } from "../lib/auth";
 import { listUserStores } from "../lib/store-context";
 import { sendPasswordResetEmail } from "../lib/email";
 
 const router = Router();
+
+router.post("/auth/sso/exchange", async (req, res) => {
+  try {
+    const rawToken = typeof req.body?.token === "string" ? req.body.token : "";
+    if (!rawToken) {
+      res.status(400).json({ error: "SSO token is required" });
+      return;
+    }
+    const sso = verifyPlatformSsoToken(rawToken);
+    const [platformUser] = await db.select().from(schema.usersTable)
+      .where(eq(schema.usersTable.platformUserId, sso.userId))
+      .limit(1);
+    const [emailUser] = platformUser ? [platformUser] : await db.select().from(schema.usersTable)
+      .where(sql`lower(trim(${schema.usersTable.email})) = ${sso.email.toLowerCase()}`)
+      .limit(1);
+    const role = sso.role === "super_admin" || sso.role === "admin" || sso.role === "support"
+      ? "admin" as const
+      : "customer" as const;
+    let user = emailUser;
+    if (!user) {
+      [user] = await db.insert(schema.usersTable).values({
+        platformUserId: sso.userId,
+        name: sso.email.split("@")[0] || "Midanic User",
+        email: sso.email.toLowerCase(),
+        passwordHash: randomBytes(32).toString("hex"),
+        role,
+      }).returning();
+    } else {
+      [user] = await db.update(schema.usersTable)
+        .set({ platformUserId: sso.userId, email: sso.email.toLowerCase(), role, isActive: true })
+        .where(eq(schema.usersTable.id, user.id))
+        .returning();
+    }
+
+    const [store] = await db.select().from(schema.storesTable)
+      .where(eq(schema.storesTable.platformTenantId, sso.tenantId))
+      .limit(1);
+    let activeStore = store;
+    if (!activeStore) {
+      [activeStore] = await db.insert(schema.storesTable).values({
+        platformTenantId: sso.tenantId,
+        nameAr: "متجر الشركة",
+        nameEn: "Company Store",
+        slug: `tenant-${sso.tenantId}`,
+      }).returning();
+    }
+    await db.insert(schema.userStoresTable)
+      .values({ userId: user.id, storeId: activeStore.id })
+      .onConflictDoNothing();
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      currentStoreId: activeStore.id,
+      platformUserId: sso.userId,
+      platformTenantId: sso.tenantId,
+    });
+    res.json({
+      token,
+      currentStoreId: activeStore.id,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      stores: [activeStore],
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(401).json({ error: "Invalid or expired Platform SSO token" });
+  }
+});
 
 router.post("/auth/register", async (req, res) => {
   try {

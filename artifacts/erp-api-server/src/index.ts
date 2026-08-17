@@ -827,6 +827,10 @@ async function runMigrations() {
     }
   }
   logger.info({ applied, skipped }, "DB migrations done.");
+  await pool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
+  await pool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "stores_platform_tenant_id_uq" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
 }
 
 // Canonical-email uniqueness: login matches emails case-insensitively, so two

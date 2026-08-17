@@ -23,6 +23,19 @@ export interface JwtPayload {
   role: string;
 }
 
+export function generateErpSsoToken(payload: {
+  userId: number;
+  email: string;
+  role: string;
+  tenantId: number;
+}): string {
+  return jwt.sign(
+    { ...payload, aud: "erp", purpose: "sso" },
+    process.env.PLATFORM_SSO_SECRET ?? ACCESS_TOKEN_SECRET,
+    { expiresIn: "2m" },
+  );
+}
+
 export function generateAccessToken(payload: JwtPayload): string {
   return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }

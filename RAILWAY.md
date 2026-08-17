@@ -49,6 +49,10 @@ For **Platform API**, add:
 | `DATABASE_URL` | *(auto-injected by Railway PostgreSQL)* | No action needed if you added the DB add-on |
 | `ADMIN_EMAIL` | Your administrator email | Used once to create the first `super_admin` account |
 | `ADMIN_PASSWORD` | A strong password (12+ characters) | Used once to create the first `super_admin` account |
+| `PLATFORM_SSO_SECRET` | Strong random secret | Shared only with ERP API for SSO tickets |
+| `PLATFORM_SERVICE_SECRET` | Strong random secret | Shared only with ERP API for the control bridge |
+| `ERP_API_URL` | Public ERP API URL | Used by Platform's Super Admin control bridge |
+| `ERP_WEB_URL` | Public ERP Web URL | Used to create SSO launch links |
 
 For **ERP API**, add:
 
@@ -61,6 +65,9 @@ For **ERP API**, add:
 | `FRONTEND_URL` | Recommended | Public ERP Web URL |
 | `WEB_STORE_URL` | Recommended | Public Web Store URL |
 | `APP_URL` | Recommended | Public ERP Web URL |
+| `PLATFORM_API_URL` | Yes in production | Public Platform API URL |
+| `PLATFORM_SSO_SECRET` | Yes | Same value as Platform API |
+| `PLATFORM_SERVICE_SECRET` | Yes | Same value as Platform API |
 
 For **ERP Web**, set the Docker build variable:
 

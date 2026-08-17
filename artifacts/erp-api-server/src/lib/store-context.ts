@@ -37,6 +37,28 @@ export async function resolvePublicStore(req: PublicStoreRequest, res: Response,
       res.status(503).json({ error: "No active store configured" });
       return;
     }
+    if (store.platformTenantId && process.env["PLATFORM_API_URL"]) {
+      const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+      if (!secret) {
+        res.status(503).json({ error: "Platform control is not configured" });
+        return;
+      }
+      try {
+        const platformUrl = process.env["PLATFORM_API_URL"]!.replace(/\/+$/, "");
+        const access = await fetch(`${platformUrl}/api/internal/erp/access/tenant/${store.platformTenantId}`, {
+          headers: { "X-Platform-Service-Secret": secret },
+        });
+        const body = await access.json() as { canAccess?: boolean };
+        if (!access.ok || body.canAccess !== true) {
+          res.status(403).json({ error: "This store is disabled by Platform", code: "PLATFORM_STORE_INACTIVE" });
+          return;
+        }
+      } catch (err) {
+        req.log.error(err);
+        res.status(503).json({ error: "Platform control is unavailable" });
+        return;
+      }
+    }
     req.currentStoreId = store.id;
     req.currentStoreSlug = store.slug;
     next();

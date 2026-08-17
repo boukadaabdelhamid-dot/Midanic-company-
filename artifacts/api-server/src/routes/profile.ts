@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable, licensesTable, productsTable, customerEntitlementsTable, erpTenantsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { hashPassword, comparePassword, formatUserProfile } from "../lib/auth";
+import { hashPassword, comparePassword, formatUserProfile, generateErpSsoToken } from "../lib/auth";
 import {
   UpdateProfileBody,
   ChangePasswordBody,
@@ -53,6 +53,15 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     tenant.trialEndsAt.getTime() <= Date.now();
   const effectiveStatus = isTrialExpired ? "expired" : tenant.status;
   const canAccess = effectiveStatus === "active" || effectiveStatus === "converted";
+  const ssoToken = canAccess
+    ? generateErpSsoToken({
+        userId: req.user!.userId,
+        email: req.user!.email,
+        role: req.user!.role,
+        tenantId: tenant.id,
+      })
+    : null;
+  const erpBaseUrl = (process.env["ERP_WEB_URL"] ?? "/erp").replace(/\/+$/, "");
 
   res.json({
     hasAccount: true,
@@ -60,7 +69,7 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     companyName: tenant.companyName,
     status: effectiveStatus,
     canAccess,
-    launchUrl: "/erp/",
+    launchUrl: ssoToken ? `${erpBaseUrl}/sso?token=${encodeURIComponent(ssoToken)}` : `${erpBaseUrl}/`,
     trialStartedAt: tenant.trialStartedAt,
     trialEndsAt: tenant.trialEndsAt,
     message:
