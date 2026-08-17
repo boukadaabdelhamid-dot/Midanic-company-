@@ -8,8 +8,6 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY lib ./lib
 COPY artifacts/erp-api-server ./artifacts/erp-api-server
-COPY vendor ./vendor
-
 RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 RUN pnpm --filter @workspace/erp-api-server run build
