@@ -18,10 +18,13 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install runtime dependencies directly via npm so pnpm symlinks are never
-# involved. The ERP bundle externalizes pg (and a few other native packages);
-# those must be present as real packages in node_modules, not broken symlinks.
-RUN npm install pg@8 nodemailer@9 bcryptjs@3
+# Install every package that esbuild externalises so they are real npm
+# installations (not broken pnpm symlinks). Exact versions match package.json.
+RUN npm install \
+      pg@8 \
+      nodemailer@9 \
+      @google-cloud/storage@7 \
+      google-auth-library@10
 
 COPY --from=build /app/artifacts/erp-api-server/dist ./artifacts/erp-api-server/dist
 
