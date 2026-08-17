@@ -10,7 +10,10 @@ COPY lib ./lib
 COPY artifacts/erp-api-server ./artifacts/erp-api-server
 RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
-RUN pnpm --filter @workspace/erp-api-server run build
+# Force a fresh bundle so a stale checked-in/cached dist directory can never
+# become the runtime entrypoint after a Railway rebuild.
+ARG ERP_API_BUILD_REV=2026-08-18-01
+RUN rm -rf /app/artifacts/erp-api-server/dist && pnpm --filter @workspace/erp-api-server run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
