@@ -135,7 +135,7 @@ router.get("/erp/settings/products/types", authenticate, requireStaff, requirePe
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/types", authenticate, requireStaff, requirePermission("settings", "create"), async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/types", authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const parsed = typeAttributeSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" }); return; }
@@ -155,7 +155,7 @@ router.post("/erp/settings/products/types", authenticate, requireStaff, requireP
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.put("/erp/settings/products/types/:id", authenticate, requireStaff, requirePermission("settings", "edit"), async (req: AuthRequest, res) => {
+router.put("/erp/settings/products/types/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
     const parsed = typeAttributeSchema.safeParse(req.body);
@@ -179,7 +179,7 @@ router.put("/erp/settings/products/types/:id", authenticate, requireStaff, requi
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/erp/settings/products/types/:id", authenticate, requireStaff, requirePermission("settings", "delete"), async (req: AuthRequest, res) => {
+router.delete("/erp/settings/products/types/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
     const inUse = await db.select({ id: schema.productsTable.id })

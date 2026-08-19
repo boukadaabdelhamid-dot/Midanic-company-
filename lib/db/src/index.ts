@@ -123,6 +123,10 @@ async function ensureErpManagementSchema(): Promise<void> {
       "owner_user_id" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
       "company_name" text NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
+      "subdomain" text,
+      "hostname" text,
+      "domain_status" text DEFAULT 'inactive' NOT NULL,
+      "domain_activated_at" timestamp with time zone,
       "trial_started_at" timestamp with time zone,
       "trial_ends_at" timestamp with time zone,
       "approved_at" timestamp with time zone,
@@ -133,12 +137,27 @@ async function ensureErpManagementSchema(): Promise<void> {
     )
   `);
   await pool.query(`
+    ALTER TABLE "erp_tenants"
+      ADD COLUMN IF NOT EXISTS "subdomain" text,
+      ADD COLUMN IF NOT EXISTS "hostname" text,
+      ADD COLUMN IF NOT EXISTS "domain_status" text DEFAULT 'inactive' NOT NULL,
+      ADD COLUMN IF NOT EXISTS "domain_activated_at" timestamp with time zone
+  `);
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS "erp_tenants_owner_user_id_idx"
     ON "erp_tenants" ("owner_user_id")
   `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS "erp_tenants_status_idx"
     ON "erp_tenants" ("status")
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_subdomain_uq"
+    ON "erp_tenants" ("subdomain") WHERE "subdomain" IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_hostname_uq"
+    ON "erp_tenants" ("hostname") WHERE "hostname" IS NOT NULL
   `);
 }
 

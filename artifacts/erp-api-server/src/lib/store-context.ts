@@ -2,10 +2,16 @@ import type { Request, Response, NextFunction } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { AuthRequest } from "./auth";
+import {
+  getRequestTenantHostname,
+  isConfiguredTenantHostname,
+  resolvePlatformTenantDomain,
+  tenantStoreMatches,
+} from "./tenant-domain";
 
 /**
  * Resolve the public-storefront store from `?store=<slug>` query param or
- * `X-Store-Slug` header. Falls back to the first active store. Sets
+ * `X-Store-Slug` header. Unknown or missing stores fail closed. Sets
  * `req.currentStoreId` and `req.currentStoreSlug`.
  */
 export interface PublicStoreRequest extends AuthRequest {
@@ -19,23 +25,30 @@ export async function resolvePublicStore(req: PublicStoreRequest, res: Response,
       (req.headers["x-store-slug"] as string | undefined) ||
       undefined;
 
-    let store: typeof schema.storesTable.$inferSelect | undefined;
-    if (slug) {
-      const [match] = await db.select().from(schema.storesTable)
-        .where(and(eq(schema.storesTable.slug, slug), eq(schema.storesTable.isActive, true)))
-        .limit(1);
-      if (match) store = match;
-    }
-    if (!store) {
-      const [first] = await db.select().from(schema.storesTable)
-        .where(eq(schema.storesTable.isActive, true))
-        .orderBy(schema.storesTable.id)
-        .limit(1);
-      store = first;
-    }
-    if (!store) {
-      res.status(503).json({ error: "No active store configured" });
+    if (!slug) {
+      res.status(400).json({ error: "Store slug is required", code: "STORE_CONTEXT_REQUIRED" });
       return;
+    }
+    const [store] = await db.select().from(schema.storesTable)
+      .where(and(eq(schema.storesTable.slug, slug), eq(schema.storesTable.isActive, true)))
+      .limit(1);
+    if (!store) {
+      res.status(404).json({ error: "Store not found or inactive", code: "STORE_NOT_FOUND" });
+      return;
+    }
+    const requestHostname = getRequestTenantHostname(req);
+    if (isConfiguredTenantHostname(requestHostname)) {
+      const domain = await resolvePlatformTenantDomain(requestHostname!);
+      if (
+        domain?.canAccess !== true ||
+        !tenantStoreMatches(domain.tenantId, store.platformTenantId)
+      ) {
+        res.status(403).json({
+          error: "This store does not belong to the current ERP company domain",
+          code: "TENANT_STORE_MISMATCH",
+        });
+        return;
+      }
     }
     if (store.platformTenantId && process.env["PLATFORM_API_URL"]) {
       const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
@@ -82,17 +95,23 @@ export async function userHasStoreAccess(userId: number, storeId: number): Promi
   return !!link;
 }
 
-export async function listUserStores(userId: number) {
+export async function listUserStores(userId: number, platformTenantId?: number) {
   const rows = await db.select({
     id: schema.storesTable.id,
     nameAr: schema.storesTable.nameAr,
     nameEn: schema.storesTable.nameEn,
     slug: schema.storesTable.slug,
     isActive: schema.storesTable.isActive,
+    platformTenantId: schema.storesTable.platformTenantId,
   })
     .from(schema.userStoresTable)
     .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
-    .where(eq(schema.userStoresTable.userId, userId))
+    .where(and(
+      eq(schema.userStoresTable.userId, userId),
+      platformTenantId === undefined
+        ? undefined
+        : eq(schema.storesTable.platformTenantId, platformTenantId),
+    ))
     .orderBy(schema.storesTable.id);
   return rows;
 }

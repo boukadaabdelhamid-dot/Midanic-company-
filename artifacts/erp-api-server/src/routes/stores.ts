@@ -2,7 +2,8 @@ import { Router } from "express";
 import { eq, sql, ilike, or, and } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { getRequestTenantHostname, isConfiguredTenantHostname, resolvePlatformTenantDomain } from "../lib/tenant-domain";
 
 const router = Router();
 
@@ -10,15 +11,26 @@ const pid = (req: { params: Record<string, string | string[]> }, key: string): n
   parseInt(req.params[key] as string);
 
 // Public-ish: list active stores (used by storefront to populate a switcher)
-router.get("/stores/public", async (_req, res) => {
+router.get("/stores/public", async (req, res) => {
   try {
+    const hostname = getRequestTenantHostname(req);
+    const domain = isConfiguredTenantHostname(hostname)
+      ? await resolvePlatformTenantDomain(hostname!)
+      : null;
+    if (isConfiguredTenantHostname(hostname) && domain?.canAccess !== true) {
+      res.status(403).json({ error: "This ERP company domain is inactive" });
+      return;
+    }
     const stores = await db.select({
       id: schema.storesTable.id,
       nameAr: schema.storesTable.nameAr,
       nameEn: schema.storesTable.nameEn,
       slug: schema.storesTable.slug,
     }).from(schema.storesTable)
-      .where(eq(schema.storesTable.isActive, true))
+      .where(and(
+        eq(schema.storesTable.isActive, true),
+        domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
+      ))
       .orderBy(schema.storesTable.id);
     res.json(stores);
   } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
@@ -28,7 +40,7 @@ router.get("/stores/public", async (_req, res) => {
 router.get("/erp/stores/mine", authenticate, async (req: AuthRequest, res) => {
   try {
     const role = req.user?.role;
-    if (role !== "admin" && role !== "employee") {
+    if (role !== "admin" && role !== "tenant_admin" && role !== "employee") {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -50,7 +62,12 @@ router.get("/erp/stores/mine", authenticate, async (req: AuthRequest, res) => {
     })
       .from(schema.userStoresTable)
       .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
-      .where(eq(schema.userStoresTable.userId, req.user!.id))
+      .where(and(
+        eq(schema.userStoresTable.userId, req.user!.id),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      ))
       .orderBy(schema.storesTable.id);
     res.json(rows.filter((r) => r.isActive));
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
@@ -62,7 +79,7 @@ router.get("/erp/stores/mine", authenticate, async (req: AuthRequest, res) => {
 router.get("/erp/stores/all", authenticate, async (req: AuthRequest, res) => {
   try {
     const role = req.user?.role;
-    if (role !== "admin" && role !== "employee") {
+    if (role !== "admin" && role !== "tenant_admin" && role !== "employee") {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -73,7 +90,12 @@ router.get("/erp/stores/all", authenticate, async (req: AuthRequest, res) => {
       slug: schema.storesTable.slug,
       isActive: schema.storesTable.isActive,
     }).from(schema.storesTable)
-      .where(eq(schema.storesTable.isActive, true))
+      .where(and(
+        eq(schema.storesTable.isActive, true),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      ))
       .orderBy(schema.storesTable.id);
     res.json(rows);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
@@ -296,7 +318,7 @@ router.get("/erp/stores/web-settings", authenticate, requireStaff, requireStore,
 });
 
 // PUT /erp/stores/web-settings — admin only (upsert)
-router.put("/erp/stores/web-settings", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.put("/erp/stores/web-settings", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const parsed = webSettingsSchema.safeParse(req.body);

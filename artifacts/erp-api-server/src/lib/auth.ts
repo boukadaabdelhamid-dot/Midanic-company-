@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "crypto";
+import { tenantStoreMatches, verifyTenantDomainRequest, type TenantDomainRequest } from "./tenant-domain";
 
 function resolveJwtSecret(): string {
   const envSecret = process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
@@ -18,10 +19,11 @@ const JWT_SECRET: string = resolveJwtSecret();
 export type JwtPayload = {
   id: number;
   email: string;
-  role: string;
+  role: "admin" | "tenant_admin" | "employee" | "customer";
   currentStoreId?: number | null;
   platformUserId?: number;
   platformTenantId?: number;
+  tenantHostname?: string;
 };
 
 export type PlatformSsoPayload = {
@@ -29,6 +31,7 @@ export type PlatformSsoPayload = {
   tenantId: number;
   email: string;
   role: string;
+  hostname: string;
   aud: "erp";
   purpose: "sso";
 };
@@ -45,7 +48,13 @@ export function verifyPlatformSsoToken(token: string): PlatformSsoPayload {
   const secret = process.env["PLATFORM_SSO_SECRET"] ?? process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
   if (!secret) throw new Error("PLATFORM_SSO_SECRET must be configured for SSO.");
   const payload = jwt.verify(token, secret, { audience: "erp" }) as PlatformSsoPayload;
-  if (payload.purpose !== "sso" || !Number.isInteger(payload.userId) || !Number.isInteger(payload.tenantId)) {
+  if (
+    payload.purpose !== "sso" ||
+    !Number.isInteger(payload.userId) ||
+    !Number.isInteger(payload.tenantId) ||
+    typeof payload.hostname !== "string" ||
+    !payload.hostname
+  ) {
     throw new Error("Invalid Platform SSO payload");
   }
   return payload;
@@ -54,30 +63,17 @@ export function verifyPlatformSsoToken(token: string): PlatformSsoPayload {
 export interface AuthRequest extends Request {
   user?: JwtPayload;
   currentStoreId?: number;
+  isPlatformService?: boolean;
 }
 
-const accessCache = new Map<number, { expiresAt: number; canAccess: boolean }>();
-
-async function enforcePlatformAccess(user: JwtPayload): Promise<boolean> {
+export async function enforcePlatformAccess(req: TenantDomainRequest, user: JwtPayload): Promise<boolean> {
   if (!user.platformUserId) return process.env["NODE_ENV"] !== "production";
-  const now = Date.now();
-  const cached = accessCache.get(user.platformUserId);
-  if (cached && cached.expiresAt > now) return cached.canAccess;
-  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/$/, "");
-  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
-  if (!baseUrl || !secret) return process.env["NODE_ENV"] !== "production";
-  try {
-    const response = await fetch(`${baseUrl}/api/internal/erp/access/${user.platformUserId}`, {
-      headers: { "X-Platform-Service-Secret": secret },
-    });
-    if (!response.ok) throw new Error(`Platform access check failed: ${response.status}`);
-    const body = await response.json() as { canAccess?: boolean };
-    const canAccess = body.canAccess === true;
-    accessCache.set(user.platformUserId, { expiresAt: now + 30_000, canAccess });
-    return canAccess;
-  } catch {
-    return false;
-  }
+  if (!user.platformTenantId || !user.tenantHostname) return false;
+  return verifyTenantDomainRequest(req, {
+    hostname: user.tenantHostname,
+    tenantId: user.platformTenantId,
+    ownerUserId: user.platformUserId,
+  });
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
@@ -92,6 +88,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       currentStoreId: storeId > 0 ? storeId : null,
     };
     if (storeId > 0) req.currentStoreId = storeId;
+    req.isPlatformService = true;
     next();
     return;
   }
@@ -103,8 +100,11 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   try {
     const token = authHeader.slice(7);
     req.user = verifyToken(token);
-    if (!(await enforcePlatformAccess(req.user))) {
-      res.status(403).json({ error: "Platform access is inactive", code: "PLATFORM_ACCESS_INACTIVE" });
+    if (!(await enforcePlatformAccess(req, req.user))) {
+      res.status(403).json({
+        error: "ERP tenant domain is unknown, inactive, or does not match this session",
+        code: "TENANT_DOMAIN_MISMATCH",
+      });
       return;
     }
     if (typeof req.user.currentStoreId === "number") {
@@ -117,7 +117,13 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  if (req.user?.role !== "admin") {
+  // Global ERP administration is reserved for non-tenant local admins and
+  // the authenticated Platform service bridge. The platformTenantId check
+  // also invalidates still-unexpired legacy SSO tokens that carried `admin`.
+  if (
+    req.user?.role !== "admin" ||
+    (req.user.platformTenantId !== undefined && req.isPlatformService !== true)
+  ) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -126,7 +132,20 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
 
 export function requireStaff(req: AuthRequest, res: Response, next: NextFunction) {
   const role = req.user?.role;
-  if (role !== "admin" && role !== "employee") {
+  if (role !== "admin" && role !== "tenant_admin" && role !== "employee") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+}
+
+/**
+ * Tenant-aware administrative actions must opt into this middleware
+ * explicitly. Legacy `requireAdmin` routes remain global-admin-only because
+ * SSO tenant owners carry the distinct `tenant_admin` JWT role.
+ */
+export function requireTenantAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (req.user?.role !== "admin" && req.user?.role !== "tenant_admin") {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -150,7 +169,10 @@ export async function requireStore(req: AuthRequest, res: Response, next: NextFu
   try {
     const { db, schema } = await import("./db");
     const { eq, and } = await import("drizzle-orm");
-    const [link] = await db.select({ storeId: schema.userStoresTable.storeId })
+    const [link] = await db.select({
+      storeId: schema.userStoresTable.storeId,
+      platformTenantId: schema.storesTable.platformTenantId,
+    })
       .from(schema.userStoresTable)
       .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
       .where(and(
@@ -163,6 +185,13 @@ export async function requireStore(req: AuthRequest, res: Response, next: NextFu
       res.status(403).json({ error: "Store access revoked. Please re-select a store.", code: "STORE_ACCESS_REVOKED" });
       return;
     }
+    if (!tenantStoreMatches(req.user.platformTenantId, link.platformTenantId)) {
+      res.status(403).json({
+        error: "The selected store does not belong to this ERP tenant",
+        code: "TENANT_STORE_MISMATCH",
+      });
+      return;
+    }
     next();
   } catch (err) {
     (req as AuthRequest & { log?: { error: (e: unknown) => void } }).log?.error?.(err);
@@ -171,7 +200,8 @@ export async function requireStore(req: AuthRequest, res: Response, next: NextFu
 }
 
 export function isAdmin(req: AuthRequest): boolean {
-  return req.user?.role === "admin";
+  return req.user?.role === "admin" &&
+    (req.user.platformTenantId === undefined || req.isPlatformService === true);
 }
 
 /**
@@ -181,7 +211,7 @@ export function isAdmin(req: AuthRequest): boolean {
  */
 export function requirePermission(section: string, action: string) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.role === "admin") { next(); return; }
+    if (req.user?.role === "admin" || req.user?.role === "tenant_admin") { next(); return; }
     if (!req.user?.id) { res.status(401).json({ error: "Unauthorized" }); return; }
     try {
       const { db, schema } = await import("./db");
@@ -224,11 +254,18 @@ export function isEmailUniqueViolation(err: unknown): boolean {
      /users.*email/i.test(e.constraint ?? e.message ?? ""));
 }
 
-export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+export async function optionalAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {
     try {
       req.user = verifyToken(authHeader.slice(7));
+      if (!(await enforcePlatformAccess(req, req.user))) {
+        res.status(403).json({
+          error: "ERP tenant domain is unknown, inactive, or does not match this session",
+          code: "TENANT_DOMAIN_MISMATCH",
+        });
+        return;
+      }
       if (typeof req.user.currentStoreId === "number") {
         req.currentStoreId = req.user.currentStoreId;
       }
@@ -244,11 +281,18 @@ export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunctio
 // request as anonymous. Critical for order creation: a POS sale made with
 // an expired staff token must NOT fall through as an anonymous "online"
 // order (wrong channel, no seller, no caisse credit).
-export function optionalAuthStrict(req: AuthRequest, res: Response, next: NextFunction) {
+export async function optionalAuthStrict(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {
     try {
       req.user = verifyToken(authHeader.slice(7));
+      if (!(await enforcePlatformAccess(req, req.user))) {
+        res.status(403).json({
+          error: "ERP tenant domain is unknown, inactive, or does not match this session",
+          code: "TENANT_DOMAIN_MISMATCH",
+        });
+        return;
+      }
       if (typeof req.user.currentStoreId === "number") {
         req.currentStoreId = req.user.currentStoreId;
       }

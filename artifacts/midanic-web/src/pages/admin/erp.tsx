@@ -28,7 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { BriefcaseBusiness, Plus, RefreshCw } from "lucide-react";
+import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 
@@ -51,8 +51,13 @@ export default function AdminErp() {
   const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
+  const [createSubdomain, setCreateSubdomain] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [domainTenant, setDomainTenant] = useState<ErpTenant | null>(null);
+  const [domainSubdomain, setDomainSubdomain] = useState("");
+  const [domainStatus, setDomainStatus] = useState<"inactive" | "active">("inactive");
+  const [savingDomain, setSavingDomain] = useState(false);
   const { toast } = useToast();
 
   const loadTenants = useCallback(async () => {
@@ -97,10 +102,15 @@ export default function AdminErp() {
     }
     setCreating(true);
     try {
-      const tenant = await adminApi.createErpTenant({ companyName: companyName.trim(), ownerUserId: parsedOwnerId });
+      const tenant = await adminApi.createErpTenant({
+        companyName: companyName.trim(),
+        ownerUserId: parsedOwnerId,
+        ...(createSubdomain.trim() ? { subdomain: createSubdomain.trim() } : {}),
+      });
       setTenants((current) => [tenant, ...current]);
       setCompanyName("");
       setOwnerUserId("");
+      setCreateSubdomain("");
       setCreateOpen(false);
       toast({ title: "ERP account created" });
     } catch (error) {
@@ -108,6 +118,46 @@ export default function AdminErp() {
     } finally {
       setCreating(false);
     }
+  }
+
+  function openDomainEditor(tenant: ErpTenant) {
+    setDomainTenant(tenant);
+    setDomainSubdomain(tenant.subdomain ?? "");
+    setDomainStatus(tenant.domainStatus);
+  }
+
+  async function saveDomain() {
+    if (!domainTenant) return;
+    if (domainStatus === "active" && !domainSubdomain.trim()) {
+      toast({ title: "Assign a subdomain before activating it", variant: "destructive" });
+      return;
+    }
+    setSavingDomain(true);
+    try {
+      const subdomainChanged = (domainTenant.subdomain ?? "") !== domainSubdomain.trim();
+      const updated = await adminApi.updateErpTenant(domainTenant.id, {
+        subdomain: domainSubdomain.trim() || null,
+        domainStatus: subdomainChanged ? "inactive" : domainStatus,
+      });
+      setTenants((current) =>
+        current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+      );
+      setDomainTenant(null);
+      toast({
+        title: subdomainChanged && domainStatus === "active"
+          ? "Domain saved inactive — activate it after DNS is ready"
+          : "ERP domain updated",
+      });
+    } catch (error) {
+      toast({ title: "Domain update failed", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setSavingDomain(false);
+    }
+  }
+
+  async function copyHostname(hostname: string) {
+    await navigator.clipboard.writeText(`https://${hostname}`);
+    toast({ title: "ERP domain copied" });
   }
 
   return (
@@ -140,6 +190,20 @@ export default function AdminErp() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="erp-owner-id">Owner user ID</label>
                   <Input id="erp-owner-id" inputMode="numeric" value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} placeholder="Example: 42" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="erp-subdomain">Company subdomain</label>
+                  <div className="flex items-center rounded-md border bg-background">
+                    <Input
+                      id="erp-subdomain"
+                      value={createSubdomain}
+                      onChange={(event) => setCreateSubdomain(event.target.value.toLowerCase())}
+                      placeholder="plattin"
+                      className="border-0 shadow-none focus-visible:ring-0"
+                    />
+                    <span className="pr-3 text-sm text-muted-foreground">.midanic.com</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">The domain is created inactive. Activate it after the wildcard DNS setup is ready.</p>
                 </div>
               </div>
               <DialogFooter><Button onClick={() => void createTenant()} disabled={creating}>{creating ? "Creating..." : "Create account"}</Button></DialogFooter>
@@ -174,6 +238,7 @@ export default function AdminErp() {
               <TableHead>Company</TableHead>
               <TableHead>Owner</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Company domain</TableHead>
               <TableHead>Trial ends</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="text-right">Access</TableHead>
@@ -181,9 +246,9 @@ export default function AdminErp() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Loading ERP accounts...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Loading ERP accounts...</TableCell></TableRow>
             ) : tenants.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No ERP accounts found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No ERP accounts found.</TableCell></TableRow>
             ) : tenants.map((tenant) => (
               <TableRow key={tenant.id}>
                 <TableCell>
@@ -195,6 +260,21 @@ export default function AdminErp() {
                   <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `User #${tenant.ownerUserId}`}</div>
                 </TableCell>
                 <TableCell><Badge className={STATUS_STYLES[tenant.status] ?? ""}>{tenant.status}</Badge></TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    className="h-auto justify-start px-2 py-1 text-left"
+                    onClick={() => openDomainEditor(tenant)}
+                  >
+                    <Globe2 className="mr-2 h-4 w-4" />
+                    <span>
+                      <span className="block text-sm">{tenant.hostname ?? "Assign domain"}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {tenant.hostname ? tenant.domainStatus : "unassigned"}
+                      </span>
+                    </span>
+                  </Button>
+                </TableCell>
                 <TableCell>{formatDate(tenant.trialEndsAt)}</TableCell>
                 <TableCell>{formatDate(tenant.createdAt)}</TableCell>
                 <TableCell className="text-right">
@@ -208,6 +288,61 @@ export default function AdminErp() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={Boolean(domainTenant)} onOpenChange={(open) => !open && setDomainTenant(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage ERP company domain</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <p className="text-sm font-medium">{domainTenant?.companyName}</p>
+              <p className="text-xs text-muted-foreground">All companies use the same shared ERP service; this hostname selects the tenant.</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="domain-subdomain">Subdomain</label>
+              <div className="flex items-center rounded-md border bg-background">
+                <Input
+                  id="domain-subdomain"
+                  value={domainSubdomain}
+                  onChange={(event) => setDomainSubdomain(event.target.value.toLowerCase())}
+                  placeholder="plattin"
+                  className="border-0 shadow-none focus-visible:ring-0"
+                />
+                <span className="pr-3 text-sm text-muted-foreground">.midanic.com</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Domain access</label>
+              <Select value={domainStatus} onValueChange={(value) => setDomainStatus(value as "inactive" | "active")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inactive">Inactive — block ERP access</SelectItem>
+                  <SelectItem value="active">Active — allow ERP access</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {domainTenant?.hostname && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => void copyHostname(domainTenant.hostname!)}>
+                  <Copy className="mr-2 h-4 w-4" />Copy URL
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`https://${domainTenant.hostname}`} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />Open
+                  </a>
+                </Button>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDomainTenant(null)}>Cancel</Button>
+            <Button onClick={() => void saveDomain()} disabled={savingDomain}>
+              {savingDomain ? "Saving..." : "Save domain"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

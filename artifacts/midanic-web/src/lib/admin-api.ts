@@ -71,6 +71,8 @@ export const adminApi = {
     request<UserListResponse>(`/admin/users?${new URLSearchParams(cleanParams(params)).toString()}`),
   updateUser: (id: number, body: { role?: string; isActive?: boolean }) =>
     request<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  createCustomerErpLink: (id: number) =>
+    request<CustomerErpLink>(`/admin/users/${id}/erp-link`, { method: "POST" }),
 
   // Products
   listProducts: () => request<AdminProduct[]>("/admin/products"),
@@ -126,14 +128,21 @@ export const adminApi = {
     request<{ tenants: ErpTenant[] }>(
       `/admin/erp/tenants${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     ),
-  createErpTenant: (body: { ownerUserId: number; companyName: string }) =>
+  createErpTenant: (body: { ownerUserId: number; companyName: string; subdomain?: string }) =>
     request<ErpTenant>("/admin/erp/tenants", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   updateErpTenant: (
     id: number,
-    body: { status?: string; companyName?: string; notes?: string | null; trialEndsAt?: string | null },
+    body: {
+      status?: string;
+      companyName?: string;
+      notes?: string | null;
+      trialEndsAt?: string | null;
+      subdomain?: string | null;
+      domainStatus?: "inactive" | "active";
+    },
   ) =>
     request<ErpTenant>(`/admin/erp/tenants/${id}`, {
       method: "PATCH",
@@ -314,6 +323,14 @@ export interface AdminUser {
   companyName: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface CustomerErpLink {
+  launchUrl: string;
+  expiresIn: number;
+  tenantId: number;
+  companyName: string;
+  status: string;
 }
 
 export interface UserListResponse {
@@ -624,6 +641,10 @@ export interface ErpTenant {
   ownerUserId: number;
   companyName: string;
   status: string;
+  subdomain: string | null;
+  hostname: string | null;
+  domainStatus: "inactive" | "active";
+  domainActivatedAt: string | null;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
   approvedAt: string | null;
@@ -644,5 +665,7 @@ export interface MyErpAccess {
   launchUrl: string;
   trialStartedAt?: string | null;
   trialEndsAt?: string | null;
+  hostname?: string | null;
+  domainStatus?: "inactive" | "active";
   message: string | null;
 }

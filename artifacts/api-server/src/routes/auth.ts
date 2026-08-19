@@ -8,6 +8,7 @@ import {
   RefreshTokenBody,
   LogoutBody,
 } from "@workspace/api-zod";
+import { buildErpTenantLaunchUrl, normalizeErpHostname } from "../lib/erp-domain";
 import {
   hashPassword,
   comparePassword,
@@ -130,6 +131,8 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
       id: erpTenantsTable.id,
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
@@ -143,14 +146,25 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "ERP access is not active", status: status ?? "none" });
     return;
   }
+  if (!tenant.hostname || tenant.domainStatus !== "active") {
+    res.status(403).json({ error: "ERP domain is not active", status: "domain_inactive" });
+    return;
+  }
 
   const token = generateErpSsoToken({
     userId: req.user!.userId,
     email: req.user!.email,
     role: req.user!.role,
     tenantId: tenant.id,
+    hostname: tenant.hostname,
   });
-  res.json({ token, expiresIn: 120, tenantId: tenant.id });
+  res.json({
+    token,
+    expiresIn: 120,
+    tenantId: tenant.id,
+    hostname: tenant.hostname,
+    launchUrl: buildErpTenantLaunchUrl(tenant.hostname, token),
+  });
 });
 
 router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
@@ -169,6 +183,8 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
       id: erpTenantsTable.id,
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, userId))
@@ -182,7 +198,12 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
     userId,
     tenantId: tenant?.id ?? null,
     status,
-    canAccess: status === "active" || status === "converted",
+    hostname: tenant?.hostname ?? null,
+    domainStatus: tenant?.domainStatus ?? "inactive",
+    canAccess:
+      (status === "active" || status === "converted") &&
+      tenant?.domainStatus === "active" &&
+      Boolean(tenant.hostname),
   });
 });
 
@@ -197,12 +218,69 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
     id: erpTenantsTable.id,
     status: erpTenantsTable.status,
     trialEndsAt: erpTenantsTable.trialEndsAt,
+    hostname: erpTenantsTable.hostname,
+    domainStatus: erpTenantsTable.domainStatus,
   }).from(erpTenantsTable).where(eq(erpTenantsTable.id, tenantId)).limit(1);
   const trialExpired = !!tenant?.trialEndsAt &&
     tenant.trialEndsAt.getTime() <= Date.now() &&
     tenant.status === "active";
   const status = trialExpired ? "expired" : tenant?.status ?? "none";
-  res.json({ tenantId, status, canAccess: status === "active" || status === "converted" });
+  res.json({
+    tenantId,
+    status,
+    hostname: tenant?.hostname ?? null,
+    domainStatus: tenant?.domainStatus ?? "inactive",
+    canAccess:
+      (status === "active" || status === "converted") &&
+      tenant?.domainStatus === "active" &&
+      Boolean(tenant.hostname),
+  });
+});
+
+router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const hostname = normalizeErpHostname(req.params.hostname);
+  if (!hostname) {
+    res.status(400).json({ error: "Invalid hostname" });
+    return;
+  }
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      ownerUserId: erpTenantsTable.ownerUserId,
+      status: erpTenantsTable.status,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.hostname, hostname))
+    .limit(1);
+  const trialExpired =
+    tenant?.status === "active" &&
+    Boolean(tenant.trialEndsAt) &&
+    tenant.trialEndsAt!.getTime() <= Date.now();
+  const status = trialExpired ? "expired" : tenant?.status ?? "unknown";
+  const canAccess =
+    Boolean(tenant) &&
+    (status === "active" || status === "converted") &&
+    tenant?.domainStatus === "active";
+  if (!tenant) {
+    res.status(404).json({ hostname, status, canAccess: false });
+    return;
+  }
+  res.json({
+    hostname,
+    tenantId: tenant.id,
+    ownerUserId: tenant.ownerUserId,
+    status,
+    domainStatus: tenant.domainStatus,
+    canAccess,
+  });
 });
 
 router.post("/auth/refresh", async (req, res): Promise<void> => {

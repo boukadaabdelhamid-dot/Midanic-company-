@@ -3,6 +3,7 @@ import { db, usersTable, licensesTable, productsTable, customerEntitlementsTable
 import { eq, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { hashPassword, comparePassword, formatUserProfile, generateErpSsoToken } from "../lib/auth";
+import { buildErpTenantLaunchUrl } from "../lib/erp-domain";
 import {
   UpdateProfileBody,
   ChangePasswordBody,
@@ -28,6 +29,8 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
       id: erpTenantsTable.id,
       companyName: erpTenantsTable.companyName,
       status: erpTenantsTable.status,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
       trialStartedAt: erpTenantsTable.trialStartedAt,
       trialEndsAt: erpTenantsTable.trialEndsAt,
     })
@@ -52,16 +55,18 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     tenant.trialEndsAt !== null &&
     tenant.trialEndsAt.getTime() <= Date.now();
   const effectiveStatus = isTrialExpired ? "expired" : tenant.status;
-  const canAccess = effectiveStatus === "active" || effectiveStatus === "converted";
+  const tenantIsActive = effectiveStatus === "active" || effectiveStatus === "converted";
+  const domainIsActive = tenant.domainStatus === "active" && Boolean(tenant.hostname);
+  const canAccess = tenantIsActive && domainIsActive;
   const ssoToken = canAccess
     ? generateErpSsoToken({
         userId: req.user!.userId,
         email: req.user!.email,
         role: req.user!.role,
         tenantId: tenant.id,
+        hostname: tenant.hostname!,
       })
     : null;
-  const erpBaseUrl = (process.env["ERP_WEB_URL"] ?? "/erp").replace(/\/+$/, "");
 
   res.json({
     hasAccount: true,
@@ -69,7 +74,11 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     companyName: tenant.companyName,
     status: effectiveStatus,
     canAccess,
-    launchUrl: ssoToken ? `${erpBaseUrl}/sso?token=${encodeURIComponent(ssoToken)}` : `${erpBaseUrl}/`,
+    hostname: tenant.hostname,
+    domainStatus: tenant.domainStatus,
+    launchUrl: tenant.hostname
+      ? buildErpTenantLaunchUrl(tenant.hostname, ssoToken ?? undefined)
+      : "/erp/",
     trialStartedAt: tenant.trialStartedAt,
     trialEndsAt: tenant.trialEndsAt,
     message:
@@ -79,6 +88,8 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
           ? "Your ERP trial has ended. Please contact the administration."
           : effectiveStatus === "suspended"
             ? "Your ERP access is currently suspended. Please contact the administration."
+            : tenantIsActive && !domainIsActive
+              ? "Your ERP company domain is not active yet. Please contact the administration."
             : null,
   });
 });

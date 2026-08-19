@@ -6,6 +6,7 @@ import { db, schema } from "../lib/db";
 import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verifyPlatformSsoToken, type AuthRequest } from "../lib/auth";
 import { listUserStores } from "../lib/store-context";
 import { sendPasswordResetEmail } from "../lib/email";
+import { tenantStoreMatches, verifyTenantDomainRequest } from "../lib/tenant-domain";
 
 const router = Router();
 
@@ -17,15 +18,27 @@ router.post("/auth/sso/exchange", async (req, res) => {
       return;
     }
     const sso = verifyPlatformSsoToken(rawToken);
+    if (!(await verifyTenantDomainRequest(req, {
+      hostname: sso.hostname,
+      tenantId: sso.tenantId,
+      ownerUserId: sso.userId,
+    }))) {
+      res.status(403).json({
+        error: "This SSO ticket is not valid for the current ERP domain",
+        code: "TENANT_DOMAIN_MISMATCH",
+      });
+      return;
+    }
     const [platformUser] = await db.select().from(schema.usersTable)
       .where(eq(schema.usersTable.platformUserId, sso.userId))
       .limit(1);
     const [emailUser] = platformUser ? [platformUser] : await db.select().from(schema.usersTable)
       .where(sql`lower(trim(${schema.usersTable.email})) = ${sso.email.toLowerCase()}`)
       .limit(1);
-    const role = sso.role === "super_admin" || sso.role === "admin" || sso.role === "support"
-      ? "admin" as const
-      : "customer" as const;
+    // Platform only issues this ticket for the tenant owner. Inside that
+    // tenant, the owner is the ERP administrator regardless of their
+    // Platform-facing account role.
+    const databaseRole = "admin" as const;
     let user = emailUser;
     if (!user) {
       [user] = await db.insert(schema.usersTable).values({
@@ -33,11 +46,11 @@ router.post("/auth/sso/exchange", async (req, res) => {
         name: sso.email.split("@")[0] || "Midanic User",
         email: sso.email.toLowerCase(),
         passwordHash: randomBytes(32).toString("hex"),
-        role,
+        role: databaseRole,
       }).returning();
     } else {
       [user] = await db.update(schema.usersTable)
-        .set({ platformUserId: sso.userId, email: sso.email.toLowerCase(), role, isActive: true })
+        .set({ platformUserId: sso.userId, email: sso.email.toLowerCase(), role: databaseRole, isActive: true })
         .where(eq(schema.usersTable.id, user.id))
         .returning();
     }
@@ -60,10 +73,14 @@ router.post("/auth/sso/exchange", async (req, res) => {
     const token = signToken({
       id: user.id,
       email: user.email,
-      role: user.role,
+      // Keep tenant owners out of legacy global-admin routes. The database
+      // role remains `admin` for the ERP UI, while the JWT role is the
+      // fail-closed tenant-aware authorization boundary.
+      role: "tenant_admin",
       currentStoreId: activeStore.id,
       platformUserId: sso.userId,
       platformTenantId: sso.tenantId,
+      tenantHostname: sso.hostname,
     });
     res.json({
       token,
@@ -148,7 +165,7 @@ router.get("/auth/me", authenticate, async (req: AuthRequest, res) => {
     const [user] = await db.select().from(schema.usersTable).where(eq(schema.usersTable.id, req.user!.id)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
     const stores = ((user.role === "admin" || user.role === "employee")
-      ? await listUserStores(user.id)
+      ? await listUserStores(user.id, req.user!.platformTenantId)
       : []).filter((s) => s.isActive);
     const tokenStoreId = req.user!.currentStoreId ?? null;
     const validCurrent = tokenStoreId != null && stores.some((s) => s.id === tokenStoreId)
@@ -436,11 +453,21 @@ router.post("/auth/select-store", authenticate, async (req: AuthRequest, res) =>
       res.status(404).json({ error: "Store not found or inactive" });
       return;
     }
+    if (!tenantStoreMatches(req.user!.platformTenantId, store.platformTenantId)) {
+      res.status(403).json({
+        error: "The selected store does not belong to this ERP tenant",
+        code: "TENANT_STORE_MISMATCH",
+      });
+      return;
+    }
     const token = signToken({
       id: req.user!.id,
       email: req.user!.email,
       role: req.user!.role,
       currentStoreId: store.id,
+      platformUserId: req.user!.platformUserId,
+      platformTenantId: req.user!.platformTenantId,
+      tenantHostname: req.user!.tenantHostname,
     });
     res.json({ token, currentStoreId: store.id, store });
   } catch (err) {

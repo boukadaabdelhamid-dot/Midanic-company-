@@ -1,224 +1,4 @@
-import { Router } from "express";
-import { eq, ilike, and, sql, or, inArray, gt } from "drizzle-orm";
-import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireStaff, requireStore, optionalAuth, requirePermission, type AuthRequest } from "../lib/auth";
-import { resolvePublicStore } from "../lib/store-context";
-import multer from "multer";
-import * as XLSX from "xlsx";
-import { randomUUID } from "crypto";
-
-// ── Excel import session store ──────────────────────────────────────────────
-interface ImportRow {
-  index: number;
-  excelCategoryId: number | null;
-  nameEn: string;
-  nameAr: string;
-  /** The raw "Modèle" value — written to products.model so the list column shows it */
-  model: string | null;
-  barcode: string;
-  price: number;
-  costPrice: number | null;
-  isDuplicate: boolean;
-  existingProductId: number | null;
-  resolvedCategoryId: number | null;
-  // Attribute columns (Marque / Famille / Couleur)
-  brandName: string | null;
-  familyName: string | null;
-  colorName: string | null;
-  resolvedBrandId: number | null;
-  resolvedFamilyId: number | null;
-  resolvedColorId: number | null;
-  error: string | null;
-}
-interface ImportSession {
-  storeId: number;
-  rows: ImportRow[];
-  createdAt: number;
-  totalRows: number;
-  newCount: number;
-  duplicateCount: number;
-  errorCount: number;
-  missingCategoryIds: number[];
-  // Which attribute columns were present in the source file
-  hasAttributeCols: { brand: boolean; family: boolean; color: boolean };
-}
-const importSessions = new Map<string, ImportSession>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, s] of importSessions) {
-    if (now - s.createdAt > 20 * 60 * 1000) importSessions.delete(key);
-  }
-}, 5 * 60 * 1000);
-
-const xlsxUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ok = file.mimetype.includes("spreadsheet") || file.mimetype.includes("excel") ||
-      file.originalname.endsWith(".xlsx") || file.originalname.endsWith(".xls");
-    if (ok) cb(null, true);
-    else cb(new Error("Only Excel files (.xlsx / .xls) are accepted"));
-  },
-});
-
-const router = Router();
-
-// ── Public: product types (used by web store Shop by Category) ────────────────
-router.get("/product-types", async (req: AuthRequest, res) => {
-  try {
-    const items = await db.select().from(schema.productTypesTable)
-      .orderBy(schema.productTypesTable.id);
-    res.json(items);
-  } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
-});
-
-const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
-  const n = parseInt(req.params[key] as string);
-  if (isNaN(n)) throw Object.assign(new Error("Invalid numeric id"), { statusCode: 400 });
-  return n;
-};
-
-type ImageInput = { url: string; sortOrder?: number; isPrimary?: boolean };
-
-// Replace a product's entire image gallery in one transaction.
-// Normalizes ordering + ensures exactly one primary (auto-promotes the first
-// when none is flagged). Also keeps products.image_url synced to the primary
-// url for backward compatibility. Returns the persisted rows (sorted).
-async function syncProductImages(productId: number, images: ImageInput[]) {
-  const clean = images
-    .filter((im) => im && typeof im.url === "string" && im.url.trim() !== "")
-    .map((im, i) => ({
-      url: im.url.trim(),
-      sortOrder: typeof im.sortOrder === "number" ? im.sortOrder : i,
-      isPrimary: !!im.isPrimary,
-    }))
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((im, i) => ({ ...im, sortOrder: i }));
-
-  // Ensure exactly one primary
-  if (clean.length > 0) {
-    let primaryIdx = clean.findIndex((im) => im.isPrimary);
-    if (primaryIdx === -1) primaryIdx = 0;
-    clean.forEach((im, i) => { im.isPrimary = i === primaryIdx; });
-  }
-
-  return await db.transaction(async (tx) => {
-    await tx.delete(schema.productImagesTable).where(eq(schema.productImagesTable.productId, productId));
-    let rows: (typeof schema.productImagesTable.$inferSelect)[] = [];
-    if (clean.length > 0) {
-      rows = await tx.insert(schema.productImagesTable)
-        .values(clean.map((im) => ({ productId, url: im.url, sortOrder: im.sortOrder, isPrimary: im.isPrimary })))
-        .returning();
-    }
-    const primaryUrl = clean.find((im) => im.isPrimary)?.url ?? null;
-    await tx.update(schema.productsTable)
-      .set({ imageUrl: primaryUrl })
-      .where(eq(schema.productsTable.id, productId));
-    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
-  });
-}
-
-// Load images for a set of products. Falls back to a synthesized primary
-// entry from products.image_url when no rows exist (backward compat).
-async function loadImagesFor(products: { id: number; imageUrl: string | null }[]) {
-  const ids = products.map((p) => p.id);
-  const byProduct = new Map<number, (typeof schema.productImagesTable.$inferSelect)[]>();
-  if (ids.length > 0) {
-    const rows = await db.select().from(schema.productImagesTable)
-      .where(inArray(schema.productImagesTable.productId, ids))
-      .orderBy(schema.productImagesTable.sortOrder);
-    for (const r of rows) {
-      const list = byProduct.get(r.productId) ?? [];
-      list.push(r);
-      byProduct.set(r.productId, list);
-    }
-  }
-  return products.map((p) => {
-    let images = byProduct.get(p.id) ?? [];
-    if (images.length === 0 && p.imageUrl) {
-      images = [{ id: -1, productId: p.id, url: p.imageUrl, sortOrder: 0, isPrimary: true, createdAt: new Date() }];
-    }
-    const primaryImage = images.find((im) => im.isPrimary)?.url ?? images[0]?.url ?? p.imageUrl ?? null;
-    return { ...p, images, primaryImage };
-  });
-}
-
-// GET /products — public storefront list (filtered by store)
-// For ERP, the same client sends Authorization+selected store; we still filter by req.currentStoreId
-router.get("/products", optionalAuth, async (req: AuthRequest, res, next) => {
-  // Employees must have products.view permission — direct API calls still return 403.
-  // Admins and unauthenticated users (web store customers) are unaffected.
-  if (req.user?.role === "employee") {
-    const [perm] = await db.select({ granted: schema.userPermissionsTable.granted })
-      .from(schema.userPermissionsTable)
-      .where(and(
-        eq(schema.userPermissionsTable.userId, req.user.id),
-        eq(schema.userPermissionsTable.section, "products"),
-        eq(schema.userPermissionsTable.action, "view"),
-      )).limit(1);
-    if (!perm?.granted) { res.status(403).json({ error: "Forbidden: insufficient permissions" }); return; }
-  }
-  // optionalAuth populates req.currentStoreId from a valid JWT if present.
-  // Anonymous, customer (no store), or invalid bearer → fall back to public.
-  if (req.currentStoreId) return handleListProducts(req, res);
-  return resolvePublicStore(req, res, () => handleListProducts(req, res, true));
-});
-
-async function handleListProducts(req: AuthRequest, res: import("express").Response, publicOnly = false) {
-  try {
-    const storeId = req.currentStoreId!;
-    const {
-      search, categoryId, page = "1", limit = "20",
-      inStockOnly,
-      filterName, filterCode, filterBrand, filterFamily, filterStock,
-      filterId, filterRef, filterCatalogueType, filterDescription,
-      filterModel, filterColor, filterColisage, filterWeight,
-      filterCatalogue1, filterCatalogue2, filterCatalogue3,
-      filterCatalogue4, filterCatalogue5, filterCatalogue6,
-      filterCreatedAt, filterExposed, filterActive,
-      filterPrice, filterPriceGros, filterPriceSemiGros, filterPriceMin, filterCostPrice,
-    } = req.query as Record<string, string>;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-
-    const conditions = [eq(schema.productsTable.storeId, storeId)];
-
-    // Public storefront (web store / mobile) only sees products flagged visible
-    // via the VITRINE (isExposed) toggle in the ERP. The staff/ERP path
-    // (currentStoreId from JWT) skips this and sees every product.
-    if (publicOnly) {
-      conditions.push(eq(schema.productsTable.isExposed, true));
-    }
-
-    if (search) {
-      conditions.push(
-        sql`(${ilike(schema.productsTable.nameAr, `%${search}%`)} OR ${ilike(schema.productsTable.nameEn, `%${search}%`)})`,
-      );
-    }
-    if (categoryId) {
-      conditions.push(eq(schema.productsTable.categoryId, parseInt(categoryId)));
-    }
-    if (filterName) {
-      conditions.push(
-        sql`(${ilike(schema.productsTable.nameEn, `%${filterName}%`)} OR ${ilike(schema.productsTable.nameAr, `%${filterName}%`)})`,
-      );
-    }
-    if (filterCode) {
-      // Also search in extra barcodes table so scanner lookups find all products
-      const extraMatches = await db
-        .select({ productId: schema.productBarcodesTable.productId })
-        .from(schema.productBarcodesTable)
-        .where(and(
-          eq(schema.productBarcodesTable.storeId, storeId),
-          ilike(schema.productBarcodesTable.barcode, `%${filterCode}%`),
-        ));
-      const extraIds = extraMatches.map((r) => r.productId);
-      if (extraIds.length > 0) {
-        conditions.push(or(
-          ilike(schema.productsTable.barcode, `%${filterCode}%`),
-          sql`${schema.productsTable.id} = ANY(ARRAY[${sql.join(extraIds.map((id) => sql`${id}`), sql`, `)}]::int[])`,
-        )!);
-      } else {
-        conditions.push(ilike(schema.productsTable.barcode, `%${filterCode}%`));
+de, `%${filterCode}%`));
       }
     }
     if (filterBrand) {
@@ -355,7 +135,9 @@ router.get("/products/:id", optionalAuth, async (req: AuthRequest, res) => {
       )).limit(1);
     if (!perm?.granted) { res.status(403).json({ error: "Forbidden: insufficient permissions" }); return; }
   }
-  if (req.currentStoreId) return handleGetProduct(req, res);
+  if (req.currentStoreId) {
+    return requireStore(req, res, () => void handleGetProduct(req, res));
+  }
   return resolvePublicStore(req, res, () => handleGetProduct(req, res, true));
 });
 
@@ -617,7 +399,9 @@ router.get("/categories", optionalAuth, async (req: AuthRequest, res) => {
       res.json(categories);
     } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
   };
-  if (req.currentStoreId) return handler();
+  if (req.currentStoreId) {
+    return requireStore(req, res, () => void handler());
+  }
   return resolvePublicStore(req, res, handler);
 });
 
@@ -704,27 +488,28 @@ router.put("/products/:id/images", authenticate, requireStaff, requireStore, req
 });
 
 // ── Extra barcodes for a product ──────────────────────────────────────
-// Note: these routes omit requireStore — the storeId is derived from the
-// product record itself, so admin can manage barcodes without a store JWT claim.
-
 // GET /erp/products/extra-barcodes — all extra barcodes (used by POS for fast in-memory lookup)
-router.get("/erp/products/extra-barcodes", authenticate, requireStaff, requirePermission("products", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/products/extra-barcodes", authenticate, requireStaff, requireStore, requirePermission("products", "view"), async (req: AuthRequest, res) => {
   try {
     const rows = await db.select({
       barcode: schema.productBarcodesTable.barcode,
       productId: schema.productBarcodesTable.productId,
-    }).from(schema.productBarcodesTable);
+    }).from(schema.productBarcodesTable)
+      .where(eq(schema.productBarcodesTable.storeId, req.currentStoreId!));
     res.json(rows);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
 // GET /erp/products/:id/barcodes — list additional barcodes
-router.get("/erp/products/:id/barcodes", authenticate, requireStaff, requirePermission("products", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/products/:id/barcodes", authenticate, requireStaff, requireStore, requirePermission("products", "view"), async (req: AuthRequest, res) => {
   try {
     const productId = pid(req, "id");
     const [product] = await db.select({ storeId: schema.productsTable.storeId })
       .from(schema.productsTable)
-      .where(eq(schema.productsTable.id, productId))
+      .where(and(
+        eq(schema.productsTable.id, productId),
+        eq(schema.productsTable.storeId, req.currentStoreId!),
+      ))
       .limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
     const rows = await db.select()
@@ -738,12 +523,15 @@ router.get("/erp/products/:id/barcodes", authenticate, requireStaff, requirePerm
 });
 
 // POST /erp/products/:id/barcodes — add a barcode
-router.post("/erp/products/:id/barcodes", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.post("/erp/products/:id/barcodes", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const productId = pid(req, "id");
     const [product] = await db.select({ storeId: schema.productsTable.storeId })
       .from(schema.productsTable)
-      .where(eq(schema.productsTable.id, productId))
+      .where(and(
+        eq(schema.productsTable.id, productId),
+        eq(schema.productsTable.storeId, req.currentStoreId!),
+      ))
       .limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
     const storeId = product.storeId;
@@ -794,6 +582,23 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
 
     if (tidArr.length === 0) {
       res.status(400).json({ error: "No valid target stores (cannot copy to the same store)" });
+      return;
+    }
+    const uniqueTargetStoreIds = Array.from(new Set(tidArr));
+    const validTargetStores = await db.select({ id: schema.storesTable.id })
+      .from(schema.storesTable)
+      .where(and(
+        inArray(schema.storesTable.id, uniqueTargetStoreIds),
+        eq(schema.storesTable.isActive, true),
+        req.user?.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user.platformTenantId),
+      ));
+    if (validTargetStores.length !== uniqueTargetStoreIds.length) {
+      res.status(403).json({
+        error: "One or more target stores do not belong to this ERP tenant",
+        code: "TENANT_STORE_MISMATCH",
+      });
       return;
     }
 
@@ -1407,13 +1212,16 @@ router.post(
 );
 
 // DELETE /erp/products/:id/barcodes/:barcodeId — remove a barcode
-router.delete("/erp/products/:id/barcodes/:barcodeId", authenticate, requireStaff, requirePermission("products", "delete"), async (req: AuthRequest, res) => {
+router.delete("/erp/products/:id/barcodes/:barcodeId", authenticate, requireStaff, requireStore, requirePermission("products", "delete"), async (req: AuthRequest, res) => {
   try {
     const productId = pid(req, "id");
     const barcodeId = pid(req, "barcodeId");
     const [product] = await db.select({ storeId: schema.productsTable.storeId })
       .from(schema.productsTable)
-      .where(eq(schema.productsTable.id, productId))
+      .where(and(
+        eq(schema.productsTable.id, productId),
+        eq(schema.productsTable.storeId, req.currentStoreId!),
+      ))
       .limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
     await db.delete(schema.productBarcodesTable)

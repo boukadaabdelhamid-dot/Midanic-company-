@@ -28,6 +28,7 @@ export function generateErpSsoToken(payload: {
   email: string;
   role: string;
   tenantId: number;
+  hostname: string;
 }): string {
   return jwt.sign(
     { ...payload, aud: "erp", purpose: "sso" },

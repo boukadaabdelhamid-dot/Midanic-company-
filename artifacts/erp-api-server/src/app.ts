@@ -7,6 +7,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+app.set("trust proxy", process.env["TRUST_PROXY"] === "1" ? 1 : false);
 
 app.use(
   pinoHttp({
@@ -36,6 +37,21 @@ const allowedOrigins = (process.env["ALLOWED_ORIGINS"] ?? "")
 // Only used in development — in production every origin must be in ALLOWED_ORIGINS.
 const REPLIT_DOMAIN_RE = /^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.replit\.(dev|app)(:\d+)?$/i;
 const isDev = process.env["NODE_ENV"] !== "production";
+const tenantRootDomain = (process.env["ERP_TENANT_ROOT_DOMAIN"] ?? "midanic.com")
+  .trim()
+  .toLowerCase()
+  .replace(/\.$/, "");
+
+function isTenantOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "https:" &&
+      url.port === "" &&
+      url.hostname.toLowerCase().endsWith(`.${tenantRootDomain}`);
+  } catch {
+    return false;
+  }
+}
 
 app.use(
   cors({
@@ -43,6 +59,9 @@ app.use(
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0 && isDev) return cb(null, true);
       if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      if (isTenantOrigin(origin)) {
         return cb(null, true);
       }
       if (isDev && REPLIT_DOMAIN_RE.test(origin)) {
@@ -70,11 +89,12 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(erpDist, "index.html"));
   });
 
-  const webStoreDist = path.resolve(__dirname, "../../web-store/dist/public");
-  app.use(express.static(webStoreDist));
+  // Company wildcard domains point to this service, so the ERP web app and API
+  // share the same trusted Host boundary in production.
+  app.use(express.static(erpDist));
   app.use((req, res, next) => {
     if (req.method !== "GET") return next();
-    res.sendFile(path.join(webStoreDist, "index.html"));
+    res.sendFile(path.join(erpDist, "index.html"));
   });
 }
 

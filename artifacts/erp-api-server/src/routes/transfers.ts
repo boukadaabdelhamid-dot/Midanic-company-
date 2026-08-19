@@ -12,9 +12,25 @@ const pid = (req: { params: Record<string, string | string[]> }, key: string): n
 type TransferStatus = typeof schema.stockTransferStatusEnum.enumValues[number];
 
 // ─── helpers ───────────────────────────────────────────────────────
-async function loadTransferOr404(id: number) {
+async function storesBelongToTenant(req: AuthRequest, storeIds: number[]): Promise<boolean> {
+  const tenantId = req.user?.platformTenantId;
+  if (tenantId === undefined) return true;
+  const uniqueIds = Array.from(new Set(storeIds));
+  const rows = await db.select({ id: schema.storesTable.id })
+    .from(schema.storesTable)
+    .where(and(
+      inArray(schema.storesTable.id, uniqueIds),
+      eq(schema.storesTable.platformTenantId, tenantId),
+    ));
+  return rows.length === uniqueIds.length;
+}
+
+async function loadTransferOr404(id: number, req: AuthRequest) {
   const [t] = await db.select().from(schema.stockTransfersTable)
     .where(eq(schema.stockTransfersTable.id, id)).limit(1);
+  if (t && !(await storesBelongToTenant(req, [t.sourceStoreId, t.destinationStoreId]))) {
+    return null;
+  }
   return t ?? null;
 }
 
@@ -104,10 +120,24 @@ router.get("/erp/transfers", authenticate, requireStaff, requireStore, requirePe
     if (status) {
       conditions.push(eq(schema.stockTransfersTable.status, status as TransferStatus));
     }
-    const rows = await db.select().from(schema.stockTransfersTable)
+    let rows = await db.select().from(schema.stockTransfersTable)
       .where(and(...conditions))
       .orderBy(desc(schema.stockTransfersTable.createdAt))
       .limit(200);
+    if (req.user?.platformTenantId !== undefined && rows.length > 0) {
+      const allowedStores = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(and(
+          inArray(
+            schema.storesTable.id,
+            Array.from(new Set(rows.flatMap((r) => [r.sourceStoreId, r.destinationStoreId]))),
+          ),
+          eq(schema.storesTable.platformTenantId, req.user.platformTenantId),
+        ));
+      const allowedIds = new Set(allowedStores.map((store) => store.id));
+      rows = rows.filter((row) =>
+        allowedIds.has(row.sourceStoreId) && allowedIds.has(row.destinationStoreId));
+    }
 
     // Hydrate counterparty store names + item counts + initiator user in batch
     const storeIds = Array.from(new Set(rows.flatMap(r => [r.sourceStoreId, r.destinationStoreId])));
@@ -152,7 +182,7 @@ router.get("/erp/transfers", authenticate, requireStaff, requireStore, requirePe
 // ─── DETAIL ────────────────────────────────────────────────────────
 router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requirePermission("transfers", "view"), async (req: AuthRequest, res) => {
   try {
-    const t = await loadTransferOr404(pid(req, "id"));
+    const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!(await actorInvolved(req, t))) {
       res.status(403).json({ error: "Forbidden", code: "STORE_ACCESS_REVOKED" });
@@ -248,7 +278,13 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
     const otherStoreId = initiatorSide === "source" ? destId : sourceStoreId;
     const [otherStore] = await db.select({ id: schema.storesTable.id })
       .from(schema.storesTable)
-      .where(and(eq(schema.storesTable.id, otherStoreId), eq(schema.storesTable.isActive, true)))
+      .where(and(
+        eq(schema.storesTable.id, otherStoreId),
+        eq(schema.storesTable.isActive, true),
+        req.user?.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user.platformTenantId),
+      ))
       .limit(1);
     if (!otherStore) { res.status(400).json({ error: "Counterparty store not found or inactive" }); return; }
 
@@ -383,7 +419,7 @@ function ensure(req: AuthRequest, ok: boolean, res: import("express").Response, 
 router.post("/erp/transfers/:id/approve", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
-    const t = await loadTransferOr404(id);
+    const t = await loadTransferOr404(id, req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnDestination(req, t), res, "Only destination side can approve")) return;
     if (t.status !== "requested") { res.status(409).json({ error: `Cannot approve from status ${t.status}` }); return; }
@@ -412,7 +448,7 @@ router.post("/erp/transfers/:id/approve", authenticate, requireStaff, requireSto
 router.post("/erp/transfers/:id/reject", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
-    const t = await loadTransferOr404(id);
+    const t = await loadTransferOr404(id, req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnDestination(req, t), res, "Only destination side can reject")) return;
     if (t.status !== "requested") { res.status(409).json({ error: `Cannot reject from status ${t.status}` }); return; }
@@ -440,7 +476,7 @@ router.post("/erp/transfers/:id/reject", authenticate, requireStaff, requireStor
 
 router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
-    const t = await loadTransferOr404(pid(req, "id"));
+    const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can prepare")) return;
     if (t.status === "requested") {
@@ -484,7 +520,7 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
 router.post("/erp/transfers/:id/ship", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
-    const t = await loadTransferOr404(id);
+    const t = await loadTransferOr404(id, req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can ship")) return;
     if (t.status !== "prepared") { res.status(409).json({ error: `Cannot ship from status ${t.status}` }); return; }
@@ -512,7 +548,7 @@ router.post("/erp/transfers/:id/ship", authenticate, requireStaff, requireStore,
 
 router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
-    const t = await loadTransferOr404(pid(req, "id"));
+    const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnDestination(req, t), res, "Only destination side can receive")) return;
     // Strict transition: only ship→receive. Source must explicitly mark
@@ -599,7 +635,7 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
 
 router.post("/erp/transfers/:id/cancel", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
-    const t = await loadTransferOr404(pid(req, "id"));
+    const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can cancel")) return;
     if (t.status === "received" || t.status === "cancelled" || t.status === "rejected") {

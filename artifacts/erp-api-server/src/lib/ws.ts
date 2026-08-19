@@ -1,19 +1,21 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
-import { verifyToken } from "./auth";
+import { enforcePlatformAccess, verifyToken, type JwtPayload } from "./auth";
 import { db, schema } from "./db";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 interface WsClient {
   ws: WebSocket;
   userId: number;
   role: string;
+  platformTenantId?: number;
   storeIds: Set<number>;
 }
 
 let clients: WsClient[] = [];
 
-const isAdmin = (c: WsClient) => c.role === "admin";
+const isAdmin = (c: WsClient) => c.role === "admin" && c.platformTenantId === undefined;
+const isTenantAdmin = (c: WsClient) => c.role === "tenant_admin";
 
 export function setupWebSocket(server: Server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -27,7 +29,7 @@ export function setupWebSocket(server: Server) {
       return;
     }
 
-    let user: { id: number; email: string; role: string };
+    let user: JwtPayload;
     try {
       user = verifyToken(token);
     } catch {
@@ -35,8 +37,12 @@ export function setupWebSocket(server: Server) {
       return;
     }
 
-    if (user.role !== "admin" && user.role !== "employee") {
+    if (user.role !== "admin" && user.role !== "tenant_admin" && user.role !== "employee") {
       ws.close(1008, "Staff only");
+      return;
+    }
+    if (!(await enforcePlatformAccess(req, user))) {
+      ws.close(1008, "Tenant domain access denied");
       return;
     }
 
@@ -44,13 +50,25 @@ export function setupWebSocket(server: Server) {
     try {
       const rows = await db.select({ storeId: schema.userStoresTable.storeId })
         .from(schema.userStoresTable)
-        .where(eq(schema.userStoresTable.userId, user.id));
+        .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
+        .where(and(
+          eq(schema.userStoresTable.userId, user.id),
+          user.platformTenantId === undefined
+            ? undefined
+            : eq(schema.storesTable.platformTenantId, user.platformTenantId),
+        ));
       storeIds = new Set(rows.map((r) => r.storeId));
     } catch {
       // ignore
     }
 
-    clients.push({ ws, userId: user.id, role: user.role, storeIds });
+    clients.push({
+      ws,
+      userId: user.id,
+      role: user.role,
+      platformTenantId: user.platformTenantId,
+      storeIds,
+    });
 
     ws.on("close", () => {
       clients = clients.filter((c) => c.ws !== ws);
@@ -78,7 +96,9 @@ export function broadcastToAdmins(data: Record<string, unknown>) {
     ? (rawIds as number[])
     : (typeof rawId === "number" ? [rawId] : null);
   for (const c of activeClients()) {
-    if (!isAdmin(c)) continue;
+    if (!isAdmin(c) && !isTenantAdmin(c)) continue;
+    // Unscoped/global admin events are never sent to tenant administrators.
+    if (isTenantAdmin(c) && !targetStoreIds) continue;
     if (targetStoreIds && !targetStoreIds.some((id) => c.storeIds.has(id))) continue;
     c.ws.send(payload);
   }

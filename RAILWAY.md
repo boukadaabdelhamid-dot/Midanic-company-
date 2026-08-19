@@ -52,7 +52,7 @@ For **Platform API**, add:
 | `PLATFORM_SSO_SECRET` | Strong random secret | Shared only with ERP API for SSO tickets |
 | `PLATFORM_SERVICE_SECRET` | Strong random secret | Shared only with ERP API for the control bridge |
 | `ERP_API_URL` | Public ERP API URL | Used by Platform's Super Admin control bridge |
-| `ERP_WEB_URL` | Public ERP Web URL | Used to create SSO launch links |
+| `ERP_TENANT_ROOT_DOMAIN` | `midanic.com` | Root used to create company ERP hostnames |
 
 For **ERP API**, add:
 
@@ -68,6 +68,8 @@ For **ERP API**, add:
 | `PLATFORM_API_URL` | Yes in production | Public Platform API URL |
 | `PLATFORM_SSO_SECRET` | Yes | Same value as Platform API |
 | `PLATFORM_SERVICE_SECRET` | Yes | Same value as Platform API |
+| `ERP_TENANT_ROOT_DOMAIN` | Yes | `midanic.com`; must match Platform API |
+| `TRUST_PROXY` | Recommended | Set to `1` on Railway so the API may use Railway's forwarded host |
 
 For **ERP Web**, set the Docker build variable:
 
@@ -83,6 +85,33 @@ For **Web Store**, set:
 | `VITE_STORE_SLUG` | The public store slug, for example `principal` |
 
 > **Tip:** Generate a strong secret with: `openssl rand -hex 32`
+
+### Wildcard company ERP domains
+
+Company domains such as `plattin.midanic.com` all serve the same **ERP Web**
+Railway service. Tenant selection remains centralized in Platform; do not
+create a Railway service per company.
+
+One-time setup:
+
+1. In Railway, add `*.midanic.com` as a custom domain on the **ERP API**
+   service. Its production image includes and serves ERP Web, so company
+   browser requests and `/api` share the same trusted hostname boundary.
+2. In Cloudflare DNS, create the wildcard CNAME record Railway asks for:
+   - **Name:** `*`
+   - **Target:** the hostname shown by Railway for the ERP API service
+3. Complete Railway's domain verification and wait for the wildcard TLS
+   certificate to become active. Use Cloudflare **Full (strict)** SSL mode.
+4. Set `ERP_TENANT_ROOT_DOMAIN=midanic.com` on both Platform API and ERP API,
+   then redeploy them.
+5. In Platform, open **ERP Control**, assign a unique subdomain to the company,
+   and set its domain access to **Active** only after the wildcard route works.
+
+The wildcard ERP service compares its trusted request hostname with the signed
+SSO ticket, the authenticated session, Platform's active domain record, and the
+ERP store's `platformTenantId`. Unknown, inactive, expired, suspended, or
+mismatched company domains are rejected. Cloudflare and Railway configuration
+is manual; the application does not create DNS or Railway domains automatically.
 
 On the first production startup, if both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are
 present, the API creates that administrator when the email does not exist yet.

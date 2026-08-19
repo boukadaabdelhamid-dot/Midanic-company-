@@ -22,6 +22,13 @@ import {
 } from "@workspace/db";
 import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { generateErpSsoToken } from "../lib/auth";
+import {
+  buildErpTenantHostname,
+  buildErpTenantLaunchUrl,
+  parseErpSubdomain,
+} from "../lib/erp-domain";
+import { isDatabaseUniqueViolation } from "../lib/db-errors";
 
 const router: IRouter = Router();
 
@@ -188,6 +195,10 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
       ownerUserId: erpTenantsTable.ownerUserId,
       companyName: erpTenantsTable.companyName,
       status: erpTenantsTable.status,
+      subdomain: erpTenantsTable.subdomain,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
+      domainActivatedAt: erpTenantsTable.domainActivatedAt,
       trialStartedAt: erpTenantsTable.trialStartedAt,
       trialEndsAt: erpTenantsTable.trialEndsAt,
       approvedAt: erpTenantsTable.approvedAt,
@@ -210,6 +221,13 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   const ownerUserId = Number(body.ownerUserId);
   const companyName = typeof body.companyName === "string" ? body.companyName.trim() : "";
+  let subdomain: string | null;
+  try {
+    subdomain = parseErpSubdomain(body.subdomain);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+    return;
+  }
 
   if (!Number.isInteger(ownerUserId) || ownerUserId <= 0 || !companyName) {
     res.status(400).json({ error: "ownerUserId and companyName are required" });
@@ -226,18 +244,35 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
     return;
   }
 
-  const [tenant] = await db
-    .insert(erpTenantsTable)
-    .values({ ownerUserId, companyName, status: "pending" })
-    .returning();
-  res.status(201).json(tenant);
+  try {
+    const [tenant] = await db
+      .insert(erpTenantsTable)
+      .values({
+        ownerUserId,
+        companyName,
+        status: "pending",
+        subdomain,
+        hostname: subdomain ? buildErpTenantHostname(subdomain) : null,
+        domainStatus: "inactive",
+      })
+      .returning();
+    res.status(201).json(tenant);
+  } catch (error) {
+    if (isDatabaseUniqueViolation(error)) {
+      res.status(409).json({ error: "This ERP subdomain is already assigned" });
+      return;
+    }
+    throw error;
+  }
 });
 
 router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
   const status = typeof body.status === "string" ? body.status : undefined;
+  const domainStatus = typeof body.domainStatus === "string" ? body.domainStatus : undefined;
   const allowedStatuses = ["pending", "active", "suspended", "expired", "converted"];
+  const allowedDomainStatuses = ["inactive", "active"];
 
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "Invalid tenant id" });
@@ -247,8 +282,25 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid ERP tenant status" });
     return;
   }
+  if (domainStatus && !allowedDomainStatuses.includes(domainStatus)) {
+    res.status(400).json({ error: "Invalid ERP domain status" });
+    return;
+  }
+  const [currentTenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      subdomain: erpTenantsTable.subdomain,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, id))
+    .limit(1);
+  if (!currentTenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
 
   const updates: Partial<typeof erpTenantsTable.$inferInsert> = {};
+  let subdomainChanged = false;
   if (status) {
     updates.status = status;
     if (status === "active" || status === "converted") {
@@ -263,6 +315,41 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   }
   if (body.notes === null || typeof body.notes === "string") {
     updates.notes = body.notes === null ? null : body.notes.trim().slice(0, 2000);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "subdomain")) {
+    try {
+      const subdomain = parseErpSubdomain(body.subdomain);
+      if (!subdomain && domainStatus === "active") {
+        res.status(400).json({ error: "Assign a subdomain before activating it" });
+        return;
+      }
+      subdomainChanged = subdomain !== currentTenant.subdomain;
+      updates.subdomain = subdomain;
+      updates.hostname = subdomain ? buildErpTenantHostname(subdomain) : null;
+      if (!subdomain || subdomainChanged) {
+        updates.domainStatus = "inactive";
+        updates.domainActivatedAt = null;
+      }
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+  }
+  if (domainStatus && !subdomainChanged) {
+    if (domainStatus === "active") {
+      const nextSubdomain =
+        typeof updates.subdomain === "string" ? updates.subdomain : undefined;
+      if (!nextSubdomain) {
+        if (!currentTenant.subdomain) {
+          res.status(400).json({ error: "Assign a subdomain before activating it" });
+          return;
+        }
+      }
+      updates.domainActivatedAt = new Date();
+    } else {
+      updates.domainActivatedAt = null;
+    }
+    updates.domainStatus = domainStatus;
   }
   if (body.trialEndsAt === null) {
     updates.trialEndsAt = null;
@@ -280,11 +367,20 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [tenant] = await db
-    .update(erpTenantsTable)
-    .set(updates)
-    .where(eq(erpTenantsTable.id, id))
-    .returning();
+  let tenant: typeof erpTenantsTable.$inferSelect | undefined;
+  try {
+    [tenant] = await db
+      .update(erpTenantsTable)
+      .set(updates)
+      .where(eq(erpTenantsTable.id, id))
+      .returning();
+  } catch (error) {
+    if (isDatabaseUniqueViolation(error)) {
+      res.status(409).json({ error: "This ERP subdomain is already assigned" });
+      return;
+    }
+    throw error;
+  }
   if (!tenant) {
     res.status(404).json({ error: "ERP tenant not found" });
     return;
@@ -515,6 +611,83 @@ router.patch("/admin/users/:id", async (req, res): Promise<void> => {
     return;
   }
   res.json(updated);
+});
+
+// Generate a short-lived ERP SSO link for a customer. The link carries the
+// customer's own identity and tenant, never the admin's identity.
+router.post("/admin/users/:id/erp-link", async (req, res): Promise<void> => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      role: usersTable.role,
+      isActive: usersTable.isActive,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (!user.isActive) {
+    res.status(403).json({ error: "Customer account is inactive" });
+    return;
+  }
+
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      companyName: erpTenantsTable.companyName,
+      status: erpTenantsTable.status,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.ownerUserId, userId))
+    .orderBy(desc(erpTenantsTable.createdAt))
+    .limit(1);
+
+  const trialExpired =
+    tenant?.status === "active" &&
+    tenant.trialEndsAt !== null &&
+    tenant.trialEndsAt.getTime() <= Date.now();
+  const effectiveStatus = trialExpired ? "expired" : tenant?.status;
+  if (!tenant || !["active", "converted"].includes(effectiveStatus ?? "")) {
+    res.status(403).json({
+      error: "ERP access is not active for this customer",
+      status: effectiveStatus ?? "none",
+    });
+    return;
+  }
+  if (!tenant.hostname || tenant.domainStatus !== "active") {
+    res.status(403).json({ error: "ERP domain is not active for this customer" });
+    return;
+  }
+
+  const token = generateErpSsoToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    tenantId: tenant.id,
+    hostname: tenant.hostname,
+  });
+
+  res.json({
+    launchUrl: buildErpTenantLaunchUrl(tenant.hostname, token),
+    expiresIn: 120,
+    tenantId: tenant.id,
+    companyName: tenant.companyName,
+    status: effectiveStatus,
+  });
 });
 
 // ── CUSTOMER ENTITLEMENTS ──────────────────────────────────────────────────
