@@ -36,3 +36,14 @@ export const erpTenantsTable = pgTable("erp_tenants", {
 
 export type ErpTenant = typeof erpTenantsTable.$inferSelect;
 export type InsertErpTenant = typeof erpTenantsTable.$inferInsert;
+
+export const erpCustomerLinksTable = pgTable("erp_customer_links", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("erp_customer_links_user_uq").on(table.userId),
+]);
+
+export type ErpCustomerLink = typeof erpCustomerLinksTable.$inferSelect;

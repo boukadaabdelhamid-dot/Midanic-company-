@@ -10,3 +10,5 @@ When a deployed database was created with `drizzle-kit push` before tracked migr
 **How to apply:** Keep legacy reconciliation idempotent, use `NOT VALID` constraints when old rows may violate new relationships, and log the original migration error (message and stack) before terminating startup. Verify both a push-bootstrapped database and a fresh database.
 
 An absent `drizzle.__drizzle_migrations` table must be checked with `to_regclass` first; PostgreSQL still resolves a table reference inside a `CASE` subquery even when that branch would not execute.
+
+Historical migrations must also be self-sufficient: a migration that alters a table introduced only by startup reconciliation must create its baseline table first. Post-migration reconciliation runs too late to prevent the migration from failing.

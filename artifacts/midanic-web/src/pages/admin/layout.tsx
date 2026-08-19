@@ -21,6 +21,7 @@ import { useAdminSettings } from '@/contexts/admin-settings-context';
 const NAV_ITEMS = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
   { href: '/admin/users', label: 'Users', icon: Users },
+  { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/products', label: 'Products', icon: Package },
   { href: '/admin/licenses', label: 'Licenses', icon: Key },
   { href: '/admin/content', label: 'Content', icon: FileText },

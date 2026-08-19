@@ -37,7 +37,7 @@ router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { email, password, firstName, lastName, companyName, language } = parsed.data;
+  const { email, password, firstName, lastName, companyName, address, language } = parsed.data;
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
   if (existing) {
     res.status(409).json({ error: "Email already registered" });
@@ -52,6 +52,7 @@ router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
       firstName,
       lastName,
       companyName: companyName ?? null,
+      address: address ?? null,
       language: language ?? "en",
       role: "customer",
     })
@@ -84,6 +85,9 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
     res.status(401).json({ error: "Account is deactivated" });
     return;
   }
+  await db.update(usersTable)
+    .set({ lastLoginAt: new Date() })
+    .where(eq(usersTable.id, user.id));
   const payload = { userId: user.id, email: user.email, role: user.role };
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
@@ -118,7 +122,7 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     role: user.role === "super_admin" ? "admin" : user.role,
     preferredLang: user.language,
     phone: user.phone ?? null,
-    address: null,
+    address: user.address ?? null,
     city: null,
     stores: [],
     currentStoreId: null,
@@ -205,6 +209,39 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
       tenant?.domainStatus === "active" &&
       Boolean(tenant.hostname),
   });
+});
+
+// ERP uses this server-to-server endpoint to keep a provisioned ERP identity
+// aligned with the Platform account. The password hash never reaches a
+// browser and the endpoint is protected by the platform service secret.
+router.get("/internal/erp/credentials/:userId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const [user] = await db.select({
+    id: usersTable.id,
+    email: usersTable.email,
+    passwordHash: usersTable.passwordHash,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    companyName: usersTable.companyName,
+    phone: usersTable.phone,
+    address: usersTable.address,
+    role: usersTable.role,
+    isActive: usersTable.isActive,
+  }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!user || user.role !== "customer") {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+  res.json(user);
 });
 
 router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<void> => {

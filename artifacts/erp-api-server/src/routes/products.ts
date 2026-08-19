@@ -1,5 +1,101 @@
-de, `%${filterCode}%`));
-      }
+import { Router } from "express";
+import multer from "multer";
+import * as XLSX from "xlsx";
+import { randomUUID } from "node:crypto";
+import { and, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { db, schema } from "../lib/db";
+import {
+  authenticate,
+  optionalAuth,
+  requireAdmin,
+  requirePermission,
+  requireStaff,
+  requireStore,
+  requireTenantAdmin,
+  type AuthRequest,
+} from "../lib/auth";
+import { resolvePublicStore } from "../lib/store-context";
+
+const router = Router();
+const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
+  const n = parseInt(req.params[key] as string);
+  if (isNaN(n)) throw Object.assign(new Error("Invalid numeric id"), { statusCode: 400 });
+  return n;
+};
+
+type ImageInput = { url: string; sortOrder?: number; isPrimary?: boolean };
+type ImportRow = {
+  index: number; excelCategoryId: number | null; nameEn: string; nameAr: string; model: string | null;
+  barcode: string; price: number; costPrice: number | null; isDuplicate: boolean;
+  existingProductId: number | null; resolvedCategoryId: number | null; brandName: string | null;
+  familyName: string | null; colorName: string | null; resolvedBrandId: number | null;
+  resolvedFamilyId: number | null; resolvedColorId: number | null; error: string | null;
+};
+type ImportSession = {
+  storeId: number; rows: ImportRow[]; createdAt: number; totalRows: number; newCount: number;
+  duplicateCount: number; errorCount: number; missingCategoryIds: number[];
+  hasAttributeCols: { brand: boolean; family: boolean; color: boolean };
+};
+const importSessions = new Map<string, ImportSession>();
+const xlsxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+async function loadImagesFor<T extends { id: number; imageUrl: string | null }>(products: T[]) {
+  if (!products.length) return products.map((product) => ({ ...product, images: [] }));
+  const images = await db.select().from(schema.productImagesTable)
+    .where(inArray(schema.productImagesTable.productId, products.map((product) => product.id)))
+    .orderBy(schema.productImagesTable.sortOrder, schema.productImagesTable.id);
+  const byProduct = new Map<number, typeof images>();
+  for (const image of images) {
+    const list = byProduct.get(image.productId) ?? [];
+    list.push(image);
+    byProduct.set(image.productId, list);
+  }
+  return products.map((product) => ({
+    ...product,
+    images: byProduct.get(product.id) ?? (product.imageUrl ? [{ url: product.imageUrl, isPrimary: true, sortOrder: 0 }] : []),
+  }));
+}
+
+async function syncProductImages(productId: number, inputs: ImageInput[]) {
+  const normalized = inputs
+    .filter((image) => typeof image?.url === "string" && image.url.trim())
+    .map((image, index) => ({ url: image.url.trim(), sortOrder: image.sortOrder ?? index, isPrimary: image.isPrimary === true }));
+  if (normalized.length && !normalized.some((image) => image.isPrimary)) normalized[0].isPrimary = true;
+  await db.delete(schema.productImagesTable).where(eq(schema.productImagesTable.productId, productId));
+  if (normalized.length) await db.insert(schema.productImagesTable).values(normalized.map((image) => ({ ...image, productId })));
+  await db.update(schema.productsTable).set({ imageUrl: normalized.find((image) => image.isPrimary)?.url ?? normalized[0]?.url ?? null })
+    .where(eq(schema.productsTable.id, productId));
+  return db.select().from(schema.productImagesTable).where(eq(schema.productImagesTable.productId, productId))
+    .orderBy(schema.productImagesTable.sortOrder, schema.productImagesTable.id);
+}
+
+router.get("/products", optionalAuth, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const {
+      page = "1", limit = "50", search, filterCode, filterBrand, filterFamily, filterStock,
+      inStockOnly, filterId, filterRef, filterCatalogueType, filterDescription, filterModel,
+      filterColor, filterColisage, filterWeight, filterCatalogue1, filterCatalogue2, filterCatalogue3,
+      filterCatalogue4, filterCatalogue5, filterCatalogue6, filterCreatedAt, filterExposed,
+      filterActive, filterPrice, filterPriceGros, filterPriceSemiGros, filterPriceMin, filterCostPrice,
+    } = req.query as Record<string, string | undefined>;
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+    const pageLimit = Math.max(1, parseInt(limit, 10) || 50);
+    const offset = (pageNumber - 1) * pageLimit;
+    const conditions = [eq(schema.productsTable.storeId, storeId)];
+    if (search) {
+      conditions.push(or(
+        ilike(schema.productsTable.nameEn, `%${search}%`),
+        ilike(schema.productsTable.nameAr, `%${search}%`),
+        ilike(schema.productsTable.reference, `%${search}%`),
+        ilike(schema.productsTable.barcode, `%${search}%`),
+      )!);
+    }
+    if (filterCode) {
+      conditions.push(or(
+        ilike(schema.productsTable.barcode, `%${filterCode}%`),
+        ilike(schema.productsTable.reference, `%${filterCode}%`),
+      )!);
     }
     if (filterBrand) {
       conditions.push(ilike(schema.productsTable.brand, `%${filterBrand}%`));
@@ -109,7 +205,7 @@ de, `%${filterCode}%`));
 
     const products = await db.select().from(schema.productsTable)
       .where(and(...conditions))
-      .limit(parseInt(limit))
+      .limit(pageLimit)
       .offset(offset)
       .orderBy(schema.productsTable.createdAt);
 
@@ -119,9 +215,9 @@ de, `%${filterCode}%`));
     const withImages = await loadImagesFor(products);
 
     res.set("Cache-Control", "no-store");
-    res.json({ products: withImages, total: Number(count), page: parseInt(page), limit: parseInt(limit) });
+    res.json({ products: withImages, total: Number(count), page: pageNumber, limit: pageLimit });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
-}
+});
 
 // GET /products/:id — public, store-scoped
 router.get("/products/:id", optionalAuth, async (req: AuthRequest, res) => {

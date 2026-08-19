@@ -51,6 +51,25 @@ async function ensureEntitlementsSchema(): Promise<void> {
   `);
 }
 
+async function ensureCustomerProfileSchema(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE "users"
+      ADD COLUMN IF NOT EXISTS "address" text,
+      ADD COLUMN IF NOT EXISTS "last_login_at" timestamp with time zone
+  `);
+}
+
+async function ensureErpCustomerLinksSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "erp_customer_links" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer NOT NULL UNIQUE REFERENCES "users"("id") ON DELETE CASCADE,
+      "token_hash" text NOT NULL UNIQUE,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )
+  `);
+}
+
 async function ensureAdminSettingsSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "admin_settings" (
@@ -514,6 +533,8 @@ export async function runMigrations(): Promise<void> {
   // database, where the products table did not exist during the bootstrap
   // detection above.
   await ensureUploadedAssetsSchema();
+  await ensureCustomerProfileSchema();
+  await ensureErpCustomerLinksSchema();
   await ensureEntitlementsSchema();
   await ensureAdminSettingsSchema();
   await ensureErpManagementSchema();

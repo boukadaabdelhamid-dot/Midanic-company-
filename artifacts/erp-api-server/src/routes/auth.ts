@@ -10,6 +10,30 @@ import { tenantStoreMatches, verifyTenantDomainRequest } from "../lib/tenant-dom
 
 const router = Router();
 
+type PlatformCredentials = {
+  id: number;
+  email: string;
+  passwordHash: string;
+  firstName: string;
+  lastName: string;
+  companyName: string | null;
+  phone: string | null;
+  address: string | null;
+  role: string;
+  isActive: boolean;
+};
+
+async function getPlatformCredentials(userId: number): Promise<PlatformCredentials> {
+  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  if (!baseUrl || !secret) throw new Error("Platform credential sync is not configured");
+  const response = await fetch(`${baseUrl}/api/internal/erp/credentials/${userId}`, {
+    headers: { "X-Platform-Service-Secret": secret },
+  });
+  if (!response.ok) throw new Error(`Platform credential lookup failed (${response.status})`);
+  return await response.json() as PlatformCredentials;
+}
+
 router.post("/auth/sso/exchange", async (req, res) => {
   try {
     const rawToken = typeof req.body?.token === "string" ? req.body.token : "";
@@ -29,6 +53,11 @@ router.post("/auth/sso/exchange", async (req, res) => {
       });
       return;
     }
+    const platformCredentials = await getPlatformCredentials(sso.userId);
+    if (!platformCredentials.isActive) {
+      res.status(403).json({ error: "Platform account is inactive" });
+      return;
+    }
     const [platformUser] = await db.select().from(schema.usersTable)
       .where(eq(schema.usersTable.platformUserId, sso.userId))
       .limit(1);
@@ -43,14 +72,25 @@ router.post("/auth/sso/exchange", async (req, res) => {
     if (!user) {
       [user] = await db.insert(schema.usersTable).values({
         platformUserId: sso.userId,
-        name: sso.email.split("@")[0] || "Midanic User",
-        email: sso.email.toLowerCase(),
-        passwordHash: randomBytes(32).toString("hex"),
+        name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || "Midanic User",
+        email: platformCredentials.email.toLowerCase(),
+        passwordHash: platformCredentials.passwordHash,
         role: databaseRole,
+        phone: platformCredentials.phone,
+        address: platformCredentials.address,
       }).returning();
     } else {
       [user] = await db.update(schema.usersTable)
-        .set({ platformUserId: sso.userId, email: sso.email.toLowerCase(), role: databaseRole, isActive: true })
+        .set({
+          platformUserId: sso.userId,
+          email: platformCredentials.email.toLowerCase(),
+          passwordHash: platformCredentials.passwordHash,
+          name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || user.name,
+          phone: platformCredentials.phone,
+          address: platformCredentials.address,
+          role: databaseRole,
+          isActive: true,
+        })
         .where(eq(schema.usersTable.id, user.id))
         .returning();
     }
@@ -134,7 +174,24 @@ router.post("/auth/login", async (req, res) => {
     const [user] = await db.select().from(schema.usersTable)
       .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
     if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    let valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid && user.platformUserId) {
+      try {
+        const platformCredentials = await getPlatformCredentials(user.platformUserId);
+        valid = platformCredentials.isActive && await bcrypt.compare(password, platformCredentials.passwordHash);
+        if (valid) {
+          await db.update(schema.usersTable).set({
+            email: platformCredentials.email.toLowerCase(),
+            passwordHash: platformCredentials.passwordHash,
+            name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || user.name,
+            phone: platformCredentials.phone,
+            address: platformCredentials.address,
+          }).where(eq(schema.usersTable.id, user.id));
+        }
+      } catch (syncError) {
+        req.log.warn({ err: syncError }, "Platform credential sync unavailable during ERP login");
+      }
+    }
     if (!valid) { res.status(401).json({ error: "Invalid credentials" }); return; }
     if (!user.isActive) { res.status(403).json({ error: "Account disabled" }); return; }
 

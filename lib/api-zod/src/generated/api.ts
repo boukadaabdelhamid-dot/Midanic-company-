@@ -29,6 +29,7 @@ export const RegisterBody = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "companyName": zod.string().optional(),
+  "address": zod.string().optional(),
   "language": zod.enum(['en', 'fr', 'ar']).default(registerBodyLanguageDefault)
 })
 

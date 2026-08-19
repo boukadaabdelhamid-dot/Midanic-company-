@@ -712,6 +712,8 @@ components:
           type: string
         companyName:
           type: string
+        address:
+          type: string
         language:
           type: string
           enum: [en, fr, ar]

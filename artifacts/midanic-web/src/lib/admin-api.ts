@@ -72,7 +72,23 @@ export const adminApi = {
   updateUser: (id: number, body: { role?: string; isActive?: boolean }) =>
     request<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   createCustomerErpLink: (id: number) =>
-    request<CustomerErpLink>(`/admin/users/${id}/erp-link`, { method: "POST" }),
+    request<CustomerErpLink>(`/admin/customers/${id}/erp-link`, { method: "POST" }),
+  getCustomerErpLink: (id: number) =>
+    request<CustomerErpLinkStatus>(`/admin/customers/${id}/erp-link`),
+  deleteCustomerErpLink: (id: number) =>
+    request<void>(`/admin/customers/${id}/erp-link`, { method: "DELETE" }),
+  listCustomers: (params?: { page?: number; limit?: number; search?: string }) =>
+    request<CustomerListResponse>(`/admin/customers?${new URLSearchParams(cleanParams(params)).toString()}`),
+  getCustomer: (id: number) => request<AdminCustomer>(`/admin/customers/${id}`),
+  updateCustomer: (id: number, body: CustomerUpdateInput) =>
+    request<AdminCustomer>(`/admin/customers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  exportCustomers: async () => {
+    const res = await fetch(`${BASE}/admin/customers/export`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
 
   // Products
   listProducts: () => request<AdminProduct[]>("/admin/products"),
@@ -326,11 +342,17 @@ export interface AdminUser {
 }
 
 export interface CustomerErpLink {
+  id: number;
   launchUrl: string;
-  expiresIn: number;
+  expiresIn: number | null;
+  createdAt: string;
   tenantId: number;
   companyName: string;
   status: string;
+}
+
+export interface CustomerErpLinkStatus {
+  link: Pick<CustomerErpLink, "id" | "createdAt"> | null;
 }
 
 export interface UserListResponse {
@@ -339,6 +361,29 @@ export interface UserListResponse {
   page: number;
   limit: number;
 }
+
+export interface AdminCustomer {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  companyName: string | null;
+  phone: string | null;
+  address: string | null;
+  language: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface CustomerListResponse {
+  customers: AdminCustomer[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type CustomerUpdateInput = Partial<Pick<AdminCustomer, "email" | "firstName" | "lastName" | "companyName" | "phone" | "address" | "isActive">>;
 
 export interface AdminProduct {
   id: number;

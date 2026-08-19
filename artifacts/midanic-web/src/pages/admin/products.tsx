@@ -47,7 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Star, Download, Tag, Upload, ImageIcon, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Star, Download, Tag, Upload, ImageIcon, X, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFileToStorage } from '@/lib/storage-upload';
 
@@ -118,6 +118,7 @@ export default function AdminProducts() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
@@ -357,6 +358,14 @@ export default function AdminProducts() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Invalid image', description: 'Please choose an image file.', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Image is too large', description: 'Please choose an image smaller than 10 MB.', variant: 'destructive' });
+      return;
+    }
     setUploadingImage(true);
     try {
       const url = await uploadFileToStorage(file);
@@ -367,6 +376,7 @@ export default function AdminProducts() {
     } finally {
       setUploadingImage(false);
       if (imageInputRef.current) imageInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -528,62 +538,93 @@ export default function AdminProducts() {
                   <Label>Trial Days</Label>
                   <Input type="number" value={form.trialDays ?? ''} onChange={(e) => setForm((p) => ({ ...p, trialDays: e.target.value ? Number(e.target.value) : undefined }))} />
                 </div>
-                <div className="space-y-1 col-span-2">
-                  <Label>Product Image</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={form.imageUrl ?? ''}
-                      onChange={f('imageUrl')}
-                      placeholder="https://… or upload below"
-                      className="flex-1"
-                    />
-                    {form.imageUrl && (
+                <div className="col-span-2 space-y-3 rounded-xl border border-dashed bg-muted/20 p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label className="text-base">Product Image</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Choose a photo from your phone or take one with the camera.
+                      </p>
+                    </div>
+                    <ImageIcon className="h-5 w-5 shrink-0 text-primary" />
+                  </div>
+
+                  {form.imageUrl ? (
+                    <div className="relative overflow-hidden rounded-lg border bg-background">
+                      <img
+                        src={form.imageUrl}
+                        alt="Product preview"
+                        className="h-44 w-full object-contain sm:h-52"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
+                        variant="secondary"
+                        size="sm"
+                        className="absolute right-2 top-2 gap-1.5 shadow-sm"
                         onClick={() => setForm((p) => ({ ...p, imageUrl: '' }))}
-                        title="Clear image"
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" /> Remove
                       </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1">
+                    </div>
+                  ) : (
+                    <div className="flex h-32 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+                      <div className="text-center">
+                        <ImageIcon className="mx-auto h-8 w-8 opacity-40" />
+                        <p className="mt-2 text-xs">No product image selected</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input
                       ref={imageInputRef}
                       type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
                       accept="image/*"
+                      capture="environment"
                       className="hidden"
                       onChange={handleImageUpload}
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="gap-2"
+                      className="min-h-11 w-full gap-2"
                       disabled={uploadingImage}
                       onClick={() => imageInputRef.current?.click()}
                     >
-                      {uploadingImage ? (
-                        <span className="animate-pulse">Uploading…</span>
-                      ) : (
-                        <><Upload className="h-3.5 w-3.5" /> Upload Image</>
-                      )}
+                      <Upload className="h-4 w-4" />
+                      {uploadingImage ? 'Uploading…' : 'Choose from phone'}
                     </Button>
-                    {form.imageUrl && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        <img
-                          src={form.imageUrl}
-                          alt="preview"
-                          className="h-8 w-8 rounded object-cover border"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      </div>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 w-full gap-2"
+                      disabled={uploadingImage}
+                      onClick={() => cameraInputRef.current?.click()}
+                    >
+                      <Camera className="h-4 w-4" />
+                      Take a photo
+                    </Button>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">or paste a URL</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  <Input
+                    value={form.imageUrl ?? ''}
+                    onChange={f('imageUrl')}
+                    placeholder="https://…"
+                    inputMode="url"
+                  />
                 </div>
                 <div className="space-y-1 col-span-2">
                   <Label>Intro Video URL</Label>

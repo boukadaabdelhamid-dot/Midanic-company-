@@ -18,6 +18,7 @@ const registerSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   companyName: z.string().optional(),
+  address: z.string().optional(),
   language: z.enum(['en', 'fr', 'ar']).optional(),
 });
 
@@ -99,6 +100,17 @@ export default function Register() {
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-address" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="email"

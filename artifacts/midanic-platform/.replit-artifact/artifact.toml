@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/platform-preview/"
+title = "Midanic Platform"
+description = "The imported Midanic SaaS platform frontend for company management, products, content, and customer-facing pages."
+version = "1.0.0"
+id = "artifacts/midanic-platform"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/platform-preview" ]
+localPort = 22425
+
+[services.development]
+run = "pnpm --filter @workspace/midanic-platform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/midanic-platform", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/midanic-platform/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22425"
+BASE_PATH = "/platform-preview/"

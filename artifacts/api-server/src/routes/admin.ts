@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { createHash, randomBytes } from "node:crypto";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -19,6 +20,7 @@ import {
   entitlementHistoryTable,
   adminSettingsTable,
   erpTenantsTable,
+  erpCustomerLinksTable,
 } from "@workspace/db";
 import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -31,6 +33,44 @@ import {
 import { isDatabaseUniqueViolation } from "../lib/db-errors";
 
 const router: IRouter = Router();
+
+function hashErpCustomerLink(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+// Permanent customer ERP links only redirect to the ERP login page. They
+// never authenticate the customer by themselves and can be revoked at any time.
+router.get("/erp/customer-links/:token", async (req, res): Promise<void> => {
+  const token = typeof req.params.token === "string" ? req.params.token : "";
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    res.status(404).send("ERP link not found");
+    return;
+  }
+  const [link] = await db.select({
+    userId: erpCustomerLinksTable.userId,
+  }).from(erpCustomerLinksTable)
+    .where(eq(erpCustomerLinksTable.tokenHash, hashErpCustomerLink(token)))
+    .limit(1);
+  if (!link) {
+    res.status(410).send("This ERP link has been deleted");
+    return;
+  }
+  const [tenant] = await db.select({
+    hostname: erpTenantsTable.hostname,
+    status: erpTenantsTable.status,
+    domainStatus: erpTenantsTable.domainStatus,
+    trialEndsAt: erpTenantsTable.trialEndsAt,
+  }).from(erpTenantsTable).where(eq(erpTenantsTable.ownerUserId, link.userId))
+    .orderBy(desc(erpTenantsTable.createdAt)).limit(1);
+  const expired = tenant?.status === "active" && tenant.trialEndsAt !== null &&
+    tenant.trialEndsAt.getTime() <= Date.now();
+  if (!tenant || !tenant.hostname || tenant.domainStatus !== "active" ||
+      !["active", "converted"].includes(expired ? "expired" : tenant.status)) {
+    res.status(403).send("ERP access is not active");
+    return;
+  }
+  res.redirect(`${buildErpTenantLaunchUrl(tenant.hostname)}login`);
+});
 
 const ADMIN_LOCALES = ["en", "fr", "ar"] as const;
 type AdminLocale = (typeof ADMIN_LOCALES)[number];
@@ -589,6 +629,154 @@ router.get("/admin/users", async (req, res): Promise<void> => {
   res.json({ users, total: Number(totalRow?.total ?? 0), page, limit });
 });
 
+router.get("/admin/customers", async (req, res): Promise<void> => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Number(req.query.limit) || 20);
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const offset = (page - 1) * limit;
+  const condition = and(
+    eq(usersTable.role, "customer"),
+    search
+      ? or(
+          ilike(usersTable.email, `%${search}%`),
+          ilike(usersTable.firstName, `%${search}%`),
+          ilike(usersTable.lastName, `%${search}%`),
+          ilike(usersTable.companyName, `%${search}%`),
+          ilike(usersTable.phone, `%${search}%`),
+        )
+      : undefined,
+  );
+  const [customers, [totalRow]] = await Promise.all([
+    db.select({
+      id: usersTable.id,
+      email: usersTable.email,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      companyName: usersTable.companyName,
+      phone: usersTable.phone,
+      address: usersTable.address,
+      language: usersTable.language,
+      isActive: usersTable.isActive,
+      createdAt: usersTable.createdAt,
+      lastLoginAt: usersTable.lastLoginAt,
+    }).from(usersTable).where(condition).orderBy(desc(usersTable.createdAt)).limit(limit).offset(offset),
+    db.select({ total: count() }).from(usersTable).where(condition),
+  ]);
+  res.json({ customers, total: Number(totalRow?.total ?? 0), page, limit });
+});
+
+router.get("/admin/customers/export", async (req, res): Promise<void> => {
+  const customers = await db.select({
+    id: usersTable.id,
+    email: usersTable.email,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    companyName: usersTable.companyName,
+    phone: usersTable.phone,
+    address: usersTable.address,
+    language: usersTable.language,
+    isActive: usersTable.isActive,
+    createdAt: usersTable.createdAt,
+    lastLoginAt: usersTable.lastLoginAt,
+  }).from(usersTable).where(eq(usersTable.role, "customer")).orderBy(desc(usersTable.createdAt));
+  const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const headers = ["id", "first_name", "last_name", "email", "phone", "company", "address", "language", "status", "registered_at", "last_login_at"];
+  const rows = customers.map((customer) => [
+    customer.id, customer.firstName, customer.lastName, customer.email, customer.phone,
+    customer.companyName, customer.address, customer.language, customer.isActive ? "active" : "suspended",
+    customer.createdAt.toISOString(), customer.lastLoginAt?.toISOString() ?? "",
+  ].map(escape).join(","));
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="midanic-customers.csv"');
+  res.send([headers.join(","), ...rows].join("\n"));
+});
+
+router.get("/admin/customers/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+  const [customer] = await db.select({
+    id: usersTable.id,
+    email: usersTable.email,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    companyName: usersTable.companyName,
+    phone: usersTable.phone,
+    address: usersTable.address,
+    language: usersTable.language,
+    isActive: usersTable.isActive,
+    createdAt: usersTable.createdAt,
+    lastLoginAt: usersTable.lastLoginAt,
+  }).from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.role, "customer"))).limit(1);
+  if (!customer) {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+  res.json(customer);
+});
+
+router.patch("/admin/customers/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+  const body = req.body as {
+    firstName?: unknown; lastName?: unknown; email?: unknown; companyName?: unknown;
+    phone?: unknown; address?: unknown; isActive?: unknown;
+  };
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  for (const [key, column] of [
+    ["firstName", usersTable.firstName], ["lastName", usersTable.lastName],
+    ["email", usersTable.email], ["companyName", usersTable.companyName],
+    ["phone", usersTable.phone], ["address", usersTable.address],
+  ] as const) {
+    if (body[key] !== undefined) {
+      if (typeof body[key] !== "string") {
+        res.status(400).json({ error: `${key} must be a string` });
+        return;
+      }
+      const value = body[key].trim();
+      if (["firstName", "lastName", "email"].includes(key) && !value) {
+        res.status(400).json({ error: `${key} is required` });
+        return;
+      }
+      if (key === "email") updates.email = value.toLowerCase();
+      else updates[column.name] = value || null;
+    }
+  }
+  if (body.isActive !== undefined) {
+    if (typeof body.isActive !== "boolean") {
+      res.status(400).json({ error: "isActive must be boolean" });
+      return;
+    }
+    updates.isActive = body.isActive;
+  }
+  try {
+    const [customer] = await db.update(usersTable).set(updates).where(
+      and(eq(usersTable.id, id), eq(usersTable.role, "customer")),
+    ).returning({
+      id: usersTable.id, email: usersTable.email, firstName: usersTable.firstName,
+      lastName: usersTable.lastName, companyName: usersTable.companyName, phone: usersTable.phone,
+      address: usersTable.address, language: usersTable.language, isActive: usersTable.isActive,
+      createdAt: usersTable.createdAt, lastLoginAt: usersTable.lastLoginAt,
+    });
+    if (!customer) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    res.json(customer);
+  } catch (error) {
+    if (isDatabaseUniqueViolation(error)) {
+      res.status(409).json({ error: "Email already registered" });
+      return;
+    }
+    throw error;
+  }
+});
+
 router.patch("/admin/users/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (isNaN(id)) {
@@ -613,9 +801,24 @@ router.patch("/admin/users/:id", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-// Generate a short-lived ERP SSO link for a customer. The link carries the
-// customer's own identity and tenant, never the admin's identity.
-router.post("/admin/users/:id/erp-link", async (req, res): Promise<void> => {
+router.get("/admin/customers/:id/erp-link", async (req, res): Promise<void> => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+  const [link] = await db.select({
+    id: erpCustomerLinksTable.id,
+    createdAt: erpCustomerLinksTable.createdAt,
+  }).from(erpCustomerLinksTable)
+    .where(eq(erpCustomerLinksTable.userId, userId))
+    .limit(1);
+  res.json({ link: link ?? null });
+});
+
+// Generate a permanent ERP login link. The opaque token only permits a
+// redirect to the tenant's login page; it never authenticates the customer.
+router.post("/admin/customers/:id/erp-link", async (req, res): Promise<void> => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId) || userId <= 0) {
     res.status(400).json({ error: "Invalid user id" });
@@ -673,21 +876,38 @@ router.post("/admin/users/:id/erp-link", async (req, res): Promise<void> => {
     return;
   }
 
-  const token = generateErpSsoToken({
+  const token = randomBytes(32).toString("hex");
+  await db.delete(erpCustomerLinksTable).where(eq(erpCustomerLinksTable.userId, user.id));
+  const [link] = await db.insert(erpCustomerLinksTable).values({
     userId: user.id,
-    email: user.email,
-    role: user.role,
-    tenantId: tenant.id,
-    hostname: tenant.hostname,
-  });
+    tokenHash: hashErpCustomerLink(token),
+  }).returning({ id: erpCustomerLinksTable.id, createdAt: erpCustomerLinksTable.createdAt });
 
   res.json({
-    launchUrl: buildErpTenantLaunchUrl(tenant.hostname, token),
-    expiresIn: 120,
+    id: link.id,
+    launchUrl: `${req.protocol}://${req.get("host")}/api/erp/customer-links/${token}`,
+    expiresIn: null,
+    createdAt: link.createdAt,
     tenantId: tenant.id,
     companyName: tenant.companyName,
     status: effectiveStatus,
   });
+});
+
+router.delete("/admin/customers/:id/erp-link", async (req, res): Promise<void> => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+  const deleted = await db.delete(erpCustomerLinksTable)
+    .where(eq(erpCustomerLinksTable.userId, userId))
+    .returning({ id: erpCustomerLinksTable.id });
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "ERP link not found" });
+    return;
+  }
+  res.status(204).send();
 });
 
 // ── CUSTOMER ENTITLEMENTS ──────────────────────────────────────────────────

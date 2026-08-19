@@ -32,6 +32,7 @@ import { AdminLayout } from '@/pages/admin/layout';
 import { AdminSettingsProvider } from '@/contexts/admin-settings-context';
 import AdminOverview from '@/pages/admin/overview';
 import AdminUsers from '@/pages/admin/users';
+import AdminCustomers from '@/pages/admin/customers';
 import AdminProducts from '@/pages/admin/products';
 import AdminLicenses from '@/pages/admin/licenses';
 import AdminContent from '@/pages/admin/content';
@@ -57,6 +58,7 @@ function AdminRouter() {
         <Switch>
           <Route path="/admin" component={AdminOverview} />
           <Route path="/admin/users" component={AdminUsers} />
+          <Route path="/admin/customers" component={AdminCustomers} />
           <Route path="/admin/products" component={AdminProducts} />
           <Route path="/admin/licenses" component={AdminLicenses} />
           <Route path="/admin/content" component={AdminContent} />

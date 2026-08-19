@@ -33,6 +33,7 @@ export interface RegisterInput {
   firstName: string;
   lastName: string;
   companyName?: string;
+  address?: string;
   language?: RegisterInputLanguage;
 }
 

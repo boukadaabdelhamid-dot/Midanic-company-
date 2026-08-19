@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { adminApi, type ErpTenant } from "@/lib/admin-api";
+import { adminApi, type AdminCustomer, type ErpTenant } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,8 @@ export default function AdminErp() {
   const [domainSubdomain, setDomainSubdomain] = useState("");
   const [domainStatus, setDomainStatus] = useState<"inactive" | "active">("inactive");
   const [savingDomain, setSavingDomain] = useState(false);
+  const [customers, setCustomers] = useState<AdminCustomer[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
   const { toast } = useToast();
 
   const loadTenants = useCallback(async () => {
@@ -75,6 +77,24 @@ export default function AdminErp() {
   useEffect(() => {
     void loadTenants();
   }, [loadTenants]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingCustomers(true);
+    adminApi.listCustomers({ limit: 100 })
+      .then((result) => {
+        if (!cancelled) setCustomers(result.customers);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast({ title: "Unable to load customers", description: (error as Error).message, variant: "destructive" });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCustomers(false);
+      });
+    return () => { cancelled = true; };
+  }, [toast]);
 
   const counts = useMemo(
     () => STATUS_OPTIONS.reduce<Record<string, number>>((result, status) => {
@@ -189,7 +209,19 @@ export default function AdminErp() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="erp-owner-id">Owner user ID</label>
-                  <Input id="erp-owner-id" inputMode="numeric" value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} placeholder="Example: 42" />
+                  <Select value={ownerUserId} onValueChange={setOwnerUserId} disabled={loadingCustomers}>
+                    <SelectTrigger id="erp-owner-id">
+                      <SelectValue placeholder={loadingCustomers ? "Loading customers..." : "Select a customer"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={String(customer.id)}>
+                          {customer.firstName} {customer.lastName} — {customer.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Choose the customer who will own this ERP account.</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="erp-subdomain">Company subdomain</label>
@@ -203,7 +235,7 @@ export default function AdminErp() {
                     />
                     <span className="pr-3 text-sm text-muted-foreground">.midanic.com</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">The domain is created inactive. Activate it after the wildcard DNS setup is ready.</p>
+                   <p className="text-xs text-muted-foreground">The domain starts inactive. After creating the account, open its domain settings and activate it once wildcard DNS is ready.</p>
                 </div>
               </div>
               <DialogFooter><Button onClick={() => void createTenant()} disabled={creating}>{creating ? "Creating..." : "Create account"}</Button></DialogFooter>

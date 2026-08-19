@@ -1,4 +1,39 @@
-t, res) => {
+import { Router } from "express";
+import { and, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { db, schema } from "../lib/db";
+import {
+  authenticate,
+  requirePermission,
+  requireStaff,
+  requireStore,
+  requireTenantAdmin,
+  type AuthRequest,
+} from "../lib/auth";
+import { applyCaisseDelta } from "../lib/balance-sync";
+import { ensureCaisse } from "./caisses";
+import { broadcastCaisseChanged, broadcastToAdmins, broadcastToStaffByStores } from "../lib/ws";
+import { mutateCustomerBalance } from "../lib/balance-sync";
+
+const router = Router();
+const pid = (req: { params: Record<string, string | string[]> }, key: string): number =>
+  parseInt(req.params[key] as string);
+
+router.get("/admin/low-stock", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const raw = parseInt((req.query["threshold"] as string) || "5");
+    const threshold = isNaN(raw) ? 5 : Math.max(0, raw);
+    const lowStock = await db.select().from(schema.productsTable)
+      .where(and(lt(schema.productsTable.stock, threshold), eq(schema.productsTable.storeId, storeId)))
+      .orderBy(schema.productsTable.stock);
+    res.json(lowStock);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/analytics", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const raw = parseInt((req.query["threshold"] as string) || "5");

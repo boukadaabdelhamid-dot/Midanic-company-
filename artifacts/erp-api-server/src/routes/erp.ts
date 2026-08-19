@@ -1,4 +1,25 @@
-"low" ? "low" : "all";
+import { Router } from "express";
+import { and, desc, eq, or, sql } from "drizzle-orm";
+import { db, schema } from "../lib/db";
+import { authenticate, isAdmin, requirePermission, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { applyCaisseDelta, mutateCustomerBalance } from "../lib/balance-sync";
+import { broadcastCaisseChanged } from "../lib/ws";
+import { ensureCaisse } from "./caisses";
+
+const router = Router();
+const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
+  const n = parseInt(req.params[key] as string);
+  if (isNaN(n)) throw Object.assign(new Error("Invalid numeric id"), { statusCode: 400 });
+  return n;
+};
+
+router.get("/erp/purchases/needs", authenticate, requireStaff, requireStore, requirePermission("purchases", "view"), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const { page = "1", limit = "50", search, supplierId, familyId, brandId, supplierCity, dateFrom, dateTo, stockFilter, orderByQty } =
+      req.query as Record<string, string | undefined>;
+    const offset = (Math.max(1, parseInt(page, 10) || 1) - 1) * (Math.max(1, parseInt(limit, 10) || 50));
+    const sf = stockFilter === "rupture" ? "rupture" : stockFilter === "low" ? "low" : "all";
     const stockSql = sf === "rupture" ? sql` AND br.stock = 0`
                    : sf === "low"     ? sql` AND br.stock > 0`
                    : sql``;

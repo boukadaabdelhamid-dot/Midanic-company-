@@ -22,11 +22,13 @@ export const usersTable = pgTable("users", {
   language: languageEnum("language").notNull().default("en"),
   companyName: text("company_name"),
   phone: text("phone"),
+  address: text("address"),
   avatarUrl: text("avatar_url"),
   twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
   twoFactorSecret: text("two_factor_secret"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
