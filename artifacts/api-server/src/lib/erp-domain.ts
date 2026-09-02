@@ -54,10 +54,15 @@ export function buildErpTenantHostname(subdomain: string): string {
 }
 
 export function buildErpTenantLaunchUrl(hostname: string, token?: string): string {
-  const baseUrl = `https://${normalizeHostname(hostname)}`;
-  return token
-    ? `${baseUrl}/sso?token=${encodeURIComponent(token)}`
-    : `${baseUrl}/`;
+  const normalizedHostname = normalizeHostname(hostname);
+  const configuredBase = process.env["ERP_PUBLIC_URL"]?.trim();
+  const baseUrl = configuredBase
+    ? `${configuredBase.replace(/\/+$/, "")}/`
+    : `https://${normalizedHostname}/`;
+  const route = token ? "sso" : "login";
+  const params = new URLSearchParams({ hostname: normalizedHostname });
+  if (token) params.set("token", token);
+  return `${baseUrl}${route}?${params.toString()}`;
 }
 
 export function normalizeErpHostname(value: unknown): string | null {
