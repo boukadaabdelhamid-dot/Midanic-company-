@@ -25,7 +25,9 @@ type PlatformCredentials = {
 
 async function getPlatformCredentials(userId: number): Promise<PlatformCredentials> {
   const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
-  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!baseUrl || !secret) throw new Error("Platform credential sync is not configured");
   const response = await fetch(`${baseUrl}/api/internal/erp/credentials/${userId}`, {
     headers: { "X-Platform-Service-Secret": secret },
