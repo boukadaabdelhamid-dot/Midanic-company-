@@ -24,7 +24,7 @@ router.get("/profile", requireAuth, async (req, res): Promise<void> => {
 
 // Customer: read the ERP entry point and the current access state.
 router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
-  const [tenant] = await db
+  const tenants = await db
     .select({
       id: erpTenantsTable.id,
       companyName: erpTenantsTable.companyName,
@@ -36,8 +36,23 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
-    .orderBy(desc(erpTenantsTable.createdAt))
-    .limit(1);
+    .orderBy(desc(erpTenantsTable.createdAt));
+
+  const tenant =
+    tenants.find((candidate) => {
+      const trialExpired =
+        candidate.status === "active" &&
+        candidate.trialEndsAt !== null &&
+        candidate.trialEndsAt.getTime() <= Date.now();
+      const statusAllowsAccess =
+        candidate.status === "active" || candidate.status === "converted";
+      return (
+        !trialExpired &&
+        statusAllowsAccess &&
+        candidate.domainStatus === "active" &&
+        Boolean(candidate.hostname)
+      );
+    }) ?? tenants[0];
 
   if (!tenant) {
     res.json({
