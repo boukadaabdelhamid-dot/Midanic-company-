@@ -235,15 +235,33 @@ async function ensureErpDemoData(): Promise<void> {
     `SELECT id FROM erp_tenants WHERE owner_user_id = $1 ORDER BY id LIMIT 1`,
     [ownerId],
   );
-  if (!tenant.rows[0]) {
-    await pool.query(
+  let tenantId = tenant.rows[0]?.id;
+  if (!tenantId) {
+    const created = await pool.query<{ id: number }>(
       `INSERT INTO erp_tenants
         (owner_user_id, company_name, status, trial_started_at, trial_ends_at, approved_at, notes)
        VALUES ($1, 'شركة التجربة - Midanic', 'active', now(), now() + interval '7 days', now(),
-               'Demo tenant created for ERP evaluation')`,
+               'Demo tenant created for ERP evaluation')
+       RETURNING id`,
       [ownerId],
     );
+    tenantId = created.rows[0].id;
   }
+  // Keep the built-in evaluation tenant immediately reachable from Platform.
+  // The notes predicate prevents this demo repair from touching a real tenant.
+  await pool.query(
+    `UPDATE erp_tenants
+     SET subdomain = COALESCE(subdomain, 'demo'),
+         hostname = COALESCE(hostname, 'demo.midanic.com'),
+         domain_status = 'active',
+         domain_activated_at = COALESCE(domain_activated_at, now()),
+         status = 'active',
+         trial_started_at = COALESCE(trial_started_at, now()),
+         trial_ends_at = now() + interval '7 days',
+         updated_at = now()
+     WHERE id = $1 AND notes = 'Demo tenant created for ERP evaluation'`,
+    [tenantId],
+  );
 
   const store = await pool.query<{ id: number }>(
     `SELECT id FROM erp_stores WHERE slug = 'demo-store' LIMIT 1`,
