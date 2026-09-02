@@ -126,14 +126,19 @@ function SsoExchange() {
   const [message, setMessage] = useState("جاري تسجيل الدخول عبر Midanic…");
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
+    const search = new URLSearchParams(window.location.search);
+    const token = search.get("token");
+    const hostname = search.get("hostname");
     if (!token) {
       setMessage("رابط الدخول الموحد غير صالح.");
       return;
     }
     fetch(`${getApiBase()}/api/auth/sso/exchange`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(hostname ? { "X-Tenant-Hostname": hostname } : {}),
+      },
       body: JSON.stringify({ token }),
     })
       .then(async (response) => {
