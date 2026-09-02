@@ -77,7 +77,9 @@ export async function enforcePlatformAccess(req: TenantDomainRequest, user: JwtP
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
-  const serviceSecret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const serviceSecret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (serviceSecret && req.header("X-Platform-Service-Secret") === serviceSecret) {
     const serviceUserId = Number(req.header("X-Platform-User-Id") ?? "0");
     const storeId = Number(req.header("X-Store-Id") ?? "0");
