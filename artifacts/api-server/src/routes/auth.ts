@@ -172,7 +172,9 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
-  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -215,7 +217,9 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
 // aligned with the Platform account. The password hash never reaches a
 // browser and the endpoint is protected by the platform service secret.
 router.get("/internal/erp/credentials/:userId", async (req, res): Promise<void> => {
-  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -245,7 +249,9 @@ router.get("/internal/erp/credentials/:userId", async (req, res): Promise<void> 
 });
 
 router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<void> => {
-  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -275,7 +281,9 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
 });
 
 router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => {
-  const expected = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
     res.status(401).json({ error: "Unauthorized" });
     return;
