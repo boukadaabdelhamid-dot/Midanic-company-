@@ -69,7 +69,7 @@ router.get("/erp/customer-links/:token", async (req, res): Promise<void> => {
     res.status(403).send("ERP access is not active");
     return;
   }
-  res.redirect(`${buildErpTenantLaunchUrl(tenant.hostname)}login`);
+  res.redirect(buildErpTenantLaunchUrl(tenant.hostname));
 });
 
 const ADMIN_LOCALES = ["en", "fr", "ar"] as const;
@@ -122,7 +122,9 @@ router.use("/admin", requireAuth, requireRole("super_admin"));
 // browser. ERP validates the same service secret before honoring the request.
 router.use("/admin/erp-control", async (req, res): Promise<void> => {
   const erpUrl = process.env["ERP_API_URL"]?.replace(/\/+$/, "");
-  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!erpUrl || !secret) {
     res.status(503).json({ error: "ERP control bridge is not configured" });
     return;
