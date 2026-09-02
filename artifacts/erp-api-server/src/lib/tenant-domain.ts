@@ -82,7 +82,9 @@ export async function resolvePlatformTenantDomain(
   if (cached && cached.expiresAt > now) return cached.value;
 
   const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
-  const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
   if (!baseUrl || !secret) {
     if (process.env["NODE_ENV"] === "production") return null;
     return null;
@@ -119,12 +121,26 @@ export async function verifyTenantDomainRequest(
   const actualHostname = getRequestTenantHostname(req);
   const platformConfigured =
     Boolean(process.env["PLATFORM_API_URL"]) &&
-    Boolean(process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"]);
+    Boolean(
+      process.env["PLATFORM_SERVICE_SECRET"] ??
+      process.env["PLATFORM_SSO_SECRET"] ??
+      process.env["SESSION_SECRET"],
+    );
 
-  if (process.env["NODE_ENV"] !== "production" && !platformConfigured) {
-    return actualHostname === expectedHostname ||
-      actualHostname === "localhost" ||
-      actualHostname?.endsWith(".replit.dev") === true;
+  const isDevelopmentPreview =
+    process.env["NODE_ENV"] !== "production" &&
+    (actualHostname === "localhost" ||
+      actualHostname === "127.0.0.1" ||
+      actualHostname?.endsWith(".replit.dev") === true);
+  if (isDevelopmentPreview && !platformConfigured) {
+    return true;
+  }
+  if (isDevelopmentPreview && platformConfigured) {
+    const domain = await resolvePlatformTenantDomain(expectedHostname);
+    return domain?.canAccess === true &&
+      domain.tenantId === expected.tenantId &&
+      domain.ownerUserId === expected.ownerUserId &&
+      domain.hostname === expectedHostname;
   }
   if (actualHostname !== expectedHostname) return false;
 
