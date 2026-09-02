@@ -14,7 +14,7 @@ test("ERP tenant subdomains are normalized, validated, and used in launch URLs",
     assert.equal(buildErpTenantHostname("plattin"), "plattin.midanic.com");
     assert.equal(
       buildErpTenantLaunchUrl("plattin.midanic.com", "signed ticket"),
-      "https://plattin.midanic.com/sso?token=signed%20ticket",
+      "https://plattin.midanic.com/sso?hostname=plattin.midanic.com&token=signed+ticket",
     );
     assert.throws(() => parseErpSubdomain("-invalid"), /Subdomain must/);
     assert.throws(() => parseErpSubdomain("api"), /reserved/);
