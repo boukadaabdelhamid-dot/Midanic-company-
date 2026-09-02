@@ -51,7 +51,9 @@ export async function resolvePublicStore(req: PublicStoreRequest, res: Response,
       }
     }
     if (store.platformTenantId && process.env["PLATFORM_API_URL"]) {
-      const secret = process.env["PLATFORM_SERVICE_SECRET"] ?? process.env["PLATFORM_SSO_SECRET"];
+      const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+        process.env["PLATFORM_SSO_SECRET"] ??
+        process.env["SESSION_SECRET"];
       if (!secret) {
         res.status(503).json({ error: "Platform control is not configured" });
         return;
