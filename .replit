@@ -64,3 +64,8 @@ channel = "stable-25_05"
 [userenv.shared]
 CLOUDFLARE_R2_ACCOUNT_ID = "9cf99b811d145f7cd0da4a888a23886a"
 CLOUDFLARE_R2_BUCKET_NAME = "midanic-uploads"
+
+[userenv.development]
+ERP_API_URL = "http://127.0.0.1:8082"
+ERP_PUBLIC_URL = "/erp/"
+PLATFORM_API_URL = "http://127.0.0.1:8080"
