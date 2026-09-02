@@ -70,7 +70,7 @@ app.use(
       return cb(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization", "X-Store-Slug"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Store-Slug", "X-Tenant-Hostname"],
     exposedHeaders: ["Content-Type"],
   }),
 );
