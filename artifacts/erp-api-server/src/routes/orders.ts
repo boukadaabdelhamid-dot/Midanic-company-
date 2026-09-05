@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db, schema } from "../lib/db";
 import {
   authenticate,
@@ -221,6 +221,67 @@ router.get("/admin/analytics", authenticate, requireTenantAdmin, requireStore, a
         };
       }),
     });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /admin/orders — store-scoped list used by ERP order screens.
+router.get("/admin/orders", authenticate, requireStaff, requireStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const rawChannel = req.query["channel"];
+    const channel = typeof rawChannel === "string" ? rawChannel : "all";
+
+    if (!["all", "online", "pos"].includes(channel)) {
+      res.status(400).json({ error: "Invalid channel. Must be one of: all, online, pos" });
+      return;
+    }
+
+    const channelFilter =
+      channel === "online"
+        ? or(
+            eq(schema.ordersTable.orderSource, "online"),
+            and(isNull(schema.ordersTable.orderSource), isNull(schema.ordersTable.sellerUserId)),
+          )
+        : channel === "pos"
+          ? or(
+              eq(schema.ordersTable.orderSource, "pos"),
+              eq(schema.ordersTable.orderSource, "bon"),
+            )
+          : undefined;
+    const noDraft = ne(schema.ordersTable.status, "draft");
+    const whereClause = channelFilter
+      ? and(eq(schema.ordersTable.storeId, storeId), channelFilter, noDraft)
+      : and(eq(schema.ordersTable.storeId, storeId), noDraft);
+
+    const orders = await db
+      .select()
+      .from(schema.ordersTable)
+      .where(whereClause)
+      .orderBy(desc(schema.ordersTable.createdAt));
+    const sellerIds = Array.from(
+      new Set(orders.map((order) => order.sellerUserId).filter((id): id is number => id != null)),
+    );
+    const sellers = sellerIds.length
+      ? await db
+          .select({
+            id: schema.usersTable.id,
+            name: schema.usersTable.name,
+            email: schema.usersTable.email,
+          })
+          .from(schema.usersTable)
+          .where(inArray(schema.usersTable.id, sellerIds))
+      : [];
+    const sellerMap = new Map(sellers.map((seller) => [seller.id, seller]));
+
+    res.json(
+      orders.map((order) => ({
+        ...order,
+        sellerUser: order.sellerUserId ? sellerMap.get(order.sellerUserId) ?? null : null,
+      })),
+    );
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

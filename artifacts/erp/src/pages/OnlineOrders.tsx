@@ -32,6 +32,17 @@ const statusColor = (s: string) => {
   }
 };
 
+function normalizeOrders(value: unknown): Order[] {
+  if (Array.isArray(value)) return value as Order[];
+  if (!value || typeof value !== "object") return [];
+
+  const envelope = value as Record<string, unknown>;
+  for (const key of ["data", "orders", "items"]) {
+    if (Array.isArray(envelope[key])) return envelope[key] as Order[];
+  }
+  return [];
+}
+
 function OrderItemsRow({ orderId, colSpan, t, currency }: { orderId: number; colSpan: number; t: (fr: string, ar: string) => string; currency: string }) {
   const { data, isLoading } = useGetOrder(orderId, {
     query: { queryKey: getGetOrderQueryKey(orderId) },
@@ -85,9 +96,10 @@ export default function OnlineOrders() {
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const currency = lang === "ar" ? "دج" : "DA";
   const params = { channel: GetAdminOrdersChannel.online };
-  const { data: orders, isLoading } = useGetAdminOrders(params, {
+  const { data: rawOrders, isLoading } = useGetAdminOrders(params, {
     query: { queryKey: getGetAdminOrdersQueryKey(params) },
   });
+  const orders = normalizeOrders(rawOrders);
   const updateStatus = useUpdateOrderStatus();
   const [updating, setUpdating] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -148,9 +160,9 @@ export default function OnlineOrders() {
     cancelled: t("Annulé", "ملغي"),
   };
 
-  const pendingCount = (orders ?? []).filter((o) => o.status === "pending").length;
+  const pendingCount = orders.filter((o) => o.status === "pending").length;
 
-  const labelOrder = labelOrderId != null ? (orders ?? []).find((o) => o.id === labelOrderId) ?? null : null;
+  const labelOrder = labelOrderId != null ? orders.find((o) => o.id === labelOrderId) ?? null : null;
   const labelCustomer: LabelCustomer | null = labelOrder ? {
     customerId: labelOrder.id,
     name: labelOrder.customerName ?? "",
@@ -212,7 +224,7 @@ export default function OnlineOrders() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(orders ?? []).map((order: Order) => {
+                  {orders.map((order: Order) => {
                     const isOpen = expanded.has(order.id);
                     return (
                       <React.Fragment key={order.id}>
