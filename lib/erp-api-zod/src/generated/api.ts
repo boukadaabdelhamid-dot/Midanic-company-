@@ -3411,7 +3411,12 @@ export const GetErpCustomersResponseItem = zod.object({
     })
     .nullish(),
 });
-export const GetErpCustomersResponse = zod.array(GetErpCustomersResponseItem);
+export const GetErpCustomersResponse = zod.object({
+  data: zod.array(GetErpCustomersResponseItem),
+  total: zod.number(),
+  page: zod.number(),
+  limit: zod.number(),
+});
 
 /**
  * @summary Create a new customer

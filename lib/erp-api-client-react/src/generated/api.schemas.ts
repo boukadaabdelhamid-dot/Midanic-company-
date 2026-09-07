@@ -1756,6 +1756,13 @@ export interface CustomerSummary {
   priceTier?: PriceTier | null;
 }
 
+export interface ErpCustomersPage {
+  data: CustomerSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type StaffMemberRole =
   (typeof StaffMemberRole)[keyof typeof StaffMemberRole];
 

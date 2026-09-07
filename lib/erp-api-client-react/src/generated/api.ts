@@ -73,6 +73,7 @@ import type {
   CustomerOperation,
   CustomerProfitRow,
   CustomerSummary,
+  ErpCustomersPage,
   DashboardGeneralStats,
   DeleteErpStaff200,
   Employee,
@@ -9750,8 +9751,8 @@ export const getGetErpCustomersUrl = (params?: GetErpCustomersParams) => {
 export const getErpCustomers = async (
   params?: GetErpCustomersParams,
   options?: RequestInit,
-): Promise<CustomerSummary[]> => {
-  return customFetch<CustomerSummary[]>(getGetErpCustomersUrl(params), {
+): Promise<ErpCustomersPage> => {
+  return customFetch<ErpCustomersPage>(getGetErpCustomersUrl(params), {
     ...options,
     method: "GET",
   });

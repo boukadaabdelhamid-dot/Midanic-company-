@@ -1654,6 +1654,33 @@ type ExtCustomer = CustomerSummary & {
   priceTier?: PriceTier | null;
 };
 
+type CustomersPage = {
+  data: ExtCustomer[];
+  total: number;
+  page?: number;
+  limit?: number;
+};
+
+function normalizeCustomersPage(value: unknown): CustomersPage {
+  if (Array.isArray(value)) {
+    return { data: value as ExtCustomer[], total: value.length };
+  }
+  if (!value || typeof value !== "object") {
+    return { data: [], total: 0 };
+  }
+
+  const envelope = value as Record<string, unknown>;
+  const rows = [envelope.data, envelope.customers, envelope.items]
+    .find(Array.isArray) as ExtCustomer[] | undefined;
+  const total = Number(envelope.total);
+  return {
+    data: rows ?? [],
+    total: Number.isFinite(total) ? total : rows?.length ?? 0,
+    page: typeof envelope.page === "number" ? envelope.page : undefined,
+    limit: typeof envelope.limit === "number" ? envelope.limit : undefined,
+  };
+}
+
 function exportXLSX(customers: ExtCustomer[], currency: string, lang: string) {
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const rows = customers.map((c) => ({
@@ -1965,13 +1992,14 @@ export default function Customers() {
     limit: pageSize,
   }), [debouncedSearch, filterClassif, filterWilaya, filterTier, page, pageSize]);
 
-  const { data: customersPage, isLoading } = useGetErpCustomers(queryParams, {
+  const { data: rawCustomersPage, isLoading } = useGetErpCustomers(queryParams, {
     query: { queryKey: getGetErpCustomersQueryKey(queryParams), placeholderData: keepPreviousData },
   });
-  const total = customersPage?.total ?? 0;
+  const customersPage = normalizeCustomersPage(rawCustomersPage);
+  const total = customersPage.total;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const filtered = (customersPage?.data ?? []) as ExtCustomer[];
+  const filtered = customersPage.data;
   const displayedCustomers = filterClassif === "none"
     ? filtered.filter((c) => c.classification == null)
     : filterTier === "none"

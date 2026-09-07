@@ -1320,4 +1320,145 @@ router.delete("/erp/purchase-suggestions/:id", authenticate, requireStaff, requi
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
+// ─── CRM: customers list ────────────────────────────────────────────────────
+// This route must exist before the production SPA fallback. A missing API route
+// otherwise returns index.html, which makes the Customers page receive a
+// non-array response and crash while rendering.
+router.get("/erp/customers", authenticate, requireStaff, requireStore, requirePermission("customers", "view"), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const {
+      search,
+      wilaya,
+      classificationId,
+      priceTierId,
+      page = "1",
+      limit = "10",
+    } = req.query as Record<string, string | undefined>;
+    const pageNum = Math.max(1, parseInt(page || "1", 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit || "10", 10) || 10));
+    const offset = (pageNum - 1) * limitNum;
+
+    const searchCond = search
+      ? sql`(
+          lower(u.name) LIKE ${`%${search.toLowerCase()}%`}
+          OR lower(u.email) LIKE ${`%${search.toLowerCase()}%`}
+          OR lower(coalesce(u.phone, '')) LIKE ${`%${search.toLowerCase()}%`}
+        )`
+      : sql`true`;
+    const wilayaCond = wilaya ? sql`cp.wilaya = ${wilaya}` : sql`true`;
+    const classifCond = classificationId
+      ? sql`cp.classification_id = ${parseInt(classificationId, 10)}`
+      : sql`true`;
+    const tierCond = priceTierId
+      ? sql`cp.price_tier_id = ${parseInt(priceTierId, 10)}`
+      : sql`true`;
+
+    const countResult = await db.execute(sql`
+      SELECT COUNT(*) AS count
+      FROM (
+        SELECT u.id
+        FROM users u
+        LEFT JOIN orders o
+          ON o.user_id = u.id AND o.store_id = ${storeId}
+        LEFT JOIN customer_profiles cp
+          ON cp.user_id = u.id AND cp.store_id = ${storeId}
+        WHERE u.role = 'customer'
+          AND COALESCE(cp.contact_type, 'customer') IN ('customer', 'customer_supplier')
+          AND (${searchCond})
+          AND (${wilayaCond})
+          AND (${classifCond})
+          AND (${tierCond})
+        GROUP BY u.id, cp.store_id
+        HAVING COUNT(o.id) > 0 OR cp.store_id = ${storeId}
+      ) AS customer_count
+    `);
+    const total = Number((countResult.rows[0] as Record<string, unknown> | undefined)?.count ?? 0);
+
+    const customers = await db.execute(sql`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        u.phone,
+        u.address,
+        u.city,
+        u.created_at,
+        COUNT(o.id) AS total_orders,
+        COALESCE(SUM(o.total_amount), 0) AS total_spent,
+        cp.contact_id,
+        cp.wilaya,
+        cp.contact_type,
+        cp.rc,
+        cp.nif,
+        cp.ai,
+        cp.nis,
+        cp.account_number,
+        cp.credit_limit,
+        COALESCE(
+          CASE
+            WHEN cp.contact_type = 'customer_supplier' AND cp.contact_id IS NOT NULL
+            THEN (SELECT current_balance FROM contacts WHERE id = cp.contact_id LIMIT 1)
+            ELSE NULL
+          END,
+          cp.current_balance,
+          0
+        ) AS current_balance,
+        cp.min_balance_alert,
+        cp.foreign_currency,
+        CASE WHEN cc.id IS NOT NULL THEN json_build_object(
+          'id', cc.id,
+          'labelFr', cc.label_fr,
+          'labelAr', cc.label_ar,
+          'color', cc.color,
+          'sortOrder', cc.sort_order
+        ) ELSE NULL END AS classification,
+        CASE WHEN pt.id IS NOT NULL THEN json_build_object(
+          'id', pt.id,
+          'labelFr', pt.label_fr,
+          'labelAr', pt.label_ar,
+          'code', pt.code,
+          'sortOrder', pt.sort_order
+        ) ELSE NULL END AS "priceTier"
+      FROM users u
+      LEFT JOIN orders o
+        ON o.user_id = u.id AND o.store_id = ${storeId}
+      LEFT JOIN customer_profiles cp
+        ON cp.user_id = u.id AND cp.store_id = ${storeId}
+      LEFT JOIN customer_classifications cc
+        ON cc.id = cp.classification_id
+      LEFT JOIN price_tiers pt
+        ON pt.id = cp.price_tier_id
+      WHERE u.role = 'customer'
+        AND COALESCE(cp.contact_type, 'customer') IN ('customer', 'customer_supplier')
+        AND (${searchCond})
+        AND (${wilayaCond})
+        AND (${classifCond})
+        AND (${tierCond})
+      GROUP BY
+        u.id, u.name, u.email, u.phone, u.address, u.city, u.created_at,
+        cp.contact_id, cp.wilaya, cp.contact_type, cp.rc, cp.nif, cp.ai, cp.nis,
+        cp.account_number, cp.credit_limit, cp.current_balance,
+        cp.min_balance_alert, cp.foreign_currency, cp.store_id,
+        cc.id, cc.label_fr, cc.label_ar, cc.color, cc.sort_order,
+        pt.id, pt.label_fr, pt.label_ar, pt.code, pt.sort_order
+      HAVING COUNT(o.id) > 0 OR cp.store_id = ${storeId}
+      ORDER BY total_spent DESC
+      LIMIT ${limitNum}
+      OFFSET ${offset}
+    `);
+
+    const rows = isAdmin(req)
+      ? customers.rows
+      : customers.rows.map((row: Record<string, unknown>) => {
+          const { total_spent: _totalSpent, ...safeRow } = row;
+          return safeRow;
+        });
+    res.json({ data: rows, total, page: pageNum, limit: limitNum });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
