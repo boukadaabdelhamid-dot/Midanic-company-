@@ -25,6 +25,34 @@ const pid = (req: { params: Record<string, string | string[]> }, key: string): n
   return n;
 };
 
+// ── Customer lookups ─────────────────────────────────────────────────────────
+// These endpoints are consumed by the Customers page itself (not only by the
+// settings page), so they must return arrays rather than falling through to the
+// production SPA HTML fallback.
+router.get("/erp/customer-classifications", authenticate, requireStaff, requireStore, requirePermission("customers", "view"), async (req: AuthRequest, res) => {
+  try {
+    const items = await db.select()
+      .from(schema.customerClassificationsTable)
+      .orderBy(schema.customerClassificationsTable.sortOrder, schema.customerClassificationsTable.id);
+    res.json(items);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/erp/price-tiers", authenticate, requireStaff, requireStore, requirePermission("customers", "view"), async (req: AuthRequest, res) => {
+  try {
+    const items = await db.select()
+      .from(schema.priceTiersTable)
+      .orderBy(schema.priceTiersTable.sortOrder, schema.priceTiersTable.id);
+    res.json(items);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ── Product Families ─────────────────────────────────────────────────────────
 
 router.get("/erp/settings/products/families", authenticate, requireStaff, requireStore, requirePermission("settings", "view"), async (req: AuthRequest, res) => {

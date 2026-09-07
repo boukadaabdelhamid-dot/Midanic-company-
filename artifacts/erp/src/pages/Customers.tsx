@@ -81,6 +81,14 @@ function TierBadge({ pt, lang }: { pt?: PriceTier | null; lang: string }) {
   );
 }
 
+function normalizeArrayResponse<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (!value || typeof value !== "object") return [];
+  const envelope = value as Record<string, unknown>;
+  const rows = [envelope.data, envelope.items, envelope.results].find(Array.isArray);
+  return Array.isArray(rows) ? rows as T[] : [];
+}
+
 function CustomerSheet({ customerId, onClose, t, lang, currency, initialTab = "basic", initialEditing = false, isAdmin = false }: {
   customerId: number; onClose: () => void; t: TFn; lang: string; currency: string;
   initialTab?: string; initialEditing?: boolean; isAdmin?: boolean;
@@ -89,8 +97,10 @@ function CustomerSheet({ customerId, onClose, t, lang, currency, initialTab = "b
   const { data: customer, isLoading } = useGetErpCustomer(customerId, {
     query: { enabled: !!customerId, queryKey: getGetErpCustomerQueryKey(customerId) },
   });
-  const { data: classifs = [] } = useGetErpCustomerClassifications();
-  const { data: tiers = [] } = useGetErpPriceTiers();
+  const { data: rawClassifs } = useGetErpCustomerClassifications();
+  const { data: rawTiers } = useGetErpPriceTiers();
+  const classifs = normalizeArrayResponse<CustomerClassification>(rawClassifs);
+  const tiers = normalizeArrayResponse<PriceTier>(rawTiers);
   const updateCustomer = useUpdateErpCustomer();
   const addNote = useCreateCustomerNote();
 
@@ -1931,8 +1941,10 @@ export default function Customers() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const currency = lang === "ar" ? "دج" : "DA";
-  const { data: classifs = [] } = useGetErpCustomerClassifications();
-  const { data: tiers = [] } = useGetErpPriceTiers();
+  const { data: rawClassifs } = useGetErpCustomerClassifications();
+  const { data: rawTiers } = useGetErpPriceTiers();
+  const classifs = normalizeArrayResponse<CustomerClassification>(rawClassifs);
+  const tiers = normalizeArrayResponse<PriceTier>(rawTiers);
 
   const [detailId, setDetailId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
