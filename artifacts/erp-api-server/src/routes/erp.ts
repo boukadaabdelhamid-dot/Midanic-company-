@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { and, desc, eq, or, sql } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { db, schema } from "../lib/db";
-import { authenticate, isAdmin, requirePermission, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { authenticate, isAdmin, isEmailUniqueViolation, normalizeEmail, requirePermission, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
 import { applyCaisseDelta, mutateCustomerBalance } from "../lib/balance-sync";
 import { broadcastCaisseChanged } from "../lib/ws";
 import { ensureCaisse } from "./caisses";
@@ -1324,6 +1326,125 @@ router.delete("/erp/purchase-suggestions/:id", authenticate, requireStaff, requi
 // This route must exist before the production SPA fallback. A missing API route
 // otherwise returns index.html, which makes the Customers page receive a
 // non-array response and crash while rendering.
+router.post("/erp/customers", authenticate, requireStaff, requireStore, requirePermission("customers", "edit"), async (req: AuthRequest, res) => {
+  const body = req.body as Record<string, unknown>;
+  const name = String(body.name ?? "").trim();
+  const email = normalizeEmail(body.email);
+  const contactType = body.contactType === "customer_supplier" ? "customer_supplier" : "customer";
+
+  if (!name) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+  if (!email || !email.includes("@")) {
+    res.status(400).json({ error: "A valid email is required" });
+    return;
+  }
+  if (body.password !== undefined && body.password !== null && String(body.password).length > 0 && String(body.password).length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  const asNullableText = (value: unknown): string | null => {
+    const text = String(value ?? "").trim();
+    return text || null;
+  };
+  const asNullableNumber = (value: unknown): string | null => {
+    if (value === undefined || value === null || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(2) : null;
+  };
+  const currentBalance = asNullableNumber(body.currentBalance) ?? "0.00";
+
+  try {
+    const storeId = req.currentStoreId!;
+    const created = await db.transaction(async (tx) => {
+      const password = String(body.password ?? "").trim() || randomUUID();
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const [user] = await tx.insert(schema.usersTable).values({
+        name,
+        email,
+        passwordHash,
+        role: "customer",
+        preferredLang: body.preferredLang === "en" ? "en" : "ar",
+        phone: asNullableText(body.phone),
+        address: asNullableText(body.address),
+        city: asNullableText(body.city),
+        notes: asNullableText(body.notes),
+      }).returning();
+
+      const [contact] = await tx.insert(schema.contactsTable).values({
+        storeId,
+        name,
+        email,
+        phone: asNullableText(body.phone),
+        address: asNullableText(body.address),
+        notes: asNullableText(body.notes),
+        contactType,
+        currentBalance,
+        globalContactId: randomUUID(),
+      }).returning({ id: schema.contactsTable.id });
+
+      await tx.insert(schema.customerProfilesTable).values({
+        userId: user.id,
+        storeId,
+        contactType,
+        wilaya: asNullableText(body.wilaya),
+        commune: asNullableText(body.commune),
+        gps: asNullableText(body.gps),
+        classificationId: body.classificationId == null || body.classificationId === "" ? null : Number(body.classificationId),
+        priceTierId: body.priceTierId == null || body.priceTierId === "" ? null : Number(body.priceTierId),
+        accountNumber: asNullableText(body.accountNumber),
+        creditLimit: asNullableNumber(body.creditLimit),
+        minBalanceAlert: asNullableNumber(body.minBalanceAlert),
+        currentBalance,
+        foreignCurrency: body.foreignCurrency === true,
+        rc: asNullableText(body.rc),
+        nif: asNullableText(body.nif),
+        ai: asNullableText(body.ai),
+        nis: asNullableText(body.nis),
+        contactId: contact.id,
+      });
+
+      if (contactType === "customer_supplier") {
+        await tx.insert(schema.suppliersTable).values({
+          storeId,
+          name,
+          email,
+          phone: asNullableText(body.phone),
+          address: asNullableText(body.address),
+          notes: asNullableText(body.notes),
+          contactType,
+          currentBalance,
+          contactId: contact.id,
+        });
+      }
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        city: user.city,
+        contact_type: contactType,
+        total_orders: 0,
+        total_spent: 0,
+      };
+    });
+
+    res.status(201).json(created);
+  } catch (err) {
+    if (isEmailUniqueViolation(err)) {
+      res.status(409).json({ error: "Email already in use" });
+      return;
+    }
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/erp/customers", authenticate, requireStaff, requireStore, requirePermission("customers", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
