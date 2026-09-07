@@ -433,6 +433,8 @@ CREATE TABLE "product_types" (
 ALTER TABLE "product_types" ADD COLUMN IF NOT EXISTS "image_url" text;--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_active" boolean NOT NULL DEFAULT true;--> statement-breakpoint
 ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "user_id" integer REFERENCES "public"."users"("id") ON DELETE SET NULL;--> statement-breakpoint
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "wilaya" text;--> statement-breakpoint
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "commune" text;--> statement-breakpoint
 CREATE TABLE "user_permissions" (
         "id" serial PRIMARY KEY NOT NULL,
         "user_id" integer NOT NULL,

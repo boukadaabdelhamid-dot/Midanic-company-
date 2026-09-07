@@ -1,4 +1,4 @@
-import { useGetMe } from "@workspace/erp-api-client-react";
+import { getGetMeQueryKey, useGetMe } from "@workspace/erp-api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export type Role = "admin" | "employee" | "customer";
@@ -6,7 +6,7 @@ export type Role = "admin" | "employee" | "customer";
 export function useMe() {
   const { token } = useAuth();
   const { data, isLoading } = useGetMe({
-    query: { enabled: !!token, staleTime: 60_000, retry: false },
+    query: { queryKey: getGetMeQueryKey(), enabled: !!token, staleTime: 60_000, retry: false },
   });
   const role = (data?.role ?? null) as Role | null;
   return {

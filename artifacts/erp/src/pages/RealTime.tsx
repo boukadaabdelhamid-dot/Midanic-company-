@@ -156,9 +156,7 @@ export default function RealTime() {
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {order.shippingAddress
-                          ? `${(order.shippingAddress as Record<string, string>)?.wilaya ?? ""} · ${(order.shippingAddress as Record<string, string>)?.name ?? ""}`.trim().replace(/^·\s*/, "")
-                          : "—"}
+                        {order.customerAddress || "—"}
                       </p>
                     </div>
                     <div className="text-right shrink-0">

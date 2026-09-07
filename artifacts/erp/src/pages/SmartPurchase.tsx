@@ -1153,7 +1153,7 @@ function SuggestDrawer({
       setProductName(editTarget.product_name);
       setNotes(editTarget.notes ?? "");
       setMarketPrice(editTarget.market_price ?? "");
-      setImagePreview(editTarget.image_url ? resolveImg(editTarget.image_url) : null);
+      setImagePreview(editTarget.image_url ? resolveImg(editTarget.image_url) ?? null : null);
       setImageFile(null);
       setError(null);
     } else if (open && !editTarget) {
@@ -1375,11 +1375,11 @@ export default function SmartPurchase() {
     queryFn: fetchFilterOptions,
     staleTime: 60_000,
   });
-  const { data: suppliersData } = useGetSuppliers({ limit: 9999 });
+  const { data: suppliersData } = useGetSuppliers();
 
   const families = useMemo(() => filterOpts?.families ?? [], [filterOpts]);
   const brands   = useMemo(() => filterOpts?.brands   ?? [], [filterOpts]);
-  const suppliers = useMemo(() => (suppliersData?.data ?? []) as Array<{ id: number; name: string }>, [suppliersData]);
+  const suppliers = useMemo(() => suppliersData ?? [], [suppliersData]);
 
   // Build query params — stockFilter included so tab changes reset pagination
   const queryParams = useMemo(() => {
@@ -2166,7 +2166,7 @@ export default function SmartPurchase() {
             isExcludePending={pendingExclude.has(row.id)}
             confirmExclude={confirmExclude}
             t={t}
-            onHistory={() => setHistoryProduct({ id: row.id, name: lang === "ar" && row.designation_ar ? row.designation_ar : row.designation })}
+            onHistory={() => setHistoryProduct({ id: row.id, name: lang === "ar" && row.designation_ar ? row.designation_ar : row.designation, imageUrl: row.image_url })}
             onOrder={() => setQuickOrderProduct(row)}
             onSnooze={() => snoozeMut.mutate(row.id)}
             onExcludeRequest={() => setConfirmExclude(row.id)}

@@ -533,7 +533,23 @@ export default function Products() {
     filterPriceSemiGros: debouncedFilters.priceSemiGros || undefined,
     filterPriceMin: debouncedFilters.priceMin || undefined,
     filterCostPrice: debouncedFilters.costPrice || undefined,
-  }, { query: { placeholderData: keepPreviousData } });
+  }, { query: { queryKey: getGetProductsQueryKey({
+    page, limit: pageSize, search: debouncedSearch || undefined,
+    filterName: debouncedFilters.name || undefined, filterCode: debouncedFilters.code || undefined,
+    filterBrand: debouncedFilters.brand || undefined, filterFamily: debouncedFilters.family || undefined,
+    filterStock: debouncedFilters.stock || undefined, filterId: debouncedFilters.id || undefined,
+    filterRef: debouncedFilters.ref || undefined, filterCatalogueType: debouncedFilters.catalogueType || undefined,
+    filterDescription: debouncedFilters.description || undefined, filterModel: debouncedFilters.model || undefined,
+    filterColor: debouncedFilters.color || undefined, filterColisage: debouncedFilters.colisage || undefined,
+    filterWeight: debouncedFilters.weight || undefined, filterCatalogue1: debouncedFilters.catalogue1 || undefined,
+    filterCatalogue2: debouncedFilters.catalogue2 || undefined, filterCatalogue3: debouncedFilters.catalogue3 || undefined,
+    filterCatalogue4: debouncedFilters.catalogue4 || undefined, filterCatalogue5: debouncedFilters.catalogue5 || undefined,
+    filterCatalogue6: debouncedFilters.catalogue6 || undefined, filterCreatedAt: debouncedFilters.createdAt || undefined,
+    filterExposed: debouncedFilters.exposed || undefined, filterActive: debouncedFilters.active || undefined,
+    filterPrice: debouncedFilters.price || undefined, filterPriceGros: debouncedFilters.priceGros || undefined,
+    filterPriceSemiGros: debouncedFilters.priceSemiGros || undefined, filterPriceMin: debouncedFilters.priceMin || undefined,
+    filterCostPrice: debouncedFilters.costPrice || undefined,
+  }), placeholderData: keepPreviousData } });
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -783,7 +799,8 @@ export default function Products() {
       updateProduct.mutate({ id: editingId, data }, {
         onSuccess: () => {
           // Immediately store overrides in local state so table updates without waiting for refetch
-          setProductOverrides((m) => new Map(m).set(editingId, data as Partial<Product>));
+          const { images: _images, ...productOverride } = data;
+          setProductOverrides((m) => new Map(m).set(editingId, productOverride));
           setDialogError(null);
           setDialog({ open: false, editing: null });
           forceRefresh();

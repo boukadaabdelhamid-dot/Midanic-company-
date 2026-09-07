@@ -2028,7 +2028,7 @@ export default function Customers() {
       {
         data: {
           name: createForm.name.trim(),
-          email: createForm.email.trim() || undefined,
+          email: createForm.email.trim(),
           password: createForm.password || undefined,
           phone: createForm.phone.trim() || undefined,
           address: createForm.address.trim() || undefined,

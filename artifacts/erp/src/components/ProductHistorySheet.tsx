@@ -16,6 +16,7 @@ import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
   useGetProductHistory,
+  getGetProductHistoryQueryKey,
   type ProductHistoryPurchase,
   type ProductHistorySale,
   type ProductHistoryMovementEntry,
@@ -304,7 +305,7 @@ export default function ProductHistorySheet({ product, onClose }: Props) {
   };
 
   const { data, isLoading, isError } = useGetProductHistory(product?.id ?? 0, {
-    query: { enabled: !!product?.id },
+    query: { queryKey: getGetProductHistoryQueryKey(product?.id ?? 0), enabled: !!product?.id },
   });
 
   // Unified, sorted (newest first) list of all event types

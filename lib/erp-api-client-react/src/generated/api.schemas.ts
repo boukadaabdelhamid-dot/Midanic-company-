@@ -175,6 +175,7 @@ export interface Product {
   colorId?: number | null;
   images?: ProductImage[];
   primaryImage?: string | null;
+  minStock?: number | null;
 }
 
 export interface ProductImageInput {
@@ -235,6 +236,7 @@ export interface CreateProductRequest {
   brandId?: number | null;
   colorId?: number | null;
   images?: ProductImageInput[];
+  minStock?: number | null;
 }
 
 export interface UpdateProductRequest {
@@ -270,6 +272,7 @@ export interface UpdateProductRequest {
   brandId?: number | null;
   colorId?: number | null;
   images?: ProductImageInput[];
+  minStock?: number | null;
 }
 
 export interface CreateReviewRequest {
@@ -1039,6 +1042,7 @@ export interface PurchaseOrderItem {
   unitCost: string;
   productNameEn?: string | null;
   productNameAr?: string | null;
+  totalCharges?: string;
 }
 
 export type CreatePurchaseOrderRequestItemsItem = {
@@ -2195,6 +2199,8 @@ export type GetErpCustomersParams = {
   wilaya?: string;
   classificationId?: number;
   priceTierId?: number;
+  page?: number;
+  limit?: number;
 };
 
 export type SetErpStaffStoresBody = {

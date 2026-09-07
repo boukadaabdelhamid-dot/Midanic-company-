@@ -8,7 +8,7 @@ import {
   getGetPurchaseOrderItemsQueryKey, getGetSuppliersQueryKey,
   getGetPurchaseAnnexeChargesQueryKey,
   useGetPurchaseAnnexeCharges, useCreatePurchaseAnnexeCharge, useDeletePurchaseAnnexeCharge,
-  getProducts, useUpdateProduct,
+  getProducts, getGetProductsQueryKey, useUpdateProduct,
   type PurchaseOrder, type Supplier, type Product, type PurchaseAnnexeCharge,
 } from "@workspace/erp-api-client-react";
 import { useQueryClient, keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -689,7 +689,7 @@ function PurchaseEditor({
   const store = useCurrentStore();
 
   const { data: existingItems } = useGetPurchaseOrderItems(editing?.id ?? 0, {
-    query: { enabled: open && !!editing },
+    query: { queryKey: getGetPurchaseOrderItemsQueryKey(editing?.id ?? 0), enabled: open && !!editing },
   });
 
   // Guard: load items from server only once per dialog open.
@@ -1517,7 +1517,7 @@ function ProductPickerDialog({
 
   const { data: res, isFetching } = useGetProducts(
     { search: debouncedQ || undefined, limit: 50 },
-    { query: { enabled: open } },
+    { query: { queryKey: getGetProductsQueryKey({ search: debouncedQ || undefined, limit: 50 }), enabled: open } },
   );
   const filtered = res?.products ?? [];
 

@@ -59,7 +59,7 @@ export default function PayrollPanel({ employees, currency }: { employees: Emplo
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const { data: payslips, isLoading: loadingPayslips } = useGetPayslips(
     selectedRunId ? { runId: selectedRunId } : undefined,
-    { query: { enabled: !!selectedRunId } },
+    { query: { queryKey: getGetPayslipsQueryKey(selectedRunId ? { runId: selectedRunId } : undefined), enabled: !!selectedRunId } },
   );
   const [printSlip, setPrintSlip] = useState<Payslip | null>(null);
 

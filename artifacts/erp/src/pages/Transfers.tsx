@@ -14,6 +14,7 @@ import {
   useGetErpStoresAll,
   getGetErpTransfersQueryKey,
   getGetErpTransferQueryKey,
+  getGetProductsQueryKey,
   type StockTransferSummary,
   type StockTransferDetail,
 } from "@workspace/erp-api-client-react";
@@ -278,7 +279,7 @@ function ProductSearchBar({ products: staticProducts, disabled, onPick, tr, tota
   // Own-store server search (Envoyer vers mode)
   const { data: serverRes, isFetching: isFetchingOwn } = useGetProducts(
     { search: debouncedQ || undefined, limit: 20 },
-    { query: { enabled: !!serverSearch && !storeSearchId && !disabled && debouncedQ.length >= 1 } },
+    { query: { queryKey: getGetProductsQueryKey({ search: debouncedQ || undefined, limit: 20 }), enabled: !!serverSearch && !storeSearchId && !disabled && debouncedQ.length >= 1 } },
   );
 
   // Cross-store server search (Demander depuis mode)

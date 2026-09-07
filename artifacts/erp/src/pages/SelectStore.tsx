@@ -1,7 +1,7 @@
 import React from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetMe, useSelectStore } from "@workspace/erp-api-client-react";
+import { getGetMeQueryKey, useGetMe, useSelectStore } from "@workspace/erp-api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useStoreContext } from "@/hooks/use-store";
 import { useLang } from "@/hooks/use-lang";
@@ -17,7 +17,7 @@ export default function SelectStore() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const qc = useQueryClient();
-  const { data: me, isLoading } = useGetMe({ query: { enabled: !!token } });
+  const { data: me, isLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), enabled: !!token } });
   const selectStore = useSelectStore();
 
   const stores = me?.stores ?? [];
