@@ -7,6 +7,7 @@ import { db, schema } from "../lib/db";
 import {
   authenticate,
   optionalAuth,
+  optionalTenantAuth,
   requireAdmin,
   requirePermission,
   requireStaff,
@@ -69,7 +70,16 @@ async function syncProductImages(productId: number, inputs: ImageInput[]) {
     .orderBy(schema.productImagesTable.sortOrder, schema.productImagesTable.id);
 }
 
-router.get("/products", optionalAuth, async (req: AuthRequest, res) => {
+router.get(
+  "/products",
+  optionalTenantAuth,
+  (req: AuthRequest, res, next) => {
+    if (req.currentStoreId) {
+      return requireStore(req, res, next);
+    }
+    return resolvePublicStore(req, res, next);
+  },
+  async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const {
@@ -217,10 +227,11 @@ router.get("/products", optionalAuth, async (req: AuthRequest, res) => {
     res.set("Cache-Control", "no-store");
     res.json({ products: withImages, total: Number(count), page: pageNumber, limit: pageLimit });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
-});
+  },
+);
 
 // GET /products/:id — public, store-scoped
-router.get("/products/:id", optionalAuth, async (req: AuthRequest, res) => {
+router.get("/products/:id", optionalTenantAuth, async (req: AuthRequest, res) => {
   if (req.user?.role === "employee") {
     const [perm] = await db.select({ granted: schema.userPermissionsTable.granted })
       .from(schema.userPermissionsTable)

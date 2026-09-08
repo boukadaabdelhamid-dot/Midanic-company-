@@ -313,6 +313,84 @@ export async function optionalAuth(req: AuthRequest, res: Response, next: NextFu
   next();
 }
 
+/**
+ * Optional authentication for routes that read tenant-owned data.
+ *
+ * Unlike optionalAuth, this also enters the resolved tenant database when a
+ * bearer token is present. Anonymous requests continue without a tenant
+ * context so public-store routes can resolve their store separately.
+ */
+export async function optionalTenantAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+
+  let user: JwtPayload;
+  try {
+    user = verifyToken(authHeader.slice(7));
+  } catch {
+    // Preserve optional-auth semantics for public callers. A protected
+    // downstream route will still reject the request if it needs a session.
+    next();
+    return;
+  }
+
+  req.user = user;
+  try {
+    if (!(await enforcePlatformAccess(req, user))) {
+      res.status(403).json({
+        error: "ERP tenant domain is unknown, inactive, or does not match this session",
+        code: "TENANT_DOMAIN_MISMATCH",
+      });
+      return;
+    }
+    if (typeof user.currentStoreId === "number") {
+      req.currentStoreId = user.currentStoreId;
+    }
+
+    const tenantId = user.platformTenantId;
+    if (!tenantId) {
+      next();
+      return;
+    }
+
+    const tenantDatabase = await resolvePlatformTenantDatabase(tenantId);
+    if (!tenantDatabase && process.env["NODE_ENV"] === "production") {
+      res.status(503).json({ error: "ERP tenant database is not configured", code: "TENANT_DATABASE_UNAVAILABLE" });
+      return;
+    }
+    if (tenantDatabase?.databaseStatus === "failed") {
+      res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_FAILED" });
+      return;
+    }
+    if (tenantDatabase?.databaseStatus === "provisioning") {
+      res.status(503).json({ error: "ERP tenant database is still provisioning", code: "TENANT_DATABASE_PROVISIONING" });
+      return;
+    }
+    if (tenantDatabase && (
+      tenantDatabase.databaseStatus !== "ready" || !tenantDatabase.databaseName
+    )) {
+      res.status(503).json({ error: "ERP tenant database is not ready", code: "TENANT_DATABASE_UNAVAILABLE" });
+      return;
+    }
+    if (tenantDatabase?.databaseStatus === "ready" && tenantDatabase.databaseName) {
+      await runWithTenantDatabase(
+        { tenantId, databaseName: tenantDatabase.databaseName },
+        () => next(),
+      );
+      return;
+    }
+  } catch (err) {
+    (req as AuthRequest & { log?: { error: (e: unknown) => void } }).log?.error?.(err);
+    res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_UNAVAILABLE" });
+    return;
+  }
+
+  next();
+}
+
 // Like optionalAuth, but if the client DID send a Bearer token that is
 // invalid or expired, reject with 401 instead of silently treating the
 // request as anonymous. Critical for order creation: a POS sale made with
