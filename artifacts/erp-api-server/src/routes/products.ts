@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { randomUUID } from "node:crypto";
-import { and, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, schema } from "../lib/db";
 import {
   authenticate,
@@ -207,7 +207,7 @@ router.get("/products", optionalAuth, async (req: AuthRequest, res) => {
       .where(and(...conditions))
       .limit(pageLimit)
       .offset(offset)
-      .orderBy(schema.productsTable.createdAt);
+      .orderBy(desc(schema.productsTable.createdAt), desc(schema.productsTable.id));
 
     const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(schema.productsTable)
       .where(and(...conditions));

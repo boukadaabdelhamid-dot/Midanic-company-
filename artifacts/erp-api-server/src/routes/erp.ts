@@ -3386,25 +3386,96 @@ router.post("/erp/customers", authenticate, requireStaff, requireStore, requireP
     const number = Number(value);
     return Number.isFinite(number) ? number.toFixed(2) : null;
   };
+  const asOptionalPositiveInt = (value: unknown, field: string): number | null => {
+    if (value === undefined || value === null || value === "") return null;
+    const number = Number(value);
+    if (!Number.isInteger(number) || number <= 0) {
+      throw new HttpError(400, `${field} must be a positive integer`);
+    }
+    return number;
+  };
   const currentBalance = asNullableNumber(body.currentBalance) ?? "0.00";
 
   try {
     const storeId = req.currentStoreId!;
+    const classificationId = asOptionalPositiveInt(body.classificationId, "classificationId");
+    const priceTierId = asOptionalPositiveInt(body.priceTierId, "priceTierId");
     const created = await db.transaction(async (tx) => {
-      const password = String(body.password ?? "").trim() || randomUUID();
-      const passwordHash = await bcrypt.hash(password, 10);
+      if (classificationId !== null) {
+        const [classification] = await tx.select({ id: schema.customerClassificationsTable.id })
+          .from(schema.customerClassificationsTable)
+          .where(eq(schema.customerClassificationsTable.id, classificationId))
+          .limit(1);
+        if (!classification) throw new HttpError(400, "Unknown customer classification");
+      }
+      if (priceTierId !== null) {
+        const [priceTier] = await tx.select({ id: schema.priceTiersTable.id })
+          .from(schema.priceTiersTable)
+          .where(eq(schema.priceTiersTable.id, priceTierId))
+          .limit(1);
+        if (!priceTier) throw new HttpError(400, "Unknown price tier");
+      }
 
-      const [user] = await tx.insert(schema.usersTable).values({
-        name,
-        email,
-        passwordHash,
-        role: "customer",
-        preferredLang: body.preferredLang === "en" ? "en" : "ar",
-        phone: asNullableText(body.phone),
-        address: asNullableText(body.address),
-        city: asNullableText(body.city),
-        notes: asNullableText(body.notes),
-      }).returning();
+      const [existingUser] = await tx.select().from(schema.usersTable)
+        .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`)
+        .limit(1);
+
+      let user: typeof schema.usersTable.$inferSelect;
+      let globalContactId: string = randomUUID();
+
+      if (existingUser) {
+        if (existingUser.role !== "customer") {
+          throw new HttpError(409, "Email is already used by a staff account");
+        }
+
+        const [existingProfile] = await tx.select({ id: schema.customerProfilesTable.id })
+          .from(schema.customerProfilesTable)
+          .where(and(
+            eq(schema.customerProfilesTable.userId, existingUser.id),
+            eq(schema.customerProfilesTable.storeId, storeId),
+          ))
+          .limit(1);
+        if (existingProfile) {
+          throw new HttpError(409, "Customer already exists in this store");
+        }
+
+        const [linkedContact] = await tx.select({
+          globalContactId: schema.contactsTable.globalContactId,
+        })
+          .from(schema.customerProfilesTable)
+          .innerJoin(schema.contactsTable, eq(schema.customerProfilesTable.contactId, schema.contactsTable.id))
+          .where(eq(schema.customerProfilesTable.userId, existingUser.id))
+          .orderBy(asc(schema.customerProfilesTable.id))
+          .limit(1);
+        if (linkedContact?.globalContactId) globalContactId = linkedContact.globalContactId;
+
+        const password = String(body.password ?? "").trim();
+        const [updatedUser] = await tx.update(schema.usersTable).set({
+          name,
+          ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+          preferredLang: body.preferredLang === "en" ? "en" : existingUser.preferredLang,
+          phone: asNullableText(body.phone) ?? existingUser.phone,
+          address: asNullableText(body.address) ?? existingUser.address,
+          city: asNullableText(body.city) ?? existingUser.city,
+          notes: asNullableText(body.notes) ?? existingUser.notes,
+        }).where(eq(schema.usersTable.id, existingUser.id)).returning();
+        user = updatedUser;
+      } else {
+        const password = String(body.password ?? "").trim() || randomUUID();
+        const passwordHash = await bcrypt.hash(password, 10);
+        const [insertedUser] = await tx.insert(schema.usersTable).values({
+          name,
+          email,
+          passwordHash,
+          role: "customer",
+          preferredLang: body.preferredLang === "en" ? "en" : "ar",
+          phone: asNullableText(body.phone),
+          address: asNullableText(body.address),
+          city: asNullableText(body.city),
+          notes: asNullableText(body.notes),
+        }).returning();
+        user = insertedUser;
+      }
 
       const [contact] = await tx.insert(schema.contactsTable).values({
         storeId,
@@ -3415,7 +3486,7 @@ router.post("/erp/customers", authenticate, requireStaff, requireStore, requireP
         notes: asNullableText(body.notes),
         contactType,
         currentBalance,
-        globalContactId: randomUUID(),
+        globalContactId,
       }).returning({ id: schema.contactsTable.id });
 
       await tx.insert(schema.customerProfilesTable).values({
@@ -3425,8 +3496,8 @@ router.post("/erp/customers", authenticate, requireStaff, requireStore, requireP
         wilaya: asNullableText(body.wilaya),
         commune: asNullableText(body.commune),
         gps: asNullableText(body.gps),
-        classificationId: body.classificationId == null || body.classificationId === "" ? null : Number(body.classificationId),
-        priceTierId: body.priceTierId == null || body.priceTierId === "" ? null : Number(body.priceTierId),
+        classificationId,
+        priceTierId,
         accountNumber: asNullableText(body.accountNumber),
         creditLimit: asNullableNumber(body.creditLimit),
         minBalanceAlert: asNullableNumber(body.minBalanceAlert),
@@ -3468,6 +3539,10 @@ router.post("/erp/customers", authenticate, requireStaff, requireStore, requireP
 
     res.status(201).json(created);
   } catch (err) {
+    if (err instanceof HttpError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
     if (isEmailUniqueViolation(err)) {
       res.status(409).json({ error: "Email already in use" });
       return;

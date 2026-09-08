@@ -809,7 +809,12 @@ export default function Products() {
       });
     } else {
       createProduct.mutate({ data }, {
-        onSuccess: () => { forceRefresh(); setDialogError(null); setDialog({ open: false, editing: null }); },
+        onSuccess: () => {
+          setPage(1);
+          forceRefresh();
+          setDialogError(null);
+          setDialog({ open: false, editing: null });
+        },
         onError: (err) => setDialogError(`${t("Erreur", "خطأ")}: ${readErr(err)}`),
       });
     }

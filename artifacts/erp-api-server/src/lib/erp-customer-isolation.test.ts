@@ -292,6 +292,7 @@ integrationTest("ERP customer details stay isolated across stores", async () => 
   process.env["PLATFORM_SERVICE_SECRET"] = "erp-customer-isolation-test-secret";
   const fixture = await seedFixture();
   const { server, baseUrl } = await startServer();
+  let sharedCustomerId: number | null = null;
 
   try {
     const noAuth = await fetch(`${baseUrl}/api/erp/customers/${fixture.customerAId}`);
@@ -314,6 +315,66 @@ integrationTest("ERP customer details stay isolated across stores", async () => 
 
     const storeAHeaders = serviceHeaders(fixture.staffId, fixture.storeAId);
     const storeBHeaders = serviceHeaders(fixture.staffId, fixture.storeBId);
+
+    const sharedEmail = `shared-customer-${randomUUID()}@example.test`;
+    const createInStoreA = await fetch(`${baseUrl}/api/erp/customers`, {
+      method: "POST",
+      headers: { ...storeAHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Shared Customer",
+        email: `  ${sharedEmail.toUpperCase()}  `,
+        phone: "0555000011",
+        classificationId: fixture.classificationAId,
+      }),
+    });
+    const createdInStoreA = await jsonResponse(createInStoreA);
+    assert.equal(createInStoreA.status, 201);
+    const sharedId = Number(createdInStoreA.id);
+    assert.ok(Number.isInteger(sharedId) && sharedId > 0);
+    sharedCustomerId = sharedId;
+
+    const createInStoreB = await fetch(`${baseUrl}/api/erp/customers`, {
+      method: "POST",
+      headers: { ...storeBHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Shared Customer",
+        email: sharedEmail,
+        priceTierId: fixture.priceTierBId,
+      }),
+    });
+    const createdInStoreB = await jsonResponse(createInStoreB);
+    assert.equal(createInStoreB.status, 201);
+    assert.equal(createdInStoreB.id, sharedId);
+
+    const sharedProfiles = await db.select({
+      storeId: schema.customerProfilesTable.storeId,
+      contactId: schema.customerProfilesTable.contactId,
+    }).from(schema.customerProfilesTable)
+      .where(eq(schema.customerProfilesTable.userId, sharedId));
+    assert.deepEqual(
+      sharedProfiles.map((profile) => profile.storeId).sort((a, b) => a - b),
+      [fixture.storeAId, fixture.storeBId].sort((a, b) => a - b),
+    );
+    const sharedContacts = await db.select({
+      globalContactId: schema.contactsTable.globalContactId,
+    }).from(schema.contactsTable)
+      .where(inArray(
+        schema.contactsTable.id,
+        sharedProfiles.map((profile) => profile.contactId).filter((id): id is number => id !== null),
+      ));
+    assert.equal(sharedContacts.length, 2);
+    assert.ok(sharedContacts[0]?.globalContactId);
+    assert.equal(sharedContacts[0]?.globalContactId, sharedContacts[1]?.globalContactId);
+
+    const duplicateInStoreB = await fetch(`${baseUrl}/api/erp/customers`, {
+      method: "POST",
+      headers: { ...storeBHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Shared Customer", email: sharedEmail }),
+    });
+    const duplicateBody = await jsonResponse(duplicateInStoreB);
+    assert.equal(duplicateInStoreB.status, 409);
+    assert.equal(duplicateBody.error, "Customer already exists in this store");
+
     const [storeAListResponse, storeBListResponse] = await Promise.all([
       fetch(`${baseUrl}/api/erp/customers`, { headers: storeAHeaders }),
       fetch(`${baseUrl}/api/erp/customers`, { headers: storeBHeaders }),
@@ -322,8 +383,14 @@ integrationTest("ERP customer details stay isolated across stores", async () => 
     const storeBList = await jsonResponse(storeBListResponse);
     assert.equal(storeAListResponse.status, 200);
     assert.equal(storeBListResponse.status, 200);
-    assert.deepEqual(storeAList.data.map((customer: { id: number }) => customer.id), [fixture.customerAId]);
-    assert.deepEqual(storeBList.data.map((customer: { id: number }) => customer.id), [fixture.customerBId]);
+    assert.deepEqual(
+      storeAList.data.map((customer: { id: number }) => customer.id).sort((a: number, b: number) => a - b),
+      [fixture.customerAId, sharedId].sort((a, b) => a - b),
+    );
+    assert.deepEqual(
+      storeBList.data.map((customer: { id: number }) => customer.id).sort((a: number, b: number) => a - b),
+      [fixture.customerBId, sharedId].sort((a, b) => a - b),
+    );
 
     const storeAResponse = await fetch(`${baseUrl}/api/erp/customers/${fixture.customerAId}`, {
       headers: storeAHeaders,
@@ -361,6 +428,11 @@ integrationTest("ERP customer details stay isolated across stores", async () => 
     assert.equal(crossStoreBody.error, "Customer not found");
   } finally {
     await closeServer(server);
+    if (sharedCustomerId !== null) {
+      await db.delete(schema.customerProfilesTable)
+        .where(eq(schema.customerProfilesTable.userId, sharedCustomerId));
+      await db.delete(schema.usersTable).where(eq(schema.usersTable.id, sharedCustomerId));
+    }
     await cleanupFixture(fixture);
     if (previousServiceSecret === undefined) delete process.env["PLATFORM_SERVICE_SECRET"];
     else process.env["PLATFORM_SERVICE_SECRET"] = previousServiceSecret;
