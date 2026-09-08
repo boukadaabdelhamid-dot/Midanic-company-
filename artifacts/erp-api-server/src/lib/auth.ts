@@ -1,7 +1,13 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "crypto";
-import { tenantStoreMatches, verifyTenantDomainRequest, type TenantDomainRequest } from "./tenant-domain";
+import {
+  resolvePlatformTenantDatabase,
+  tenantStoreMatches,
+  verifyTenantDomainRequest,
+  type TenantDomainRequest,
+} from "./tenant-domain";
+import { runWithTenantDatabase } from "./db";
 
 function resolveJwtSecret(): string {
   const envSecret = process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
@@ -111,6 +117,35 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     }
     if (typeof req.user.currentStoreId === "number") {
       req.currentStoreId = req.user.currentStoreId;
+    }
+    const tenantId = req.user.platformTenantId;
+    if (tenantId) {
+      const tenantDatabase = await resolvePlatformTenantDatabase(tenantId);
+      if (!tenantDatabase && process.env["NODE_ENV"] === "production") {
+        res.status(503).json({ error: "ERP tenant database is not configured", code: "TENANT_DATABASE_UNAVAILABLE" });
+        return;
+      }
+      if (tenantDatabase?.databaseStatus === "failed") {
+        res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_FAILED" });
+        return;
+      }
+      if (tenantDatabase?.databaseStatus === "provisioning") {
+        res.status(503).json({ error: "ERP tenant database is still provisioning", code: "TENANT_DATABASE_PROVISIONING" });
+        return;
+      }
+      if (tenantDatabase && (
+        tenantDatabase.databaseStatus !== "ready" || !tenantDatabase.databaseName
+      )) {
+        res.status(503).json({ error: "ERP tenant database is not ready", code: "TENANT_DATABASE_UNAVAILABLE" });
+        return;
+      }
+      if (tenantDatabase?.databaseStatus === "ready" && tenantDatabase.databaseName) {
+        await runWithTenantDatabase(
+          { tenantId, databaseName: tenantDatabase.databaseName },
+          () => next(),
+        );
+        return;
+      }
     }
     next();
   } catch {

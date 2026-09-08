@@ -11,6 +11,15 @@ export const erpTenantStatusValues = [
 
 export type ErpTenantStatus = (typeof erpTenantStatusValues)[number];
 
+export const erpTenantDatabaseStatusValues = [
+  "unprovisioned",
+  "provisioning",
+  "ready",
+  "failed",
+] as const;
+
+export type ErpTenantDatabaseStatus = (typeof erpTenantDatabaseStatusValues)[number];
+
 export const erpTenantsTable = pgTable("erp_tenants", {
   id: serial("id").primaryKey(),
   ownerUserId: integer("owner_user_id")
@@ -27,6 +36,10 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   notes: text("notes"),
+  databaseName: text("database_name"),
+  databaseStatus: text("database_status").notNull().default("unprovisioned"),
+  databaseProvisionedAt: timestamp("database_provisioned_at", { withTimezone: true }),
+  databaseLastError: text("database_last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

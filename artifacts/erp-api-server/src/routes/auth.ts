@@ -2,11 +2,15 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq, and, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "crypto";
-import { db, schema } from "../lib/db";
+import { db, runWithTenantDatabase, schema } from "../lib/db";
 import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verifyPlatformSsoToken, type AuthRequest } from "../lib/auth";
 import { listUserStores } from "../lib/store-context";
 import { sendPasswordResetEmail } from "../lib/email";
-import { tenantStoreMatches, verifyTenantDomainRequest } from "../lib/tenant-domain";
+import {
+  resolvePlatformTenantDatabase,
+  tenantStoreMatches,
+  verifyTenantDomainRequest,
+} from "../lib/tenant-domain";
 
 const router = Router();
 
@@ -55,6 +59,27 @@ router.post("/auth/sso/exchange", async (req, res) => {
       });
       return;
     }
+    const tenantDatabase = await resolvePlatformTenantDatabase(sso.tenantId);
+    if (!tenantDatabase && process.env["NODE_ENV"] === "production") {
+      res.status(503).json({ error: "ERP tenant database is not configured", code: "TENANT_DATABASE_UNAVAILABLE" });
+      return;
+    }
+    if (tenantDatabase?.databaseStatus === "failed") {
+      res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_FAILED" });
+      return;
+    }
+    if (tenantDatabase?.databaseStatus === "provisioning") {
+      res.status(503).json({ error: "ERP tenant database is still provisioning", code: "TENANT_DATABASE_PROVISIONING" });
+      return;
+    }
+    if (tenantDatabase && (
+      tenantDatabase.databaseStatus !== "ready" || !tenantDatabase.databaseName
+    )) {
+      res.status(503).json({ error: "ERP tenant database is not ready", code: "TENANT_DATABASE_UNAVAILABLE" });
+      return;
+    }
+
+    const exchange = async () => {
     const platformCredentials = await getPlatformCredentials(sso.userId);
     if (!platformCredentials.isActive) {
       res.status(403).json({ error: "Platform account is inactive" });
@@ -130,6 +155,16 @@ router.post("/auth/sso/exchange", async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
       stores: [activeStore],
     });
+    };
+
+    if (tenantDatabase?.databaseStatus === "ready" && tenantDatabase.databaseName) {
+      await runWithTenantDatabase(
+        { tenantId: sso.tenantId, databaseName: tenantDatabase.databaseName },
+        exchange,
+      );
+    } else {
+      await exchange();
+    }
   } catch (err) {
     req.log.error(err);
     res.status(401).json({ error: "Invalid or expired Platform SSO token" });

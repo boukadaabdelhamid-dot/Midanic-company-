@@ -12,6 +12,12 @@ export type PlatformTenantDomain = {
   canAccess: boolean;
 };
 
+export type PlatformTenantDatabase = {
+  tenantId: number;
+  databaseName: string | null;
+  databaseStatus: string;
+};
+
 const domainCache = new Map<string, { expiresAt: number; value: PlatformTenantDomain }>();
 
 export function normalizeTenantHostname(value: unknown): string | null {
@@ -109,6 +115,36 @@ export async function resolvePlatformTenantDomain(
   } catch {
     return null;
   }
+}
+
+export async function resolvePlatformTenantDatabase(
+  tenantId: number,
+): Promise<PlatformTenantDatabase | null> {
+  if (!Number.isInteger(tenantId) || tenantId <= 0) return null;
+  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!baseUrl || !secret) {
+    if (process.env["NODE_ENV"] !== "production") return null;
+    throw new Error("Tenant database registry is not configured");
+  }
+
+  const response = await fetch(
+    `${baseUrl}/api/internal/erp/database/${tenantId}`,
+    { headers: { "X-Platform-Service-Secret": secret } },
+  );
+  if (!response.ok) {
+    throw new Error(`Tenant database registry lookup failed (${response.status})`);
+  }
+  const value = await response.json() as PlatformTenantDatabase;
+  if (value.tenantId !== tenantId || typeof value.databaseStatus !== "string") {
+    throw new Error("Tenant database registry returned an invalid response");
+  }
+  if (value.databaseName !== null && !/^erp_tenant_[1-9][0-9]*$/.test(value.databaseName)) {
+    throw new Error("Tenant database registry returned an invalid database name");
+  }
+  return value;
 }
 
 export async function verifyTenantDomainRequest(
