@@ -11,7 +11,8 @@ COPY artifacts/erp ./artifacts/erp
 COPY attached_assets ./attached_assets
 RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
-# Force a clean bundle — never run a stale checked-in dist.
+# Force a clean bundle — never run a stale checked-in dist. Keeping this build
+# inside the ERP API image also ensures route changes ship with the service.
 RUN rm -rf /app/artifacts/erp-api-server/dist /app/artifacts/erp/dist && \
     VITE_API_URL="" pnpm --filter @workspace/erp run build && \
     pnpm --filter @workspace/erp-api-server run build
