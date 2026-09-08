@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:tenant-domain": "tsx --test src/lib/tenant-domain.test.ts src/lib/tenant-authority.test.ts"
+    "test:tenant-domain": "tsx --test src/lib/tenant-domain.test.ts src/lib/tenant-authority.test.ts src/lib/tenant-database.test.ts src/lib/tenant-registry.test.ts",
+    "test:erp-customers": "tsx --test src/lib/erp-customer-isolation.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

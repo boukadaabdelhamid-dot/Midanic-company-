@@ -31,6 +31,11 @@ import {
   parseErpSubdomain,
 } from "../lib/erp-domain";
 import { isDatabaseUniqueViolation } from "../lib/db-errors";
+import { getTenantDatabaseName } from "../lib/erp-tenant-database";
+import {
+  checkErpTenantDatabaseHealth,
+  provisionErpTenantDatabase,
+} from "../lib/erp-provisioning";
 
 const router: IRouter = Router();
 
@@ -246,6 +251,10 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
       approvedAt: erpTenantsTable.approvedAt,
       suspendedAt: erpTenantsTable.suspendedAt,
       notes: erpTenantsTable.notes,
+       databaseName: erpTenantsTable.databaseName,
+       databaseStatus: erpTenantsTable.databaseStatus,
+       databaseProvisionedAt: erpTenantsTable.databaseProvisionedAt,
+       databaseLastError: erpTenantsTable.databaseLastError,
       createdAt: erpTenantsTable.createdAt,
       ownerEmail: usersTable.email,
       ownerFirstName: usersTable.firstName,
@@ -298,13 +307,140 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
         domainStatus: "inactive",
       })
       .returning();
-    res.status(201).json(tenant);
+
+    let provisionedTenant = tenant;
+    [provisionedTenant] = await db
+      .update(erpTenantsTable)
+      .set({
+        databaseName: getTenantDatabaseName(tenant.id),
+        databaseStatus: "provisioning",
+        databaseLastError: null,
+      })
+      .where(eq(erpTenantsTable.id, tenant.id))
+      .returning();
+    try {
+      const provisioning = await provisionErpTenantDatabase(tenant.id);
+      [provisionedTenant] = await db
+        .update(erpTenantsTable)
+        .set({
+          databaseName: provisioning.databaseName,
+          databaseStatus: "ready",
+          databaseProvisionedAt: new Date(),
+          databaseLastError: null,
+        })
+        .where(eq(erpTenantsTable.id, tenant.id))
+        .returning();
+    } catch (error) {
+      [provisionedTenant] = await db
+        .update(erpTenantsTable)
+        .set({
+          databaseName: getTenantDatabaseName(tenant.id),
+          databaseStatus: "failed",
+          databaseLastError: (error as Error).message.slice(0, 2000),
+        })
+        .where(eq(erpTenantsTable.id, tenant.id))
+        .returning();
+      req.log.error({ err: error, tenantId: tenant.id }, "ERP tenant database provisioning failed");
+    }
+
+    res.status(201).json(provisionedTenant);
   } catch (error) {
     if (isDatabaseUniqueViolation(error)) {
       res.status(409).json({ error: "This ERP subdomain is already assigned" });
       return;
     }
     throw error;
+  }
+});
+
+router.post("/admin/erp/tenants/:id/provision", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+
+  const [currentTenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      databaseStatus: erpTenantsTable.databaseStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, id))
+    .limit(1);
+  if (!currentTenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+
+  await db.update(erpTenantsTable)
+    .set({ databaseStatus: "provisioning", databaseLastError: null })
+    .where(eq(erpTenantsTable.id, id));
+
+  try {
+    const provisioning = await provisionErpTenantDatabase(id);
+    const [tenant] = await db
+      .update(erpTenantsTable)
+      .set({
+        databaseName: provisioning.databaseName,
+        databaseStatus: "ready",
+        databaseProvisionedAt: new Date(),
+        databaseLastError: null,
+      })
+      .where(eq(erpTenantsTable.id, id))
+      .returning();
+    res.json(tenant);
+  } catch (error) {
+    const [tenant] = await db
+      .update(erpTenantsTable)
+      .set({
+        databaseName: getTenantDatabaseName(id),
+        databaseStatus: "failed",
+        databaseLastError: (error as Error).message.slice(0, 2000),
+      })
+      .where(eq(erpTenantsTable.id, id))
+      .returning();
+    req.log.error({ err: error, tenantId: id }, "ERP tenant database provisioning retry failed");
+    res.status(502).json({
+      error: "ERP tenant database provisioning failed",
+      databaseStatus: tenant?.databaseStatus ?? "failed",
+    });
+  }
+});
+
+router.get("/admin/erp/tenants/:id/database-health", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      databaseStatus: erpTenantsTable.databaseStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, id))
+    .limit(1);
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+  if (tenant.databaseStatus !== "ready") {
+    res.status(409).json({
+      error: "ERP tenant database is not ready",
+      databaseStatus: tenant.databaseStatus,
+    });
+    return;
+  }
+
+  try {
+    const health = await checkErpTenantDatabaseHealth(id);
+    res.status(health.healthy ? 200 : 503).json(health);
+  } catch (error) {
+    req.log.error({ err: error, tenantId: id }, "ERP tenant database health check failed");
+    res.status(502).json({ error: "ERP tenant database health check failed" });
   }
 });
 
@@ -332,12 +468,28 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     .select({
       id: erpTenantsTable.id,
       subdomain: erpTenantsTable.subdomain,
+      databaseStatus: erpTenantsTable.databaseStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.id, id))
     .limit(1);
   if (!currentTenant) {
     res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+  if ((status === "active" || status === "converted") &&
+      currentTenant.databaseStatus !== "ready") {
+    res.status(409).json({
+      error: "Provision the tenant database before activating ERP access",
+      databaseStatus: currentTenant.databaseStatus,
+    });
+    return;
+  }
+  if (domainStatus === "active" && currentTenant.databaseStatus !== "ready") {
+    res.status(409).json({
+      error: "Provision the tenant database before activating the ERP domain",
+      databaseStatus: currentTenant.databaseStatus,
+    });
     return;
   }
 

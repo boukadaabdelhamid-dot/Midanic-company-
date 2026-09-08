@@ -1,8 +1,16 @@
 import { createServer } from "http";
+import type { Pool } from "pg";
 import app from "./app";
 import { setupWebSocket } from "./lib/ws";
 import { logger } from "./lib/logger";
-import { db, schema, pool } from "./lib/db";
+import {
+  db,
+  getTenantDatabasePool,
+  pool,
+  provisionTenantDatabase,
+  runWithTenantDatabase,
+  schema,
+} from "./lib/db";
 import { bootstrap } from "./seed";
 import { runCaisseGlobalMigration } from "./lib/caisse-global-migration";
 import { runContactGlobalLinkMigration } from "./lib/contact-global-link-migration";
@@ -11,6 +19,8 @@ import { runOrderSourceMigration } from "./lib/order-source-migration";
 import { runPaymentMethodMigration } from "./lib/payment-method-migration";
 import { runPurchaseOrdersSchemaMigration } from "./lib/purchase-orders-schema-migration";
 import { getStorageMode, getLocalStorageBase, ensureLocalStorageReady } from "./lib/objectStorage";
+import { listReadyTenantDatabases } from "./lib/tenant-registry";
+import { resolvePlatformTenantDatabase } from "./lib/tenant-domain";
 
 const rawPort = process.env["PORT"];
 
@@ -801,8 +811,8 @@ ALTER TABLE "payroll_adjustments" ADD COLUMN IF NOT EXISTS "is_cashed" boolean N
 `;
 
 
-async function runMigrations() {
-  await pool.query(`CREATE SCHEMA IF NOT EXISTS "erp"`);
+async function runMigrations(targetPool: Pool = pool) {
+  await targetPool.query(`CREATE SCHEMA IF NOT EXISTS "erp"`);
   const statements = MIGRATION_SQL
     .replaceAll(`"public".`, `"erp".`)
     .split("--> statement-breakpoint")
@@ -813,7 +823,7 @@ async function runMigrations() {
   let skipped = 0;
   for (const stmt of statements) {
     try {
-      await pool.query(stmt);
+        await targetPool.query(stmt);
       applied++;
     } catch (err: any) {
       const msg: string = err?.message ?? "";
@@ -829,10 +839,10 @@ async function runMigrations() {
     }
   }
   logger.info({ applied, skipped }, "DB migrations done.");
-  await pool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
-  await pool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "stores_platform_tenant_id_uq" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
+  await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
+  await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
+  await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "stores_platform_tenant_id_uq" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
+  await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
 }
 
 // Canonical-email uniqueness: login matches emails case-insensitively, so two
@@ -895,7 +905,7 @@ async function initStorage() {
   }
 }
 
-async function runAttributeUniqueIndexMigration() {
+async function runAttributeUniqueIndexMigration(targetPool: Pool = pool) {
   // Each attribute table is handled independently so one failure doesn't block the others.
   // Before creating the unique index we deduplicate existing rows (keep lowest id per
   // store+lower(name_fr), re-point products references, then delete extras) so the index
@@ -922,7 +932,7 @@ async function runAttributeUniqueIndexMigration() {
   for (const tbl of tables) {
     try {
       // 1. Re-point products that reference a duplicate row to the canonical (lowest) id.
-      await pool.query(`
+      await targetPool.query(`
         UPDATE products p
         SET    ${tbl.fkCol} = canon.keep_id
         FROM   (
@@ -934,7 +944,7 @@ async function runAttributeUniqueIndexMigration() {
           AND  canon.id <> canon.keep_id
       `);
       // 2. Delete the duplicate (non-canonical) rows now that nothing references them.
-      await pool.query(`
+      await targetPool.query(`
         DELETE FROM ${tbl.name}
         WHERE id IN (
           SELECT id
@@ -947,7 +957,7 @@ async function runAttributeUniqueIndexMigration() {
         )
       `);
       // 3. Create the unique expression index — safe now that duplicates are gone.
-      await pool.query(`
+      await targetPool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS ${tbl.idxName}
           ON ${tbl.name} (store_id, lower(name_fr))
       `);
@@ -960,7 +970,7 @@ async function runAttributeUniqueIndexMigration() {
   // product_types is a global table (no store_id) — products reference it by name string,
   // not by FK id, so no FK rewrites are needed. Just dedup and add the unique index.
   try {
-    await pool.query(`
+    await targetPool.query(`
       DELETE FROM product_types
       WHERE id IN (
         SELECT id
@@ -972,7 +982,7 @@ async function runAttributeUniqueIndexMigration() {
         WHERE  id <> keep_id
       )
     `);
-    await pool.query(`
+    await targetPool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_product_types_lower_name_fr
         ON product_types (lower(name_fr))
     `);
@@ -982,12 +992,12 @@ async function runAttributeUniqueIndexMigration() {
   }
 }
 
-async function runStaffEmployeeBackfill() {
+async function runStaffEmployeeBackfill(targetPool: Pool = pool) {
   // For every admin/employee user that has no linked employee record, create one.
   // Idempotent: ON CONFLICT DO NOTHING makes repeated runs safe.
   try {
     const today = new Date().toISOString().split("T")[0];
-    const result = await pool.query(
+    const result = await targetPool.query(
       `INSERT INTO employees (store_id, user_id, name, email, phone, position, salary, status, hire_date)
        SELECT
          (SELECT us.store_id FROM user_stores us WHERE us.user_id = u.id ORDER BY us.store_id LIMIT 1),
@@ -1015,9 +1025,9 @@ async function runStaffEmployeeBackfill() {
   }
 }
 
-async function runPurchaseSuggestionsSchemaMigration() {
+async function runPurchaseSuggestionsSchemaMigration(targetPool: Pool = pool) {
   try {
-    await pool.query(`
+    await targetPool.query(`
       ALTER TABLE purchase_suggestions
         ADD COLUMN IF NOT EXISTS market_price text
     `);
@@ -1027,7 +1037,7 @@ async function runPurchaseSuggestionsSchemaMigration() {
   }
 }
 
-async function runPurchaseNeededIndexMigration() {
+async function runPurchaseNeededIndexMigration(targetPool: Pool = pool) {
   // These indexes are critical for the /erp/purchases/needed query performance.
   // Without them every join does a full-table seq-scan, causing O(n×m) latency.
   const idxDefs: [string, string][] = [
@@ -1051,7 +1061,7 @@ async function runPurchaseNeededIndexMigration() {
   let built = 0;
   for (const [name, stmt] of idxDefs) {
     try {
-      await pool.query(stmt);
+      await targetPool.query(stmt);
       built++;
     } catch (err: any) {
       logger.warn({ err: err?.message, index: name }, "purchase-needed index skipped (non-fatal)");
@@ -1060,9 +1070,9 @@ async function runPurchaseNeededIndexMigration() {
   logger.info({ built }, "purchase-needed performance indexes ready.");
 }
 
-async function runWebSettingsMigration() {
+async function runWebSettingsMigration(targetPool: Pool = pool) {
   try {
-    await pool.query(`
+    await targetPool.query(`
       CREATE TABLE IF NOT EXISTS store_web_settings (
         store_id integer PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
         description text,
@@ -1084,6 +1094,96 @@ async function runWebSettingsMigration() {
     logger.info("store_web_settings table ready.");
   } catch (err) {
     logger.warn({ err }, "store_web_settings migration skipped (non-fatal)");
+  }
+}
+
+const tenantInitializationJobs = new Map<string, Promise<void>>();
+
+function initializeTenantDatabase(
+  tenantId: number,
+  databaseName: string,
+  createIfMissing: boolean,
+): Promise<void> {
+  const existing = tenantInitializationJobs.get(databaseName);
+  if (existing) return existing;
+
+  const job = (async () => {
+    if (createIfMissing) {
+      await provisionTenantDatabase(databaseName);
+    }
+
+    const tenantPool = getTenantDatabasePool(databaseName);
+    const lockClient = await tenantPool.connect();
+    try {
+      // Serializes migrations for this tenant across concurrent ERP instances.
+      await lockClient.query("SELECT pg_advisory_lock($1, $2)", [742318, tenantId]);
+      await runMigrations(tenantPool);
+      await tenantPool.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS users_email_canonical_uq ON users (lower(trim(email)))`,
+      );
+      await runOrderSourceMigration(tenantPool);
+      await runPaymentMethodMigration(tenantPool);
+      await runPurchaseOrdersSchemaMigration(tenantPool);
+      await runCaisseGlobalMigration(tenantPool);
+      await runContactGlobalLinkMigration(tenantPool);
+      await runProductAttributeDedupMigration(tenantPool);
+      await runAttributeUniqueIndexMigration(tenantPool);
+      await runWebSettingsMigration(tenantPool);
+      await runPurchaseSuggestionsSchemaMigration(tenantPool);
+      await runPurchaseNeededIndexMigration(tenantPool);
+      await runWithTenantDatabase(
+        { tenantId, databaseName },
+        async () => {
+          await bootstrap();
+          await runStaffEmployeeBackfill(tenantPool);
+        },
+      );
+    } finally {
+      await lockClient.query("SELECT pg_advisory_unlock($1, $2)", [742318, tenantId])
+        .catch(() => undefined);
+      lockClient.release();
+    }
+  })().finally(() => {
+    tenantInitializationJobs.delete(databaseName);
+  });
+
+  tenantInitializationJobs.set(databaseName, job);
+  return job;
+}
+
+async function synchronizeReadyTenantDatabases(): Promise<void> {
+  let tenants: Awaited<ReturnType<typeof listReadyTenantDatabases>> | null = null;
+  try {
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        tenants = await listReadyTenantDatabases();
+        break;
+      } catch (error) {
+        if (attempt === 5) throw error;
+        logger.warn(
+          { err: error, attempt },
+          "Tenant database registry unavailable; retrying synchronization",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+    if (!tenants) return;
+    for (const tenant of tenants) {
+      try {
+        await initializeTenantDatabase(tenant.tenantId, tenant.databaseName, false);
+        logger.info(
+          { tenantId: tenant.tenantId, databaseName: tenant.databaseName },
+          "Tenant database migrations synchronized",
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, tenantId: tenant.tenantId, databaseName: tenant.databaseName },
+          "Tenant database migration synchronization failed",
+        );
+      }
+    }
+  } catch (error) {
+    logger.warn({ err: error }, "Tenant database registry synchronization skipped");
   }
 }
 
@@ -1115,6 +1215,88 @@ server.listen(port, async () => {
   await runBootstrap();
   // Backfill runs after bootstrap so the initial admin account (created there) is also linked.
   await runStaffEmployeeBackfill();
+  await synchronizeReadyTenantDatabases();
+});
+
+app.get("/api/internal/erp/health/:tenantId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenantId = Number(req.params.tenantId);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+
+  try {
+    const registered = await resolvePlatformTenantDatabase(tenantId);
+    if (!registered || registered.databaseStatus !== "ready" || !registered.databaseName) {
+      res.status(409).json({ error: "ERP tenant database is not ready" });
+      return;
+    }
+    const expectedDatabaseName = `erp_tenant_${tenantId}`;
+    if (registered.databaseName !== expectedDatabaseName) {
+      res.status(409).json({ error: "ERP tenant database registry mismatch" });
+      return;
+    }
+
+    const tenantPool = getTenantDatabasePool(registered.databaseName);
+    const result = await tenantPool.query<{
+      database_name: string;
+      schema_ready: boolean;
+    }>(
+      `SELECT current_database() AS database_name,
+              to_regclass('erp.users') IS NOT NULL AS schema_ready`,
+    );
+    const databaseName = result.rows[0]?.database_name ?? "";
+    const schemaReady = result.rows[0]?.schema_ready === true;
+    const healthy = databaseName === expectedDatabaseName && schemaReady;
+    res.status(healthy ? 200 : 503).json({
+      tenantId,
+      databaseName,
+      healthy,
+      schemaReady,
+    });
+  } catch (error) {
+    logger.error({ err: error, tenantId }, "ERP tenant database health check failed");
+    res.status(503).json({ error: "ERP tenant database is unavailable" });
+  }
+});
+
+app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenantId = Number(req.body?.tenantId);
+  const databaseName = typeof req.body?.databaseName === "string"
+    ? req.body.databaseName
+    : "";
+  if (!Number.isInteger(tenantId) || tenantId <= 0 ||
+      databaseName !== `erp_tenant_${tenantId}`) {
+    res.status(400).json({ error: "Invalid tenant database provisioning payload" });
+    return;
+  }
+
+  try {
+    await initializeTenantDatabase(tenantId, databaseName, true);
+    res.json({ tenantId, databaseName, databaseStatus: "ready" });
+  } catch (error) {
+    logger.error({ err: error, tenantId, databaseName }, "ERP tenant provisioning failed");
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "ERP tenant provisioning failed",
+      databaseStatus: "failed",
+    });
+  }
 });
 
 server.on("error", (err) => {

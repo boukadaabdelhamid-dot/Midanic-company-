@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { db, usersTable, erpTenantsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import {
   RegisterBody,
   LoginBody,
@@ -137,6 +137,7 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
       trialEndsAt: erpTenantsTable.trialEndsAt,
       hostname: erpTenantsTable.hostname,
       domainStatus: erpTenantsTable.domainStatus,
+      databaseStatus: erpTenantsTable.databaseStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
@@ -152,6 +153,13 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
   }
   if (!tenant.hostname || tenant.domainStatus !== "active") {
     res.status(403).json({ error: "ERP domain is not active", status: "domain_inactive" });
+    return;
+  }
+  if (tenant.databaseStatus !== "ready") {
+    res.status(503).json({
+      error: "ERP tenant database is not ready",
+      status: tenant.databaseStatus,
+    });
     return;
   }
 
@@ -191,6 +199,7 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
       trialEndsAt: erpTenantsTable.trialEndsAt,
       hostname: erpTenantsTable.hostname,
       domainStatus: erpTenantsTable.domainStatus,
+      databaseStatus: erpTenantsTable.databaseStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, userId))
@@ -206,9 +215,11 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
     status,
     hostname: tenant?.hostname ?? null,
     domainStatus: tenant?.domainStatus ?? "inactive",
+    databaseStatus: tenant?.databaseStatus ?? "unprovisioned",
     canAccess:
       (status === "active" || status === "converted") &&
       tenant?.domainStatus === "active" &&
+      tenant?.databaseStatus === "ready" &&
       Boolean(tenant.hostname),
   });
 });
@@ -263,6 +274,7 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
     trialEndsAt: erpTenantsTable.trialEndsAt,
     hostname: erpTenantsTable.hostname,
     domainStatus: erpTenantsTable.domainStatus,
+    databaseStatus: erpTenantsTable.databaseStatus,
   }).from(erpTenantsTable).where(eq(erpTenantsTable.id, tenantId)).limit(1);
   const trialExpired = !!tenant?.trialEndsAt &&
     tenant.trialEndsAt.getTime() <= Date.now() &&
@@ -273,10 +285,73 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
     status,
     hostname: tenant?.hostname ?? null,
     domainStatus: tenant?.domainStatus ?? "inactive",
+    databaseStatus: tenant?.databaseStatus ?? "unprovisioned",
     canAccess:
       (status === "active" || status === "converted") &&
       tenant?.domainStatus === "active" &&
+      tenant?.databaseStatus === "ready" &&
       Boolean(tenant.hostname),
+  });
+});
+
+router.get("/internal/erp/databases", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenants = await db
+    .select({
+      tenantId: erpTenantsTable.id,
+      databaseName: erpTenantsTable.databaseName,
+    })
+    .from(erpTenantsTable)
+    .where(and(
+      eq(erpTenantsTable.databaseStatus, "ready"),
+      isNotNull(erpTenantsTable.databaseName),
+    ))
+    .orderBy(erpTenantsTable.id);
+
+  res.json({ tenants });
+});
+
+router.get("/internal/erp/database/:tenantId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenantId = Number(req.params.tenantId);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      databaseName: erpTenantsTable.databaseName,
+      databaseStatus: erpTenantsTable.databaseStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, tenantId))
+    .limit(1);
+
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+
+  res.json({
+    tenantId: tenant.id,
+    databaseName: tenant.databaseName,
+    databaseStatus: tenant.databaseStatus,
   });
 });
 
@@ -301,6 +376,7 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       trialEndsAt: erpTenantsTable.trialEndsAt,
       hostname: erpTenantsTable.hostname,
       domainStatus: erpTenantsTable.domainStatus,
+      databaseStatus: erpTenantsTable.databaseStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.hostname, hostname))
@@ -313,7 +389,8 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
   const canAccess =
     Boolean(tenant) &&
     (status === "active" || status === "converted") &&
-    tenant?.domainStatus === "active";
+    tenant?.domainStatus === "active" &&
+    tenant?.databaseStatus === "ready";
   if (!tenant) {
     res.status(404).json({ hostname, status, canAccess: false });
     return;
@@ -324,6 +401,7 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
     ownerUserId: tenant.ownerUserId,
     status,
     domainStatus: tenant.domainStatus,
+    databaseStatus: tenant.databaseStatus,
     canAccess,
   });
 });
