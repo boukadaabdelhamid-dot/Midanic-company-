@@ -49,6 +49,7 @@ import {
   ShieldCheck, ShieldOff, Ban, Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -97,6 +98,7 @@ interface CreateSheetProps {
 
 function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps) {
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<{
     userId: string;
@@ -114,7 +116,7 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
 
   const submit = async () => {
     if (!form.productId || !form.type) {
-      toast({ title: 'Missing fields', description: 'Product and type are required.', variant: 'destructive' });
+      toast({ title: tAdmin('Missing fields'), description: tAdmin('Product and type are required.'), variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -126,12 +128,12 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
       };
       if (form.userId) body.userId = Number(form.userId);
       const license = await adminApi.createLicense(body);
-      toast({ title: 'License created', description: `Key: ${license.licenseKey}` });
+      toast({ title: tAdmin('License created'), description: `${tAdmin('Key')}: ${license.licenseKey}` });
       onCreated(license);
       onOpenChange(false);
       setForm({ userId: '', productId: '', type: 'trial', maxDevices: '1' });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -141,17 +143,17 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>New License</SheetTitle>
+          <SheetTitle>{tAdmin('New License')}</SheetTitle>
         </SheetHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-1.5">
-            <Label>Product *</Label>
+             <Label>{tAdmin('Product *')}</Label>
             <Select
               value={form.productId}
               onValueChange={v => setForm(f => ({ ...f, productId: v }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select product" />
+                 <SelectValue placeholder={tAdmin('Select product')} />
               </SelectTrigger>
               <SelectContent>
                 {products.map(p => (
@@ -162,7 +164,7 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
           </div>
 
           <div className="space-y-1.5">
-            <Label>License Type *</Label>
+             <Label>{tAdmin('License Type *')}</Label>
             <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -195,9 +197,9 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
         </div>
 
         <SheetFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+           <Button variant="outline" onClick={() => onOpenChange(false)}>{tAdmin('Cancel')}</Button>
           <Button onClick={submit} disabled={saving}>
-            {saving ? 'Creating…' : 'Create License'}
+             {saving ? tAdmin('Creating…') : tAdmin('Create License')}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -217,6 +219,7 @@ export default function AdminLicenses() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminLicense | null>(null);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const fetchLicenses = useCallback(async () => {
     setLoading(true);
@@ -225,7 +228,7 @@ export default function AdminLicenses() {
       setLicenses(res.licenses);
       setLTotal(res.total);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -237,7 +240,7 @@ export default function AdminLicenses() {
       setSubscriptions(res.subscriptions);
       setSTotal(res.total);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   }, [sPage, toast]);
 
@@ -248,9 +251,9 @@ export default function AdminLicenses() {
     try {
       const updated = await adminApi.updateLicense(license.id, { status });
       setLicenses(ls => ls.map(l => l.id === updated.id ? updated : l));
-      toast({ title: 'Status updated', description: `License is now ${status}.` });
+       toast({ title: tAdmin('Status updated'), description: `${tAdmin('License is now')} ${tAdmin(status)}.` });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -260,9 +263,9 @@ export default function AdminLicenses() {
       await adminApi.deleteLicense(deleteTarget.id);
       setLicenses(ls => ls.filter(l => l.id !== deleteTarget.id));
       setLTotal(t => t - 1);
-      toast({ title: 'License deleted' });
+       toast({ title: tAdmin('License deleted') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);
     }
@@ -277,19 +280,19 @@ export default function AdminLicenses() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Licenses & Subscriptions</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage customer licenses and subscriptions</p>
+           <h1 className="text-2xl font-bold">{tAdmin('Licenses & Subscriptions')}</h1>
+           <p className="text-muted-foreground text-sm mt-1">{tAdmin('Manage customer licenses and subscriptions')}</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          New License
+           {tAdmin('New License')}
         </Button>
       </div>
 
       <Tabs defaultValue="licenses">
         <TabsList>
-          <TabsTrigger value="licenses">Licenses ({lTotal})</TabsTrigger>
-          <TabsTrigger value="subscriptions">Subscriptions ({sTotal})</TabsTrigger>
+           <TabsTrigger value="licenses">{tAdmin('Licenses')} ({lTotal})</TabsTrigger>
+           <TabsTrigger value="subscriptions">{tAdmin('Subscriptions')} ({sTotal})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="licenses" className="mt-4 space-y-3">
@@ -297,13 +300,13 @@ export default function AdminLicenses() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>License Key</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Devices</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Expires</TableHead>
+                   <TableHead>{tAdmin('License Key')}</TableHead>
+                   <TableHead>{tAdmin('User')}</TableHead>
+                   <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('Type')}</TableHead>
+                   <TableHead>{tAdmin('Devices')}</TableHead>
+                   <TableHead>{tAdmin('Status')}</TableHead>
+                   <TableHead>{tAdmin('Expires')}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -319,8 +322,8 @@ export default function AdminLicenses() {
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                         <div className="space-y-2">
-                          <p className="font-medium">No licenses yet</p>
-                          <p className="text-xs">Click "New License" to create the first one.</p>
+                           <p className="font-medium">{tAdmin('No licenses yet')}</p>
+                           <p className="text-xs">{tAdmin('Click "New License" to create the first one.')}</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -333,7 +336,7 @@ export default function AdminLicenses() {
                       <TableCell className="text-sm">
                         {l.userEmail
                           ? <span>{l.userEmail}</span>
-                          : <span className="text-muted-foreground italic">Unassigned</span>}
+                           : <span className="text-muted-foreground italic">{tAdmin('Unassigned')}</span>}
                       </TableCell>
                       <TableCell className="text-sm">{l.productName ?? `#${l.productId}`}</TableCell>
                       <TableCell>
@@ -363,19 +366,19 @@ export default function AdminLicenses() {
                             {l.status !== 'active' && (
                               <DropdownMenuItem onClick={() => changeStatus(l, 'active')}>
                                 <ShieldCheck className="h-4 w-4 mr-2 text-green-500" />
-                                Activate
+                                 {tAdmin('Activate')}
                               </DropdownMenuItem>
                             )}
                             {l.status === 'active' && (
                               <DropdownMenuItem onClick={() => changeStatus(l, 'suspended')}>
                                 <ShieldOff className="h-4 w-4 mr-2 text-yellow-500" />
-                                Suspend
+                                 {tAdmin('Suspend')}
                               </DropdownMenuItem>
                             )}
                             {l.status !== 'revoked' && (
                               <DropdownMenuItem onClick={() => changeStatus(l, 'revoked')}>
                                 <Ban className="h-4 w-4 mr-2 text-gray-500" />
-                                Revoke
+                                 {tAdmin('Revoke')}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
@@ -384,7 +387,7 @@ export default function AdminLicenses() {
                               onClick={() => setDeleteTarget(l)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
+                               {tAdmin('Delete')}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -402,11 +405,11 @@ export default function AdminLicenses() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Period Start</TableHead>
-                  <TableHead>Period End</TableHead>
+                   <TableHead>{tAdmin('User')}</TableHead>
+                   <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('Status')}</TableHead>
+                   <TableHead>{tAdmin('Period Start')}</TableHead>
+                   <TableHead>{tAdmin('Period End')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -414,7 +417,7 @@ export default function AdminLicenses() {
                   ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No subscriptions
+                         {tAdmin('No subscriptions')}
                       </TableCell>
                     </TableRow>
                   )
@@ -449,18 +452,18 @@ export default function AdminLicenses() {
       <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this license?</AlertDialogTitle>
+           <AlertDialogTitle>{tAdmin('Delete this license?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              License <span className="font-mono text-foreground">{deleteTarget?.licenseKey}</span> will be permanently deleted. This cannot be undone.
+               {tAdmin('License')} <span className="font-mono text-foreground">{deleteTarget?.licenseKey}</span> {tAdmin('will be permanently deleted. This cannot be undone.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+             <AlertDialogCancel>{tAdmin('Cancel')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 text-white"
               onClick={confirmDelete}
             >
-              Delete
+               {tAdmin('Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -470,11 +473,12 @@ export default function AdminLicenses() {
 }
 
 function Pagination({ total, page, onPage }: { total: number; page: number; onPage: (p: number) => void }) {
+  const { tAdmin } = useAdminText();
   const totalPages = Math.ceil(total / 20);
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground">
-      <span>Page {page} of {totalPages}</span>
+       <span>{tAdmin('Page')} {page} {tAdmin('of')} {totalPages}</span>
       <div className="flex gap-1">
         <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onPage(page - 1)}>
           <ChevronLeft className="h-4 w-4" />

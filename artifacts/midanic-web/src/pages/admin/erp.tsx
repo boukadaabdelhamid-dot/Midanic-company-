@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminText } from "@/lib/admin-i18n";
 import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
@@ -73,6 +74,7 @@ export default function AdminErp() {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -80,7 +82,7 @@ export default function AdminErp() {
       const result = await adminApi.listErpTenants(statusFilter === "all" ? undefined : statusFilter);
       setTenants(result.tenants);
     } catch (error) {
-      toast({ title: "Unable to load ERP accounts", description: (error as Error).message, variant: "destructive" });
+      toast({ title: tAdmin("Unable to load ERP accounts"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -99,7 +101,7 @@ export default function AdminErp() {
       })
       .catch((error) => {
         if (!cancelled) {
-          toast({ title: "Unable to load customers", description: (error as Error).message, variant: "destructive" });
+          toast({ title: tAdmin("Unable to load customers"), description: (error as Error).message, variant: "destructive" });
         }
       })
       .finally(() => {
@@ -120,16 +122,16 @@ export default function AdminErp() {
     try {
       const updated = await adminApi.updateErpTenant(tenant.id, { status });
       setTenants((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-      toast({ title: "ERP account updated" });
+      toast({ title: tAdmin("ERP account updated") });
     } catch (error) {
-      toast({ title: "Update failed", description: (error as Error).message, variant: "destructive" });
+      toast({ title: tAdmin("Update failed"), description: (error as Error).message, variant: "destructive" });
     }
   }
 
   async function createTenant() {
     const parsedOwnerId = Number(ownerUserId);
     if (!companyName.trim() || !Number.isInteger(parsedOwnerId) || parsedOwnerId <= 0) {
-      toast({ title: "Enter a company name and a valid owner user ID", variant: "destructive" });
+      toast({ title: tAdmin("Enter a company name and a valid owner user ID"), variant: "destructive" });
       return;
     }
     setCreating(true);
@@ -144,9 +146,9 @@ export default function AdminErp() {
       setOwnerUserId("");
       setCreateSubdomain("");
       setCreateOpen(false);
-      toast({ title: "ERP account created" });
+      toast({ title: tAdmin("ERP account created") });
     } catch (error) {
-      toast({ title: "Creation failed", description: (error as Error).message, variant: "destructive" });
+      toast({ title: tAdmin("Creation failed"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setCreating(false);
     }
@@ -161,7 +163,7 @@ export default function AdminErp() {
   async function saveDomain() {
     if (!domainTenant) return;
     if (domainStatus === "active" && !domainSubdomain.trim()) {
-      toast({ title: "Assign a subdomain before activating it", variant: "destructive" });
+      toast({ title: tAdmin("Assign a subdomain before activating it"), variant: "destructive" });
       return;
     }
     setSavingDomain(true);
@@ -177,11 +179,11 @@ export default function AdminErp() {
       setDomainTenant(null);
       toast({
         title: subdomainChanged && domainStatus === "active"
-          ? "Domain saved inactive — activate it after DNS is ready"
-          : "ERP domain updated",
+          ? tAdmin("Domain saved inactive — activate it after DNS is ready")
+          : tAdmin("ERP domain updated"),
       });
     } catch (error) {
-      toast({ title: "Domain update failed", description: (error as Error).message, variant: "destructive" });
+      toast({ title: tAdmin("Domain update failed"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setSavingDomain(false);
     }
@@ -197,9 +199,9 @@ export default function AdminErp() {
       );
       setDeleteDomainOpen(false);
       setDomainTenant(null);
-      toast({ title: "ERP domain deleted" });
+      toast({ title: tAdmin("ERP domain deleted") });
     } catch (error) {
-      toast({ title: "Domain deletion failed", description: (error as Error).message, variant: "destructive" });
+      toast({ title: tAdmin("Domain deletion failed"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setDeletingDomain(false);
     }
@@ -207,7 +209,7 @@ export default function AdminErp() {
 
   async function copyHostname(hostname: string) {
     await navigator.clipboard.writeText(`https://${hostname}`);
-    toast({ title: "ERP domain copied" });
+    toast({ title: tAdmin("ERP domain copied") });
   }
 
   return (
@@ -216,10 +218,10 @@ export default function AdminErp() {
         <div>
           <div className="flex items-center gap-2">
             <BriefcaseBusiness className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">ERP Control</h1>
+            <h1 className="text-2xl font-bold">{tAdmin("ERP Control")}</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Control companies, trials, access, and lifecycle from one place.
+            {tAdmin("Control companies, trials, access, and lifecycle from one place.")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -228,20 +230,20 @@ export default function AdminErp() {
           </Button>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Create ERP account</Button>
+              <Button><Plus className="mr-2 h-4 w-4" />{tAdmin("Create ERP account")}</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Create ERP account</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{tAdmin("Create ERP account")}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="erp-company-name">Company name</label>
-                  <Input id="erp-company-name" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
+                  <label className="text-sm font-medium" htmlFor="erp-company-name">{tAdmin("Company name")}</label>
+                  <Input id="erp-company-name" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder={tAdmin("Company name")} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="erp-owner-id">Owner user ID</label>
+                  <label className="text-sm font-medium" htmlFor="erp-owner-id">{tAdmin("Owner user ID")}</label>
                   <Select value={ownerUserId} onValueChange={setOwnerUserId} disabled={loadingCustomers}>
                     <SelectTrigger id="erp-owner-id">
-                      <SelectValue placeholder={loadingCustomers ? "Loading customers..." : "Select a customer"} />
+                      <SelectValue placeholder={loadingCustomers ? tAdmin("Loading customers...") : tAdmin("Select a customer")} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers.map((customer) => (
@@ -251,10 +253,10 @@ export default function AdminErp() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Choose the customer who will own this ERP account.</p>
+                  <p className="text-xs text-muted-foreground">{tAdmin("Choose the customer who will own this ERP account.")}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="erp-subdomain">Company subdomain</label>
+                  <label className="text-sm font-medium" htmlFor="erp-subdomain">{tAdmin("Company subdomain")}</label>
                   <div className="flex items-center rounded-md border bg-background">
                     <Input
                       id="erp-subdomain"
@@ -265,10 +267,10 @@ export default function AdminErp() {
                     />
                     <span className="pr-3 text-sm text-muted-foreground">.midanic.com</span>
                   </div>
-                   <p className="text-xs text-muted-foreground">The domain starts inactive. After creating the account, open its domain settings and activate it once wildcard DNS is ready.</p>
+                    <p className="text-xs text-muted-foreground">{tAdmin("The domain starts inactive. After creating the account, open its domain settings and activate it once wildcard DNS is ready.")}</p>
                 </div>
               </div>
-              <DialogFooter><Button onClick={() => void createTenant()} disabled={creating}>{creating ? "Creating..." : "Create account"}</Button></DialogFooter>
+              <DialogFooter><Button onClick={() => void createTenant()} disabled={creating}>{creating ? tAdmin("Creating...") : tAdmin("Create account")}</Button></DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
@@ -277,7 +279,7 @@ export default function AdminErp() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {STATUS_OPTIONS.map((status) => (
           <button key={status} className="rounded-xl border bg-card p-4 text-left transition hover:border-primary/50" onClick={() => setStatusFilter(status)}>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{status}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{tAdmin(status)}</p>
             <p className="mt-2 text-2xl font-semibold">{counts[status] ?? 0}</p>
           </button>
         ))}
@@ -287,8 +289,8 @@ export default function AdminErp() {
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+            <SelectItem value="all">{tAdmin("All statuses")}</SelectItem>
+            {STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{tAdmin(status)}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -297,29 +299,29 @@ export default function AdminErp() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Company</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Company domain</TableHead>
-              <TableHead>Trial ends</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Access</TableHead>
+              <TableHead>{tAdmin("Company")}</TableHead>
+              <TableHead>{tAdmin("Owner")}</TableHead>
+              <TableHead>{tAdmin("Status")}</TableHead>
+              <TableHead>{tAdmin("Company domain")}</TableHead>
+              <TableHead>{tAdmin("Trial ends")}</TableHead>
+              <TableHead>{tAdmin("Created")}</TableHead>
+              <TableHead className="text-right">{tAdmin("Access")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Loading ERP accounts...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">{tAdmin("Loading ERP accounts...")}</TableCell></TableRow>
             ) : tenants.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No ERP accounts found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts found.")}</TableCell></TableRow>
             ) : tenants.map((tenant) => (
               <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="font-medium">{tenant.companyName}</div>
-                  <div className="text-xs text-muted-foreground">Tenant #{tenant.id}</div>
+                   <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
                 </TableCell>
                 <TableCell>
-                  <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
-                  <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `User #${tenant.ownerUserId}`}</div>
+                   <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
+                   <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `${tAdmin("User")} #${tenant.ownerUserId}`}</div>
                 </TableCell>
                 <TableCell><Badge className={STATUS_STYLES[tenant.status] ?? ""}>{tenant.status}</Badge></TableCell>
                 <TableCell>
@@ -330,9 +332,9 @@ export default function AdminErp() {
                   >
                     <Globe2 className="mr-2 h-4 w-4" />
                     <span>
-                      <span className="block text-sm">{tenant.hostname ?? "Assign domain"}</span>
+                       <span className="block text-sm">{tenant.hostname ?? tAdmin("Assign domain")}</span>
                       <span className="block text-xs text-muted-foreground">
-                        {tenant.hostname ? tenant.domainStatus : "unassigned"}
+                         {tenant.hostname ? tAdmin(tenant.domainStatus) : tAdmin("unassigned")}
                       </span>
                     </span>
                   </Button>
@@ -354,15 +356,15 @@ export default function AdminErp() {
       <Dialog open={Boolean(domainTenant)} onOpenChange={(open) => !open && setDomainTenant(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manage ERP company domain</DialogTitle>
+            <DialogTitle>{tAdmin("Manage ERP company domain")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
               <p className="text-sm font-medium">{domainTenant?.companyName}</p>
-              <p className="text-xs text-muted-foreground">All companies use the same shared ERP service; this hostname selects the tenant.</p>
+               <p className="text-xs text-muted-foreground">{tAdmin("All companies use the same shared ERP service; this hostname selects the tenant.")}</p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="domain-subdomain">Subdomain</label>
+               <label className="text-sm font-medium" htmlFor="domain-subdomain">{tAdmin("Subdomain")}</label>
               <div className="flex items-center rounded-md border bg-background">
                 <Input
                   id="domain-subdomain"
@@ -375,23 +377,23 @@ export default function AdminErp() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Domain access</label>
+               <label className="text-sm font-medium">{tAdmin("Domain access")}</label>
               <Select value={domainStatus} onValueChange={(value) => setDomainStatus(value as "inactive" | "active")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="inactive">Inactive — block ERP access</SelectItem>
-                  <SelectItem value="active">Active — allow ERP access</SelectItem>
+                   <SelectItem value="inactive">{tAdmin("Inactive — block ERP access")}</SelectItem>
+                   <SelectItem value="active">{tAdmin("Active — allow ERP access")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {domainTenant?.hostname && (
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => void copyHostname(domainTenant.hostname!)}>
-                  <Copy className="mr-2 h-4 w-4" />Copy URL
+                   <Copy className="mr-2 h-4 w-4" />{tAdmin("Copy URL")}
                 </Button>
                 <Button variant="outline" size="sm" asChild>
                   <a href={`https://${domainTenant.hostname}`} target="_blank" rel="noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" />Open
+                     <ExternalLink className="mr-2 h-4 w-4" />{tAdmin("Open")}
                   </a>
                 </Button>
               </div>
@@ -404,11 +406,11 @@ export default function AdminErp() {
               onClick={() => setDeleteDomainOpen(true)}
               disabled={deletingDomain}
             >
-              <Trash2 className="mr-2 h-4 w-4" />Delete domain
+              <Trash2 className="mr-2 h-4 w-4" />{tAdmin("Delete domain")}
             </Button>
-            <Button variant="outline" onClick={() => setDomainTenant(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDomainTenant(null)}>{tAdmin("Cancel")}</Button>
             <Button onClick={() => void saveDomain()} disabled={savingDomain}>
-              {savingDomain ? "Saving..." : "Save domain"}
+              {savingDomain ? tAdmin("Saving...") : tAdmin("Save domain")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -417,13 +419,13 @@ export default function AdminErp() {
       <AlertDialog open={deleteDomainOpen} onOpenChange={setDeleteDomainOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this ERP domain?</AlertDialogTitle>
+           <AlertDialogTitle>{tAdmin("Delete this ERP domain?")}</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingDomain}>Cancel</AlertDialogCancel>
+             <AlertDialogCancel disabled={deletingDomain}>{tAdmin("Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={(event) => {
@@ -432,7 +434,7 @@ export default function AdminErp() {
               }}
               disabled={deletingDomain}
             >
-              {deletingDomain ? "Deleting..." : "Delete domain"}
+               {deletingDomain ? tAdmin("Deleting...") : tAdmin("Delete domain")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

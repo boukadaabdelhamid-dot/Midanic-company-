@@ -22,6 +22,7 @@ import {
 import { type MyErpAccess } from '@/lib/admin-api';
 import { useGetPublicStats } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 // ── colours for pie chart ────────────────────────────────────────────────────
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -71,6 +72,7 @@ export default function AdminOverview() {
   const [erpAccess, setErpAccess] = useState<MyErpAccess | null>(null);
   const { data: publicStats } = useGetPublicStats();
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   useEffect(() => {
     Promise.all([adminApi.getStats(), adminApi.getMonthlyLicenses(), adminApi.getMyErpAccess()])
@@ -85,7 +87,7 @@ export default function AdminOverview() {
   const renewLicense = async (license: ExpiringLicense) => {
     try {
       await adminApi.updateLicense(license.id, { status: 'active' });
-      toast({ title: 'License renewed', description: `${license.licenseKey} is now active.` });
+      toast({ title: tAdmin('License renewed'), description: `${license.licenseKey} ${tAdmin('is now active.')}` });
       // Refresh stats
       const [s, m] = await Promise.all([adminApi.getStats(), adminApi.getMonthlyLicenses()]);
       setStats(s);
@@ -105,8 +107,8 @@ export default function AdminOverview() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Overview</h1>
-        <p className="text-muted-foreground text-sm mt-1">Platform at a glance</p>
+        <h1 className="text-2xl font-bold">{tAdmin('Overview')}</h1>
+        <p className="text-muted-foreground text-sm mt-1">{tAdmin('Platform at a glance')}</p>
       </div>
 
       {error && (
@@ -124,15 +126,15 @@ export default function AdminOverview() {
               <h2 className="font-semibold">Midanic ERP</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {erpAccess?.canAccess
-                  ? (erpAccess.companyName ? `${erpAccess.companyName} · ` : '') + 'Your ERP workspace is ready.'
-                  : erpAccess?.message ?? 'Loading ERP access…'}
+                  ? (erpAccess.companyName ? `${erpAccess.companyName} · ` : '') + tAdmin('Your ERP workspace is ready.')
+                  : erpAccess?.message ?? tAdmin('Loading ERP access…')}
               </p>
             </div>
           </div>
           {erpAccess?.canAccess && erpAccess.launchUrl && (
             <Button asChild className="shrink-0 gap-2">
               <a href={erpAccess.launchUrl} target="_blank" rel="noopener noreferrer">
-                Open ERP
+                {tAdmin('Open ERP')}
                 <ExternalLink className="h-4 w-4" />
               </a>
             </Button>
@@ -144,10 +146,10 @@ export default function AdminOverview() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats ? (
           <>
-            <StatCard label="Total Users" value={stats.totalUsers} icon={Users} color="text-blue-500" />
-            <StatCard label="Total Products" value={stats.totalProducts} icon={Package} color="text-green-500" />
-            <StatCard label="Active Licenses" value={stats.activeLicenses} icon={Key} color="text-purple-500" />
-            <StatCard label="Open Tickets" value={stats.openTickets} icon={Ticket} color="text-orange-500" />
+            <StatCard label={tAdmin('Total Users')} value={stats.totalUsers} icon={Users} color="text-blue-500" />
+            <StatCard label={tAdmin('Total Products')} value={stats.totalProducts} icon={Package} color="text-green-500" />
+            <StatCard label={tAdmin('Active Licenses')} value={stats.activeLicenses} icon={Key} color="text-purple-500" />
+            <StatCard label={tAdmin('Open Tickets')} value={stats.openTickets} icon={Ticket} color="text-orange-500" />
           </>
         ) : (
           Array.from({ length: 4 }).map((_, i) => (
@@ -161,25 +163,25 @@ export default function AdminOverview() {
         {stats ? (
           <>
             <StatCard
-              label="New This Month"
+              label={tAdmin('New This Month')}
               value={stats.newThisMonth}
               icon={Sparkles}
               color="text-blue-400"
-              sub="licenses issued"
+              sub={tAdmin('licenses issued')}
             />
             <StatCard
-              label="Expiring in 30 Days"
+              label={tAdmin('Expiring in 30 Days')}
               value={stats.expiringIn30Days}
               icon={CalendarClock}
               color="text-yellow-500"
-              sub="active licenses"
+              sub={tAdmin('active licenses')}
             />
             <StatCard
-              label="Expiring Today"
+              label={tAdmin('Expiring Today')}
               value={stats.expiringToday}
               icon={AlertTriangle}
               color={stats.expiringToday > 0 ? 'text-red-500' : 'text-muted-foreground'}
-              sub="require immediate action"
+              sub={tAdmin('require immediate action')}
             />
           </>
         ) : (
@@ -194,12 +196,12 @@ export default function AdminOverview() {
         {/* Bar chart — monthly licenses */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Licenses Issued — Last 6 Months</CardTitle>
+            <CardTitle className="text-base">{tAdmin('Licenses Issued — Last 6 Months')}</CardTitle>
           </CardHeader>
           <CardContent>
             {chartData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                Loading chart…
+                {tAdmin('Loading chart…')}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
@@ -220,12 +222,12 @@ export default function AdminOverview() {
         {/* Pie chart — by product */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Active Licenses by Product</CardTitle>
+            <CardTitle className="text-base">{tAdmin('Active Licenses by Product')}</CardTitle>
           </CardHeader>
           <CardContent>
             {!stats || stats.byProduct.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                {stats ? 'No active licenses' : 'Loading…'}
+                {stats ? tAdmin('No active licenses') : tAdmin('Loading…')}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
@@ -258,19 +260,19 @@ export default function AdminOverview() {
       {/* ── Recent licenses table ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent Licenses</CardTitle>
+            <CardTitle className="text-base">{tAdmin('Recent Licenses')}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Key</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>{tAdmin('Key')}</TableHead>
+                <TableHead>{tAdmin('Customer')}</TableHead>
+                <TableHead>{tAdmin('Product')}</TableHead>
+                <TableHead>{tAdmin('Type')}</TableHead>
+                <TableHead>{tAdmin('Status')}</TableHead>
+                <TableHead>{tAdmin('Expires')}</TableHead>
+                <TableHead>{tAdmin('Created')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -285,7 +287,7 @@ export default function AdminOverview() {
               ) : stats.recentLicenses.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No licenses yet
+                     {tAdmin('No licenses yet')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -295,7 +297,7 @@ export default function AdminOverview() {
                     <TableCell className="text-sm">
                       {l.userEmail
                         ? <span title={l.userEmail}>{l.userFirstName ?? ''} {l.userLastName ?? ''}</span>
-                        : <span className="text-muted-foreground italic">Unassigned</span>}
+                         : <span className="text-muted-foreground italic">{tAdmin('Unassigned')}</span>}
                     </TableCell>
                     <TableCell className="text-sm">{l.productName ?? '—'}</TableCell>
                     <TableCell>
@@ -324,19 +326,19 @@ export default function AdminOverview() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-yellow-500" />
-              Expiring Within 14 Days ({stats.expiringIn14Days.length})
+              {tAdmin('Expiring Within 14 Days')} ({stats.expiringIn14Days.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Days Left</TableHead>
+                   <TableHead>{tAdmin('Key')}</TableHead>
+                   <TableHead>{tAdmin('Customer')}</TableHead>
+                   <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('Type')}</TableHead>
+                   <TableHead>{tAdmin('Expires')}</TableHead>
+                   <TableHead>{tAdmin('Days Left')}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -370,7 +372,7 @@ export default function AdminOverview() {
                           className="h-7 text-xs"
                           onClick={() => renewLicense(l)}
                         >
-                          Renew
+                           {tAdmin('Renew')}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -387,14 +389,14 @@ export default function AdminOverview() {
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
-            Public Metrics
+             {tAdmin('Public Metrics')}
           </h2>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
-              { label: 'Published Products', value: publicStats.totalProducts },
-              { label: 'Total Clients', value: publicStats.totalClients },
-              { label: 'Total Downloads', value: publicStats.totalDownloads },
-              { label: 'Countries', value: publicStats.totalCountries },
+               { label: tAdmin('Published Products'), value: publicStats.totalProducts },
+               { label: tAdmin('Total Clients'), value: publicStats.totalClients },
+               { label: tAdmin('Total Downloads'), value: publicStats.totalDownloads },
+               { label: tAdmin('Countries'), value: publicStats.totalCountries },
             ].map(({ label, value }) => (
               <Card key={label} className="bg-muted/50">
                 <CardHeader className="pb-2">

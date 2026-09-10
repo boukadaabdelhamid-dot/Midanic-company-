@@ -13,4 +13,8 @@
 - [Idempotent core catalog](idempotent-core-catalog.md) — Never gate later product seed data on the original admin seed; long-lived databases need safe catalog repair on startup
 - [ERP API isolation](erp-api-isolation.md) — The full ERP source API must run as a separate artifact on PostgreSQL schema `erp`, never against Midanic's public schema
 - [Railway monorepo builds](railway-monorepo-builds.md) — Railway service Dockerfiles use the repository root as context; never clone a stale external repository during builds
+- [Railway redeploy verification](railway-redeploy-verification.md) — A current GitHub commit does not prove Railway deployed it; compare live HTML asset hashes and verify the service trigger separately
 - [ERP route corruption check](erp-route-corruption-check.md) — Syntax errors at line 1 in ERP routes can indicate committed source truncation; inspect file beginnings before debugging downstream code
+- [GitHub sync path](github-sync-path.md) — Local Git may expose only GitSafe; use the connected GitHub proxy for repository pushes
+- [Customer profile saves](customer-profile-saves.md) — Profile edits preserve canonical balances and return the store-scoped detail after an atomic update
+- [Mixed-language UI prevention](mixed-language-ui.md) — Any visible JSX literal bypasses the active locale, including decorative dashboard previews and admin controls

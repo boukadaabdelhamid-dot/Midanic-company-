@@ -57,7 +57,16 @@
     "newsletter_subtitle": "Subscribe to receive product updates and industry insights.",
     "newsletter_placeholder": "Enter your email",
     "newsletter_button": "Subscribe",
-    "newsletter_success": "Successfully subscribed!"
+    "newsletter_success": "Successfully subscribed!",
+    "dashboard_path": "app.midanic.com/dashboard",
+    "preview_active_licenses": "Active licenses",
+    "preview_products": "Products",
+    "preview_clients": "Clients",
+    "preview_license_activity": "License activity — last 6 months",
+    "preview_annual_license": "Annual license — Future Company",
+    "preview_monthly_license": "Monthly license — Al Noor Foundation",
+    "preview_active": "Active",
+    "preview_new": "New"
   },
   "products": {
     "page_title": "Our Products",

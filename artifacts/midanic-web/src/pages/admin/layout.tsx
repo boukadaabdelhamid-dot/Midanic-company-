@@ -17,6 +17,7 @@ import {
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAdminSettings } from '@/contexts/admin-settings-context';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
@@ -40,6 +41,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const { settings, localizedSettings } = useAdminSettings();
+  const { tAdmin } = useAdminText();
 
   if (isLoading) {
     return (
@@ -103,7 +105,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed && <span>{label}</span>}
+                  {!collapsed && <span>{tAdmin(label)}</span>}
                 </div>
               </Link>
             );

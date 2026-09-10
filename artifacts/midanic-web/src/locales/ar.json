@@ -57,7 +57,16 @@
     "newsletter_subtitle": "اشترك لتلقي تحديثات المنتج ورؤى الصناعة.",
     "newsletter_placeholder": "أدخل بريدك الإلكتروني",
     "newsletter_button": "اشترك",
-    "newsletter_success": "تم الاشتراك بنجاح!"
+    "newsletter_success": "تم الاشتراك بنجاح!",
+    "dashboard_path": "app.midanic.com/dashboard",
+    "preview_active_licenses": "التراخيص النشطة",
+    "preview_products": "المنتجات",
+    "preview_clients": "الزبائن",
+    "preview_license_activity": "نشاط التراخيص — آخر 6 أشهر",
+    "preview_annual_license": "ترخيص سنوي — شركة المستقبل",
+    "preview_monthly_license": "ترخيص شهري — مؤسسة النور",
+    "preview_active": "نشط",
+    "preview_new": "جديد"
   },
   "products": {
     "page_title": "منتجاتنا",

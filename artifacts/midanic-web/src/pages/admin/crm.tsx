@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { ChevronLeft, ChevronRight, Mail, MailOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30',
@@ -29,11 +30,12 @@ const TRIAL_STATUSES = ['pending', 'approved', 'rejected', 'expired'];
 const DEMO_STATUSES = ['pending', 'scheduled', 'completed', 'cancelled'];
 
 function Pagination({ total, page, onPage }: { total: number; page: number; onPage: (p: number) => void }) {
+  const { tAdmin } = useAdminText();
   const totalPages = Math.ceil(total / 20);
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground">
-      <span>Page {page} of {totalPages}</span>
+       <span>{tAdmin('Page')} {page} {tAdmin('of')} {totalPages}</span>
       <div className="flex gap-1">
         <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onPage(page - 1)}>
           <ChevronLeft className="h-4 w-4" />
@@ -65,6 +67,7 @@ export default function AdminCRM() {
 
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -80,7 +83,7 @@ export default function AdminCRM() {
       setDemos(d.requests); setDemoTotal(d.total);
       setSubscribers(s.subscribers); setSubTotal(s.total);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,7 @@ export default function AdminCRM() {
       const updated = await adminApi.updateContactMessage(id, { isRead });
       setMessages((prev) => prev.map((m) => (m.id === id ? updated : m)));
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -102,7 +105,7 @@ export default function AdminCRM() {
       const updated = await adminApi.updateTrialRequest(id, { status });
       setTrials((prev) => prev.map((t) => (t.id === id ? updated : t)));
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -111,23 +114,23 @@ export default function AdminCRM() {
       const updated = await adminApi.updateDemoRequest(id, { status });
       setDemos((prev) => prev.map((d) => (d.id === id ? updated : d)));
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">CRM</h1>
-        <p className="text-muted-foreground text-sm mt-1">Contact messages, trial & demo requests, newsletter</p>
+       <h1 className="text-2xl font-bold">{tAdmin('CRM')}</h1>
+       <p className="text-muted-foreground text-sm mt-1">{tAdmin('Contact messages, trial & demo requests, newsletter')}</p>
       </div>
 
       <Tabs defaultValue="messages">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="messages">Contact ({msgTotal})</TabsTrigger>
-          <TabsTrigger value="trials">Trials ({trialTotal})</TabsTrigger>
-          <TabsTrigger value="demos">Demos ({demoTotal})</TabsTrigger>
-          <TabsTrigger value="newsletter">Newsletter ({subTotal})</TabsTrigger>
+           <TabsTrigger value="messages">{tAdmin('Contact')} ({msgTotal})</TabsTrigger>
+           <TabsTrigger value="trials">{tAdmin('Trials')} ({trialTotal})</TabsTrigger>
+           <TabsTrigger value="demos">{tAdmin('Demos')} ({demoTotal})</TabsTrigger>
+           <TabsTrigger value="newsletter">{tAdmin('Newsletter')} ({subTotal})</TabsTrigger>
         </TabsList>
 
         {/* Contact Messages */}
@@ -137,17 +140,17 @@ export default function AdminCRM() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Date</TableHead>
+                   <TableHead>{tAdmin('Name')}</TableHead>
+                   <TableHead>{tAdmin('Email')}</TableHead>
+                   <TableHead>{tAdmin('Subject')}</TableHead>
+                   <TableHead>{tAdmin('Date')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
                   ? <TableRow><TableCell colSpan={5} className="text-center py-8"><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted" /></TableCell></TableRow>
                   : messages.length === 0
-                  ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No messages</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">{tAdmin('No messages')}</TableCell></TableRow>
                   : messages.map((m) => (
                     <TableRow key={m.id} className={m.isRead ? 'opacity-60' : ''}>
                       <TableCell>
@@ -173,19 +176,19 @@ export default function AdminCRM() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
+                   <TableHead>{tAdmin('Name')}</TableHead>
+                   <TableHead>{tAdmin('Email')}</TableHead>
+                   <TableHead>{tAdmin('Company')}</TableHead>
+                   <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('Status')}</TableHead>
+                   <TableHead>{tAdmin('Date')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
                   ? <TableRow><TableCell colSpan={6}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
                   : trials.length === 0
-                  ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No trial requests</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">{tAdmin('No trial requests')}</TableCell></TableRow>
                   : trials.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium text-sm">{t.name}</TableCell>
@@ -223,19 +226,19 @@ export default function AdminCRM() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Preferred Date</TableHead>
-                  <TableHead>Status</TableHead>
+                   <TableHead>{tAdmin('Name')}</TableHead>
+                   <TableHead>{tAdmin('Email')}</TableHead>
+                   <TableHead>{tAdmin('Company')}</TableHead>
+                   <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('Preferred Date')}</TableHead>
+                   <TableHead>{tAdmin('Status')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
                   ? <TableRow><TableCell colSpan={6}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
                   : demos.length === 0
-                  ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No demo requests</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">{tAdmin('No demo requests')}</TableCell></TableRow>
                   : demos.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium text-sm">{d.name}</TableCell>
@@ -273,24 +276,24 @@ export default function AdminCRM() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead>Subscribed</TableHead>
+                   <TableHead>{tAdmin('Email')}</TableHead>
+                   <TableHead>{tAdmin('Name')}</TableHead>
+                   <TableHead>{tAdmin('Active')}</TableHead>
+                   <TableHead>{tAdmin('Subscribed')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
                   ? <TableRow><TableCell colSpan={4}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
                   : subscribers.length === 0
-                  ? <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No subscribers</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">{tAdmin('No subscribers')}</TableCell></TableRow>
                   : subscribers.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell className="font-medium text-sm">{s.email}</TableCell>
                       <TableCell className="text-sm">{s.name ?? '—'}</TableCell>
                       <TableCell>
                         <Badge className={s.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-gray-100 text-gray-600'}>
-                          {s.isActive ? 'Active' : 'Inactive'}
+                           {s.isActive ? tAdmin('Active') : tAdmin('Inactive')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{new Date(s.createdAt).toLocaleDateString()}</TableCell>

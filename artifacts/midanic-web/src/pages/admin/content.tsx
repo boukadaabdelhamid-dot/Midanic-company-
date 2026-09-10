@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const EMPTY_BLOG: ContentInput = { title: '', slug: '', excerpt: '', content: '', authorName: 'Midanic Team', published: false };
 const EMPTY_NEWS: Omit<ContentInput, 'authorName'> = { title: '', slug: '', excerpt: '', content: '', published: false };
@@ -37,6 +38,7 @@ export default function AdminContent() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; mode: SheetMode } | null>(null);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -94,10 +96,10 @@ export default function AdminContent() {
           setNews((prev) => [created, ...prev]);
         }
       }
-      toast({ title: editingId ? 'Updated' : 'Created' });
+       toast({ title: editingId ? tAdmin('Updated') : tAdmin('Created') });
       setSheetOpen(false);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -113,9 +115,9 @@ export default function AdminContent() {
         await adminApi.deleteNewsItem(deleteTarget.id);
         setNews((prev) => prev.filter((n) => n.id !== deleteTarget.id));
       }
-      toast({ title: 'Deleted' });
+       toast({ title: tAdmin('Deleted') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);
     }
@@ -131,7 +133,7 @@ export default function AdminContent() {
         setNews((prev) => prev.map((n) => (n.id === id ? updated : n)));
       }
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -140,17 +142,17 @@ export default function AdminContent() {
       <div className="space-y-3">
         <div className="flex justify-end">
           <Button size="sm" onClick={() => openNew(mode)} className="gap-2">
-            <Plus className="h-4 w-4" /> New {mode === 'blog' ? 'Post' : 'Article'}
+             <Plus className="h-4 w-4" /> {tAdmin('New')} {mode === 'blog' ? tAdmin('Post') : tAdmin('Article')}
           </Button>
         </div>
         <div className="rounded-md border bg-background">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                {mode === 'blog' && <TableHead>Author</TableHead>}
-                <TableHead>Published</TableHead>
-                <TableHead>Date</TableHead>
+                 <TableHead>{tAdmin('Title')}</TableHead>
+                 {mode === 'blog' && <TableHead>{tAdmin('Author')}</TableHead>}
+                 <TableHead>{tAdmin('Published')}</TableHead>
+                 <TableHead>{tAdmin('Date')}</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -162,7 +164,7 @@ export default function AdminContent() {
                     ))}</TableRow>
                   ))
                 : items.length === 0
-                ? <TableRow><TableCell colSpan={mode === 'blog' ? 5 : 4} className="text-center text-muted-foreground py-8">No content yet</TableCell></TableRow>
+                 ? <TableRow><TableCell colSpan={mode === 'blog' ? 5 : 4} className="text-center text-muted-foreground py-8">{tAdmin('No content yet')}</TableCell></TableRow>
                 : items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium max-w-xs truncate">{item.title}</TableCell>
@@ -198,14 +200,14 @@ export default function AdminContent() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Content</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage blog posts and news articles</p>
+         <h1 className="text-2xl font-bold">{tAdmin('Content')}</h1>
+         <p className="text-muted-foreground text-sm mt-1">{tAdmin('Manage blog posts and news articles')}</p>
       </div>
 
       <Tabs defaultValue="blog">
         <TabsList>
-          <TabsTrigger value="blog">Blog Posts ({blogs.length})</TabsTrigger>
-          <TabsTrigger value="news">News ({news.length})</TabsTrigger>
+           <TabsTrigger value="blog">{tAdmin('Blog Posts')} ({blogs.length})</TabsTrigger>
+           <TabsTrigger value="news">{tAdmin('News')} ({news.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="blog" className="mt-4"><ContentTable mode="blog" items={blogs} /></TabsContent>
         <TabsContent value="news" className="mt-4"><ContentTable mode="news" items={news} /></TabsContent>
@@ -216,38 +218,38 @@ export default function AdminContent() {
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {editingId ? 'Edit' : 'New'} {sheetMode === 'blog' ? 'Blog Post' : 'News Article'}
+               {editingId ? tAdmin('Edit') : tAdmin('New')} {sheetMode === 'blog' ? tAdmin('Blog Post') : tAdmin('News Article')}
             </SheetTitle>
           </SheetHeader>
           <div className="space-y-4 py-4">
             {sheetMode === 'blog' ? (
               <>
-                <Field label="Title *" value={blogForm.title} onChange={(v) => setBlogForm((p) => ({ ...p, title: v }))} />
-                <Field label="Slug *" value={blogForm.slug} onChange={(v) => setBlogForm((p) => ({ ...p, slug: v }))} />
-                <Field label="Author" value={blogForm.authorName ?? ''} onChange={(v) => setBlogForm((p) => ({ ...p, authorName: v }))} />
-                <Field label="Excerpt" value={blogForm.excerpt ?? ''} onChange={(v) => setBlogForm((p) => ({ ...p, excerpt: v }))} />
-                <TextareaField label="Content *" value={blogForm.content} onChange={(v) => setBlogForm((p) => ({ ...p, content: v }))} />
+                 <Field label={tAdmin('Title *')} value={blogForm.title} onChange={(v) => setBlogForm((p) => ({ ...p, title: v }))} />
+                 <Field label={tAdmin('Slug *')} value={blogForm.slug} onChange={(v) => setBlogForm((p) => ({ ...p, slug: v }))} />
+                 <Field label={tAdmin('Author')} value={blogForm.authorName ?? ''} onChange={(v) => setBlogForm((p) => ({ ...p, authorName: v }))} />
+                 <Field label={tAdmin('Excerpt')} value={blogForm.excerpt ?? ''} onChange={(v) => setBlogForm((p) => ({ ...p, excerpt: v }))} />
+                 <TextareaField label={tAdmin('Content *')} value={blogForm.content} onChange={(v) => setBlogForm((p) => ({ ...p, content: v }))} />
                 <div className="flex items-center gap-3">
                   <Switch id="pub" checked={blogForm.published} onCheckedChange={(v) => setBlogForm((p) => ({ ...p, published: v }))} />
-                  <Label htmlFor="pub">Published</Label>
+                   <Label htmlFor="pub">{tAdmin('Published')}</Label>
                 </div>
               </>
             ) : (
               <>
-                <Field label="Title *" value={newsForm.title} onChange={(v) => setNewsForm((p) => ({ ...p, title: v }))} />
-                <Field label="Slug *" value={newsForm.slug} onChange={(v) => setNewsForm((p) => ({ ...p, slug: v }))} />
-                <Field label="Excerpt" value={newsForm.excerpt ?? ''} onChange={(v) => setNewsForm((p) => ({ ...p, excerpt: v }))} />
-                <TextareaField label="Content *" value={newsForm.content} onChange={(v) => setNewsForm((p) => ({ ...p, content: v }))} />
+                 <Field label={tAdmin('Title *')} value={newsForm.title} onChange={(v) => setNewsForm((p) => ({ ...p, title: v }))} />
+                 <Field label={tAdmin('Slug *')} value={newsForm.slug} onChange={(v) => setNewsForm((p) => ({ ...p, slug: v }))} />
+                 <Field label={tAdmin('Excerpt')} value={newsForm.excerpt ?? ''} onChange={(v) => setNewsForm((p) => ({ ...p, excerpt: v }))} />
+                 <TextareaField label={tAdmin('Content *')} value={newsForm.content} onChange={(v) => setNewsForm((p) => ({ ...p, content: v }))} />
                 <div className="flex items-center gap-3">
                   <Switch id="pub2" checked={newsForm.published} onCheckedChange={(v) => setNewsForm((p) => ({ ...p, published: v }))} />
-                  <Label htmlFor="pub2">Published</Label>
+                   <Label htmlFor="pub2">{tAdmin('Published')}</Label>
                 </div>
               </>
             )}
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+             <Button variant="outline" onClick={() => setSheetOpen(false)}>{tAdmin('Cancel')}</Button>
+             <Button onClick={handleSave} disabled={saving}>{saving ? tAdmin('Saving…') : tAdmin('Save')}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -255,12 +257,12 @@ export default function AdminContent() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this item?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+           <AlertDialogTitle>{tAdmin('Delete this item?')}</AlertDialogTitle>
+           <AlertDialogDescription>{tAdmin('This action cannot be undone.')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>Delete</AlertDialogAction>
+             <AlertDialogCancel>{tAdmin('Cancel')}</AlertDialogCancel>
+             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>{tAdmin('Delete')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

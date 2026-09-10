@@ -50,6 +50,7 @@ import {
 import { Plus, Pencil, Trash2, Star, Download, Tag, Upload, ImageIcon, X, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFileToStorage } from '@/lib/storage-upload';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const LICENSE_TYPES = [
   { value: 'trial', label: 'Trial' },
@@ -122,6 +123,7 @@ export default function AdminProducts() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   // ── Products ──────────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async () => {
@@ -195,15 +197,15 @@ export default function AdminProducts() {
         const updated = await adminApi.updateProduct(editing.id, payload);
         setProducts((prev) => prev.map((p) => (p.id === editing.id ? updated : p)));
         setEditing(updated);
-        toast({ title: 'Product updated' });
+        toast({ title: tAdmin('Product updated') });
       } else {
         const created = await adminApi.createProduct(payload);
         setProducts((prev) => [...prev, created]);
         setEditing(created);
-        toast({ title: 'Product created — add versions and downloads below' });
+        toast({ title: tAdmin('Product created — add versions and downloads below') });
       }
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -214,9 +216,9 @@ export default function AdminProducts() {
     try {
       await adminApi.deleteProduct(deleteId);
       setProducts((prev) => prev.filter((p) => p.id !== deleteId));
-      toast({ title: 'Product deleted' });
+      toast({ title: tAdmin('Product deleted') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setDeleteId(null);
     }
@@ -409,11 +411,11 @@ export default function AdminProducts() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Products</h1>
+          <h1 className="text-2xl font-bold">{tAdmin('Products')}</h1>
           <p className="text-muted-foreground text-sm mt-1">{products.length} products</p>
         </div>
         <Button onClick={openNew} className="gap-2">
-          <Plus className="h-4 w-4" /> New Product
+          <Plus className="h-4 w-4" /> {tAdmin('New Product')}
         </Button>
       </div>
 
@@ -422,12 +424,12 @@ export default function AdminProducts() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>License</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Published</TableHead>
-              <TableHead>Featured</TableHead>
+              <TableHead>{tAdmin('Name')}</TableHead>
+              <TableHead>{tAdmin('Category')}</TableHead>
+              <TableHead>{tAdmin('License')}</TableHead>
+              <TableHead>{tAdmin('Price')}</TableHead>
+              <TableHead>{tAdmin('Published')}</TableHead>
+              <TableHead>{tAdmin('Featured')}</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
@@ -443,7 +445,7 @@ export default function AdminProducts() {
               : products.length === 0
               ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No products yet</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">{tAdmin('No products yet')}</TableCell>
                 </TableRow>
               )
               : products.map((p) => (
@@ -484,17 +486,17 @@ export default function AdminProducts() {
       <Sheet open={sheetOpen} onOpenChange={(o) => { if (!o) setSheetOpen(false); }}>
         <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{editing ? `Edit: ${editing.name}` : 'New Product'}</SheetTitle>
+            <SheetTitle>{editing ? `${tAdmin('Edit')}: ${editing.name}` : tAdmin('New Product')}</SheetTitle>
           </SheetHeader>
 
           <Tabs defaultValue="details" className="mt-4">
             <TabsList className="w-full">
-              <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+              <TabsTrigger value="details" className="flex-1">{tAdmin('Details')}</TabsTrigger>
               <TabsTrigger value="versions" className="flex-1" disabled={!editing}>
-                Versions {editing && versions.length > 0 && `(${versions.length})`}
+                {tAdmin('Versions')} {editing && versions.length > 0 && `(${versions.length})`}
               </TabsTrigger>
               <TabsTrigger value="downloads" className="flex-1" disabled={!editing}>
-                Downloads {editing && downloads.length > 0 && `(${downloads.length})`}
+                {tAdmin('Downloads')} {editing && downloads.length > 0 && `(${downloads.length})`}
               </TabsTrigger>
             </TabsList>
 
@@ -644,14 +646,14 @@ export default function AdminProducts() {
                 </div>
                 <div className="flex items-center gap-3 col-span-2">
                   <Switch id="published" checked={form.published} onCheckedChange={(v) => setForm((p) => ({ ...p, published: v }))} />
-                  <Label htmlFor="published">Published</Label>
+                  <Label htmlFor="published">{tAdmin('Published')}</Label>
                   <Switch id="featured" checked={form.featured} onCheckedChange={(v) => setForm((p) => ({ ...p, featured: v }))} className="ml-4" />
-                  <Label htmlFor="featured">Featured</Label>
+                  <Label htmlFor="featured">{tAdmin('Featured')}</Label>
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancel</Button>
-                <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : (editing ? 'Save Changes' : 'Create Product')}</Button>
+                <Button variant="outline" onClick={() => setSheetOpen(false)}>{tAdmin('Cancel')}</Button>
+                <Button onClick={handleSave} disabled={saving}>{saving ? tAdmin('Saving…') : (editing ? tAdmin('Save Changes') : tAdmin('Create Product'))}</Button>
               </SheetFooter>
             </TabsContent>
 

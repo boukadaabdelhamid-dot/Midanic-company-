@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/sheet';
 import { ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const STATUS_OPTIONS = ['open', 'in_progress', 'waiting_customer', 'resolved', 'closed'];
 const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'];
@@ -44,6 +45,7 @@ export default function AdminTickets() {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
@@ -52,7 +54,7 @@ export default function AdminTickets() {
       setTickets(res.tickets);
       setTotal(res.total);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -66,7 +68,7 @@ export default function AdminTickets() {
       setSelected(detail);
       setSheetOpen(true);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -76,7 +78,7 @@ export default function AdminTickets() {
       setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
       if (selected?.id === id) setSelected((prev) => prev ? { ...prev, status } : null);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -88,9 +90,9 @@ export default function AdminTickets() {
       setSelected((prev) => prev ? { ...prev, messages: [...prev.messages, msg], status: prev.status === 'open' ? 'in_progress' : prev.status } : null);
       setTickets((prev) => prev.map((t) => t.id === selected.id ? { ...t, status: t.status === 'open' ? 'in_progress' : t.status } : t));
       setReply('');
-      toast({ title: 'Reply sent' });
+       toast({ title: tAdmin('Reply sent') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSending(false);
     }
@@ -102,15 +104,15 @@ export default function AdminTickets() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Support Tickets</h1>
+           <h1 className="text-2xl font-bold">{tAdmin('Support Tickets')}</h1>
           <p className="text-muted-foreground text-sm mt-1">{total} tickets</p>
         </div>
         <Select value={statusFilter || 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All statuses" />
+             <SelectValue placeholder={tAdmin('All statuses')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
+             <SelectItem value="all">{tAdmin('All statuses')}</SelectItem>
             {STATUS_OPTIONS.map((s) => (
               <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>
             ))}
@@ -122,12 +124,12 @@ export default function AdminTickets() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ticket #</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Subject</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Date</TableHead>
+               <TableHead>{tAdmin('Ticket #')}</TableHead>
+               <TableHead>{tAdmin('User')}</TableHead>
+               <TableHead>{tAdmin('Subject')}</TableHead>
+               <TableHead>{tAdmin('Priority')}</TableHead>
+               <TableHead>{tAdmin('Status')}</TableHead>
+               <TableHead>{tAdmin('Date')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -138,7 +140,7 @@ export default function AdminTickets() {
                   ))}</TableRow>
                 ))
               : tickets.length === 0
-              ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No tickets</TableCell></TableRow>
+               ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">{tAdmin('No tickets')}</TableCell></TableRow>
               : tickets.map((t) => (
                 <TableRow
                   key={t.id}
@@ -249,8 +251,8 @@ export default function AdminTickets() {
 
               {/* Reply box */}
               <div className="shrink-0 border-t pt-3 space-y-2">
-                <Textarea
-                  placeholder="Write a reply…"
+                 <Textarea
+                   placeholder={tAdmin('Write a reply…')}
                   rows={3}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
@@ -261,7 +263,7 @@ export default function AdminTickets() {
                 <div className="flex justify-end">
                   <Button onClick={handleReply} disabled={sending || !reply.trim()} className="gap-2">
                     <Send className="h-4 w-4" />
-                    {sending ? 'Sending…' : 'Send Reply'}
+                     {sending ? tAdmin('Sending…') : tAdmin('Send Reply')}
                   </Button>
                 </div>
               </div>

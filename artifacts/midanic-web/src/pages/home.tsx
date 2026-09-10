@@ -184,13 +184,13 @@ export default function Home() {
                   <div className="w-3 h-3 rounded-full bg-yellow-400/70" />
                   <div className="w-3 h-3 rounded-full bg-green-400/70" />
                   <div className="ml-3 flex-1 bg-white/5 rounded px-3 py-1 text-xs text-white/30">
-                    app.midanic.com/dashboard
+                    {t('home.dashboard_path')}
                   </div>
                 </div>
                 {/* Dashboard preview grid */}
                 <div className="p-5 space-y-4">
                   <div className="grid grid-cols-3 gap-3">
-                    {['التراخيص النشطة', 'المنتجات', 'العملاء'].map((label, i) => (
+                    {[t('home.preview_active_licenses'), t('home.preview_products'), t('home.preview_clients')].map((label, i) => (
                       <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/5">
                         <div className="text-xl font-bold text-white">{[24, 3, 18][i]}</div>
                         <div className="text-xs text-white/40 mt-0.5">{label}</div>
@@ -198,7 +198,7 @@ export default function Home() {
                     ))}
                   </div>
                   <div className="bg-white/5 rounded-lg p-4 border border-white/5">
-                    <div className="text-xs text-white/40 mb-3">نشاط التراخيص — آخر 6 أشهر</div>
+                    <div className="text-xs text-white/40 mb-3">{t('home.preview_license_activity')}</div>
                     <div className="flex items-end gap-1.5 h-16">
                       {[40, 65, 45, 80, 55, 90].map((h, i) => (
                         <div key={i} className="flex-1 rounded-sm bg-blue-500/60" style={{ height: `${h}%` }} />
@@ -206,11 +206,11 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {['ترخيص سنوي — شركة المستقبل', 'ترخيص شهري — مؤسسة النور'].map((row, i) => (
+                    {[t('home.preview_annual_license'), t('home.preview_monthly_license')].map((row, i) => (
                       <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-2 border border-white/5">
                         <span className="text-xs text-white/60">{row}</span>
                         <span className={`text-xs font-medium ${i === 0 ? 'text-green-400' : 'text-blue-400'}`}>
-                          {i === 0 ? 'نشط' : 'جديد'}
+                          {i === 0 ? t('home.preview_active') : t('home.preview_new')}
                         </span>
                       </div>
                     ))}

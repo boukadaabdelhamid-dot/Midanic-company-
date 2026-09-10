@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Search, ChevronLeft, ChevronRight, Store, Users, HardDrive, History } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminText } from '@/lib/admin-i18n';
 
 const ROLE_OPTIONS = ['customer', 'super_admin', 'admin', 'support', 'billing'];
 
@@ -57,6 +58,7 @@ interface EntitlementFieldProps {
 }
 
 function EntitlementField({ label, icon: Icon, value, unlimited, onUnlimitedChange, onValueChange }: EntitlementFieldProps) {
+  const { tAdmin } = useAdminText();
   return (
     <div className="space-y-2">
       <Label className="flex items-center gap-1.5 text-sm font-medium">
@@ -71,7 +73,7 @@ function EntitlementField({ label, icon: Icon, value, unlimited, onUnlimitedChan
             onCheckedChange={onUnlimitedChange}
           />
           <Label htmlFor={`unlimited-${label}`} className="text-xs text-muted-foreground cursor-pointer">
-            Unlimited
+             {tAdmin('Unlimited')}
           </Label>
         </div>
         {!unlimited && (
@@ -85,7 +87,7 @@ function EntitlementField({ label, icon: Icon, value, unlimited, onUnlimitedChan
           />
         )}
         {unlimited && (
-          <span className="text-sm text-muted-foreground italic">∞ no limit</span>
+           <span className="text-sm text-muted-foreground italic">{tAdmin('∞ no limit')}</span>
         )}
       </div>
     </div>
@@ -117,6 +119,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
   const [unlimitedStorage, setUnlimitedStorage] = useState(true);
 
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   useEffect(() => {
     setLoading(true);
@@ -131,7 +134,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
         setUnlimitedUsers(entitlements.maxUsers === null);
         setUnlimitedStorage(entitlements.storageGb === null);
       })
-      .catch((e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }))
+      .catch((e: Error) => toast({ title: tAdmin('Error'), description: e.message, variant: 'destructive' }))
       .finally(() => setLoading(false));
   }, [user.id, toast]);
 
@@ -147,9 +150,9 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
       // Refresh history
       const { history: newHistory } = await adminApi.getCustomerEntitlements(user.id);
       setHistory(newHistory);
-      toast({ title: 'Entitlements saved', description: `Limits updated for ${user.firstName} ${user.lastName}` });
+       toast({ title: tAdmin('Entitlements saved'), description: `${tAdmin('Edit Limits')}: ${user.firstName} ${user.lastName}` });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -161,9 +164,9 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
       {ent && (
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Stores', value: ent.maxStores, icon: Store, color: 'text-blue-500' },
-            { label: 'Users', value: ent.maxUsers, icon: Users, color: 'text-green-500' },
-            { label: 'Storage (GB)', value: ent.storageGb, icon: HardDrive, color: 'text-purple-500' },
+             { label: tAdmin('Stores'), value: ent.maxStores, icon: Store, color: 'text-blue-500' },
+             { label: tAdmin('Users'), value: ent.maxUsers, icon: Users, color: 'text-green-500' },
+             { label: tAdmin('Storage (GB)'), value: ent.storageGb, icon: HardDrive, color: 'text-purple-500' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="rounded-lg border bg-muted/30 p-3 text-center">
               <Icon className={`h-4 w-4 mx-auto mb-1 ${color}`} />
@@ -178,7 +181,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
 
       {/* Edit form */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold">Edit Limits</h3>
+         <h3 className="text-sm font-semibold">{tAdmin('Edit Limits')}</h3>
         {loading ? (
           <div className="space-y-3">
             {[0,1,2].map(i => <div key={i} className="h-10 animate-pulse rounded bg-muted" />)}
@@ -210,7 +213,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
               onValueChange={setStorageGb}
             />
             <Button onClick={handleSave} disabled={saving} className="w-full">
-              {saving ? 'Saving…' : 'Save Limits'}
+               {saving ? tAdmin('Saving…') : tAdmin('Save Limits')}
             </Button>
           </>
         )}
@@ -226,7 +229,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
               onClick={() => setShowHistory((v) => !v)}
             >
               <History className="h-3.5 w-3.5" />
-              Change History ({history.length})
+               {tAdmin('Change History')} ({history.length})
             </button>
             {showHistory && (
               <div className="mt-3 space-y-2">
@@ -254,7 +257,7 @@ function EntitlementsPanel({ user, onClose }: EntitlementsPanelProps) {
         </>
       )}
 
-      <Button variant="outline" className="w-full" onClick={onClose}>Close</Button>
+       <Button variant="outline" className="w-full" onClick={onClose}>{tAdmin('Close')}</Button>
     </div>
   );
 }
@@ -269,6 +272,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const { toast } = useToast();
+  const { tAdmin } = useAdminText();
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -277,7 +281,7 @@ export default function AdminUsers() {
       setUsers(res.users);
       setTotal(res.total);
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -296,9 +300,9 @@ export default function AdminUsers() {
     try {
       await adminApi.updateUser(id, { role });
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
-      toast({ title: 'Role updated' });
+       toast({ title: tAdmin('Role updated') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -307,9 +311,9 @@ export default function AdminUsers() {
     try {
       await adminApi.updateUser(id, { isActive });
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isActive } : u)));
-      toast({ title: isActive ? 'User activated' : 'User deactivated' });
+      toast({ title: isActive ? tAdmin('User activated') : tAdmin('User deactivated') });
     } catch (e: unknown) {
-      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
   };
 
@@ -319,7 +323,7 @@ export default function AdminUsers() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Users</h1>
+           <h1 className="text-2xl font-bold">{tAdmin('Users')}</h1>
           <p className="text-muted-foreground text-sm mt-1">{total} total users</p>
         </div>
       </div>
@@ -334,10 +338,10 @@ export default function AdminUsers() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        <Button type="submit" variant="secondary">Search</Button>
+         <Button type="submit" variant="secondary">{tAdmin('Search')}</Button>
         {search && (
           <Button type="button" variant="ghost" onClick={() => { setSearch(''); setSearchInput(''); setPage(1); }}>
-            Clear
+             {tAdmin('Clear')}
           </Button>
         )}
       </form>
@@ -346,12 +350,12 @@ export default function AdminUsers() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead>Joined</TableHead>
+               <TableHead>{tAdmin('Name')}</TableHead>
+               <TableHead>{tAdmin('Email')}</TableHead>
+               <TableHead>{tAdmin('Company')}</TableHead>
+               <TableHead>{tAdmin('Role')}</TableHead>
+               <TableHead>{tAdmin('Active')}</TableHead>
+               <TableHead>{tAdmin('Joined')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -367,7 +371,7 @@ export default function AdminUsers() {
               ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No users found
+                     {tAdmin('No users found')}
                   </TableCell>
                 </TableRow>
               )
