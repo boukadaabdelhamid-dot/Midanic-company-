@@ -14,4 +14,5 @@ ENV NODE_ENV=production
 COPY --from=build /repo /app
 WORKDIR /app/artifacts/api-server
 EXPOSE 3000
+# Rebuild marker: admin customer and ERP domain deletion.
 CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
