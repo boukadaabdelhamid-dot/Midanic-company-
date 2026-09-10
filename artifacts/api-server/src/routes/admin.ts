@@ -8,6 +8,8 @@ import {
   downloadFilesTable,
   licensesTable,
   subscriptionsTable,
+  invoicesTable,
+  companiesTable,
   blogPostsTable,
   newsItemsTable,
   contactMessagesTable,
@@ -582,6 +584,32 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   res.json(tenant);
 });
 
+router.delete("/admin/erp/tenants/:id/domain", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid ERP tenant id" });
+    return;
+  }
+
+  const [tenant] = await db
+    .update(erpTenantsTable)
+    .set({
+      subdomain: null,
+      hostname: null,
+      domainStatus: "inactive",
+      domainActivatedAt: null,
+    })
+    .where(eq(erpTenantsTable.id, id))
+    .returning();
+
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+
+  res.json(tenant);
+});
+
 // ── ADMIN STATS ────────────────────────────────────────────────────────────
 router.get("/admin/stats", async (_req, res): Promise<void> => {
   const now = new Date();
@@ -929,6 +957,42 @@ router.patch("/admin/customers/:id", async (req, res): Promise<void> => {
     }
     throw error;
   }
+});
+
+router.delete("/admin/customers/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+
+  const [customer] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, id), eq(usersTable.role, "customer")))
+    .limit(1);
+  if (!customer) {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    // Preserve historical records where the schema allows it, while removing
+    // account-owned records that require the user row to exist.
+    await tx.update(companiesTable)
+      .set({ ownerId: null })
+      .where(eq(companiesTable.ownerId, id));
+    await tx.update(licensesTable)
+      .set({ userId: null })
+      .where(eq(licensesTable.userId, id));
+    await tx.delete(invoicesTable).where(eq(invoicesTable.userId, id));
+    await tx.delete(subscriptionsTable).where(eq(subscriptionsTable.userId, id));
+    await tx.delete(supportTicketsTable).where(eq(supportTicketsTable.userId, id));
+    await tx.delete(usersTable)
+      .where(and(eq(usersTable.id, id), eq(usersTable.role, "customer")));
+  });
+
+  res.status(204).send();
 });
 
 router.patch("/admin/users/:id", async (req, res): Promise<void> => {

@@ -27,8 +27,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw } from "lucide-react";
+import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 
@@ -58,6 +68,8 @@ export default function AdminErp() {
   const [domainSubdomain, setDomainSubdomain] = useState("");
   const [domainStatus, setDomainStatus] = useState<"inactive" | "active">("inactive");
   const [savingDomain, setSavingDomain] = useState(false);
+  const [deletingDomain, setDeletingDomain] = useState(false);
+  const [deleteDomainOpen, setDeleteDomainOpen] = useState(false);
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const { toast } = useToast();
@@ -172,6 +184,24 @@ export default function AdminErp() {
       toast({ title: "Domain update failed", description: (error as Error).message, variant: "destructive" });
     } finally {
       setSavingDomain(false);
+    }
+  }
+
+  async function deleteDomain() {
+    if (!domainTenant) return;
+    setDeletingDomain(true);
+    try {
+      const updated = await adminApi.deleteErpTenantDomain(domainTenant.id);
+      setTenants((current) =>
+        current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+      );
+      setDeleteDomainOpen(false);
+      setDomainTenant(null);
+      toast({ title: "ERP domain deleted" });
+    } catch (error) {
+      toast({ title: "Domain deletion failed", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setDeletingDomain(false);
     }
   }
 
@@ -368,6 +398,14 @@ export default function AdminErp() {
             )}
           </div>
           <DialogFooter>
+            <Button
+              variant="destructive"
+              className="mr-auto"
+              onClick={() => setDeleteDomainOpen(true)}
+              disabled={deletingDomain}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />Delete domain
+            </Button>
             <Button variant="outline" onClick={() => setDomainTenant(null)}>Cancel</Button>
             <Button onClick={() => void saveDomain()} disabled={savingDomain}>
               {savingDomain ? "Saving..." : "Save domain"}
@@ -375,6 +413,30 @@ export default function AdminErp() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDomainOpen} onOpenChange={setDeleteDomainOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this ERP domain?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDomain}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteDomain();
+              }}
+              disabled={deletingDomain}
+            >
+              {deletingDomain ? "Deleting..." : "Delete domain"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

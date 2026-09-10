@@ -82,6 +82,8 @@ export const adminApi = {
   getCustomer: (id: number) => request<AdminCustomer>(`/admin/customers/${id}`),
   updateCustomer: (id: number, body: CustomerUpdateInput) =>
     request<AdminCustomer>(`/admin/customers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCustomer: (id: number) =>
+    request<void>(`/admin/customers/${id}`, { method: "DELETE" }),
   exportCustomers: async () => {
     const res = await fetch(`${BASE}/admin/customers/export`, {
       headers: { Authorization: `Bearer ${getToken()}` },
@@ -164,6 +166,8 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  deleteErpTenantDomain: (id: number) =>
+    request<ErpTenant>(`/admin/erp/tenants/${id}/domain`, { method: "DELETE" }),
 
   // Subscriptions
   listSubscriptions: (params?: { page?: number; limit?: number }) =>

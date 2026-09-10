@@ -10,7 +10,17 @@ import {
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
-import { Search, Download, Mail, MessageCircle, ChevronLeft, ChevronRight, UserRound } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Search, Download, Mail, MessageCircle, ChevronLeft, ChevronRight, Trash2, UserRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const dateTime = (value: string | null) => value
@@ -62,6 +72,8 @@ export default function AdminCustomers() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erpLink, setErpLink] = useState<{ id: number; createdAt: string; launchUrl?: string } | null>(null);
+  const [deleteCustomerOpen, setDeleteCustomerOpen] = useState(false);
+  const [deletingCustomer, setDeletingCustomer] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -121,6 +133,22 @@ export default function AdminCustomers() {
       toast({ title: 'Could not delete ERP link', description: (error as Error).message, variant: 'destructive' });
     }
   };
+  const deleteCustomer = async () => {
+    if (!selected) return;
+    setDeletingCustomer(true);
+    try {
+      await adminApi.deleteCustomer(selected.id);
+      setCustomers((current) => current.filter((item) => item.id !== selected.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setDeleteCustomerOpen(false);
+      setSelected(null);
+      toast({ title: 'Customer deleted' });
+    } catch (error) {
+      toast({ title: 'Could not delete customer', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setDeletingCustomer(false);
+    }
+  };
   const totalPages = Math.max(1, Math.ceil(total / 20));
 
   return (
@@ -160,13 +188,36 @@ export default function AdminCustomers() {
           {selected && <><SheetHeader><SheetTitle className="flex items-center gap-2"><UserRound className="h-5 w-5" />{selected.firstName} {selected.lastName}</SheetTitle><SheetDescription>Customer account details and contact actions</SheetDescription></SheetHeader>
             <div className="mt-5 space-y-5">
               <div className="flex flex-wrap gap-2"><Badge variant={selected.isActive ? 'default' : 'secondary'}>{selected.isActive ? 'Active' : 'Suspended'}</Badge><span className="text-xs text-muted-foreground self-center">Registered {dateTime(selected.createdAt)} · Last login {dateTime(selected.lastLoginAt)}</span></div>
-              <div className="flex flex-wrap gap-2"><Button variant="outline" asChild disabled={!selected.phone}><a href={selected.phone ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : undefined} target="_blank" rel="noreferrer"><MessageCircle className="mr-2 h-4 w-4" />WhatsApp</a></Button><Button variant="outline" asChild><a href={`mailto:${selected.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button><Button variant="secondary" onClick={() => toggleStatus(selected)}>{selected.isActive ? 'Suspend' : 'Activate'}</Button><Button onClick={() => createErpLink(selected)} disabled={!selected.isActive}>{erpLink ? 'Replace ERP link' : 'Grant ERP access'}</Button></div>
+               <div className="flex flex-wrap gap-2"><Button variant="outline" asChild disabled={!selected.phone}><a href={selected.phone ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : undefined} target="_blank" rel="noreferrer"><MessageCircle className="mr-2 h-4 w-4" />WhatsApp</a></Button><Button variant="outline" asChild><a href={`mailto:${selected.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button><Button variant="secondary" onClick={() => toggleStatus(selected)}>{selected.isActive ? 'Suspend' : 'Activate'}</Button><Button onClick={() => createErpLink(selected)} disabled={!selected.isActive}>{erpLink ? 'Replace ERP link' : 'Grant ERP access'}</Button><Button variant="destructive" onClick={() => setDeleteCustomerOpen(true)}><Trash2 className="mr-2 h-4 w-4" />Delete customer</Button></div>
               {erpLink && <div className="rounded-md border bg-muted/40 p-3 space-y-2"><p className="text-sm font-medium">Permanent ERP login link</p><p className="text-xs text-muted-foreground">This link opens the ERP login page and stays valid until you delete it. The customer signs in with the same email and password.</p>{erpLink.launchUrl ? <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1" readOnly value={erpLink.launchUrl} onFocus={(event) => event.currentTarget.select()} /><Button variant="outline" onClick={() => navigator.clipboard.writeText(erpLink.launchUrl!)}>Copy</Button><Button asChild><a href={erpLink.launchUrl} target="_blank" rel="noreferrer">Open</a></Button><Button variant="destructive" onClick={() => deleteErpLink(selected)}>Delete link</Button></div> : <div className="flex flex-wrap gap-2"><p className="text-xs text-muted-foreground self-center">A permanent link is active. For security, its text is shown only when it is created.</p><Button variant="destructive" onClick={() => deleteErpLink(selected)}>Delete link</Button></div>}</div>}
               <CustomerEditor customer={selected} onSaved={(updated) => { setSelected(updated); setCustomers((current) => current.map((item) => item.id === updated.id ? updated : item)); }} />
             </div>
           </>}
         </SheetContent>
       </Sheet>
+      <AlertDialog open={deleteCustomerOpen} onOpenChange={setDeleteCustomerOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this customer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the customer account, ERP access links, and its platform record. Any ERP tenant database is retained for safety but will no longer be linked to this account. This action cannot be undone from the dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingCustomer}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteCustomer();
+              }}
+              disabled={deletingCustomer}
+            >
+              {deletingCustomer ? 'Deleting…' : 'Delete customer'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
