@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, usersTable, erpTenantsTable } from "@workspace/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { db, usersTable, erpTenantsTable, passwordResetTokensTable, refreshTokensTable } from "@workspace/db";
+import { and, eq, isNotNull, lt, desc } from "drizzle-orm";
+import { createHash, randomBytes } from "node:crypto";
 import {
   RegisterBody,
   LoginBody,
@@ -22,6 +23,8 @@ import {
   generateErpSsoToken,
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/auth";
+import { sendPasswordResetEmail } from "../lib/password-reset-email";
+import { isPasswordResetTokenUsable } from "../lib/password-reset-token";
 
 const router: IRouter = Router();
 
@@ -30,6 +33,35 @@ const authLimiter = rateLimit({
   max: 20,
   message: { error: "Too many requests, please try again later" },
 });
+
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many password reset requests, please try again later" },
+});
+
+function publicWebUrl(): string {
+  const configured = [
+    process.env["MIDANIC_WEB_URL"],
+    process.env["PUBLIC_WEB_URL"],
+    process.env["FRONTEND_URL"],
+    process.env["APP_URL"],
+  ].find((value) => value?.trim());
+  if (configured) {
+    const normalized = configured.trim().replace(/\/+$/, "");
+    try {
+      const parsed = new URL(normalized);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Unsupported URL protocol");
+      }
+      return normalized;
+    } catch {
+      throw new Error("Password reset web URL is invalid");
+    }
+  }
+  if (process.env["NODE_ENV"] !== "production") return "http://localhost:5173";
+  throw new Error("Password reset web URL is not configured. Set MIDANIC_WEB_URL.");
+}
 
 router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
@@ -105,6 +137,119 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
       preferredLang: user.language,
     },
   });
+});
+
+router.post("/auth/forgot-password", resetLimiter, async (req, res): Promise<void> => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!email) {
+    res.status(400).json({ error: "A valid email is required" });
+    return;
+  }
+
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      email: usersTable.email,
+    }).from(usersTable).where(eq(usersTable.email, email)).limit(1);
+
+    // Always return the same response for known and unknown addresses.
+    if (user) {
+      await db.delete(passwordResetTokensTable)
+        .where(eq(passwordResetTokensTable.userId, user.id));
+
+      const rawToken = randomBytes(32).toString("hex");
+      await db.insert(passwordResetTokensTable).values({
+        userId: user.id,
+        token: createHash("sha256").update(rawToken).digest("hex"),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+
+      const resetUrl = `${publicWebUrl()}/reset-password/${rawToken}`;
+      await sendPasswordResetEmail({ to: user.email, resetUrl });
+      if (process.env["NODE_ENV"] !== "production") {
+        req.log.info({ resetUrl }, "Password reset link generated");
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    req.log.error({ err: error }, "Password reset request failed");
+    // Avoid turning email-provider failures into an account enumeration oracle.
+    res.json({ success: true });
+  }
+});
+
+router.get("/auth/reset-password/:token", async (req, res): Promise<void> => {
+  const token = typeof req.params.token === "string" ? req.params.token : "";
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    res.status(400).json({ valid: false, error: "Invalid or expired reset link" });
+    return;
+  }
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const [record] = await db.select({
+    id: passwordResetTokensTable.id,
+    expiresAt: passwordResetTokensTable.expiresAt,
+    used: passwordResetTokensTable.used,
+  }).from(passwordResetTokensTable)
+    .where(eq(passwordResetTokensTable.token, tokenHash))
+    .orderBy(desc(passwordResetTokensTable.createdAt))
+    .limit(1);
+
+  if (!isPasswordResetTokenUsable(record)) {
+    res.status(400).json({ valid: false, error: "Invalid or expired reset link" });
+    return;
+  }
+  res.json({ valid: true });
+});
+
+router.post("/auth/reset-password/:token", async (req, res): Promise<void> => {
+  const token = typeof req.params.token === "string" ? req.params.token : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    res.status(400).json({ error: "Invalid or expired reset link" });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  try {
+    await db.transaction(async (tx) => {
+      const [record] = await tx.select()
+        .from(passwordResetTokensTable)
+        .where(and(
+          eq(passwordResetTokensTable.token, tokenHash),
+          eq(passwordResetTokensTable.used, false),
+        ))
+        .limit(1)
+        .for("update");
+
+      if (!isPasswordResetTokenUsable(record)) {
+        throw new Error("Invalid or expired reset link");
+      }
+
+      const passwordHash = await hashPassword(password);
+      await tx.update(usersTable)
+        .set({ passwordHash })
+        .where(eq(usersTable.id, record.userId));
+      await tx.update(passwordResetTokensTable)
+        .set({ used: true })
+        .where(eq(passwordResetTokensTable.id, record.id));
+      await tx.delete(refreshTokensTable)
+        .where(eq(refreshTokensTable.userId, record.userId));
+    });
+    res.json({ success: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid or expired reset link") {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    req.log.error({ err: error }, "Password reset completion failed");
+    res.status(500).json({ error: "Unable to reset password" });
+  }
 });
 
 // ERP uses the same Midanic access token, but its client expects this
