@@ -146,6 +146,12 @@ export const adminApi = {
     request<{ tenants: ErpTenant[] }>(
       `/admin/erp/tenants${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     ),
+  getErpTenantStoreCount: (id: number) =>
+    request<{
+      tenantId: number;
+      currentStores: number | null;
+      storeCountStatus: "ready" | "not_ready" | "unavailable";
+    }>(`/admin/erp/tenants/${id}/store-count`),
   createErpTenant: (body: { ownerUserId: number; companyName: string; subdomain?: string }) =>
     request<ErpTenant>("/admin/erp/tenants", {
       method: "POST",
@@ -158,8 +164,13 @@ export const adminApi = {
       companyName?: string;
       notes?: string | null;
       trialEndsAt?: string | null;
+      featureFlags?: Record<string, boolean>;
+      maxStores?: number | null;
       subdomain?: string | null;
       domainStatus?: "inactive" | "active";
+      webStoreStatus?: "inactive" | "active";
+      webStoreSubdomain?: string | null;
+      webStoreDomainStatus?: "inactive" | "active";
     },
   ) =>
     request<ErpTenant>(`/admin/erp/tenants/${id}`, {
@@ -168,6 +179,8 @@ export const adminApi = {
     }),
   deleteErpTenantDomain: (id: number) =>
     request<ErpTenant>(`/admin/erp/tenants/${id}/domain`, { method: "DELETE" }),
+  deleteWebStoreDomain: (id: number) =>
+    request<ErpTenant>(`/admin/erp/tenants/${id}/web-store-domain`, { method: "DELETE" }),
 
   // Subscriptions
   listSubscriptions: (params?: { page?: number; limit?: number }) =>
@@ -699,6 +712,16 @@ export interface ErpTenant {
   approvedAt: string | null;
   suspendedAt: string | null;
   notes: string | null;
+  databaseStatus: "unprovisioned" | "provisioning" | "ready" | "failed";
+  webStoreStatus: "inactive" | "active";
+  webStoreSubdomain: string | null;
+  webStoreHostname: string | null;
+  webStoreDomainStatus: "inactive" | "active";
+  webStoreDomainActivatedAt: string | null;
+  featureFlags: Record<string, boolean>;
+  maxStores: number | null;
+  currentStores: number | null;
+  storeCountStatus: "ready" | "not_ready" | "unavailable";
   createdAt: string;
   ownerEmail: string | null;
   ownerFirstName: string | null;

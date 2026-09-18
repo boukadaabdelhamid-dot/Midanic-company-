@@ -23,6 +23,9 @@ import {
   adminSettingsTable,
   erpTenantsTable,
   erpCustomerLinksTable,
+  erpFeatureKeys,
+  defaultErpFeatureFlags,
+  type ErpFeatureFlags,
 } from "@workspace/db";
 import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -32,6 +35,10 @@ import {
   buildErpTenantLaunchUrl,
   parseErpSubdomain,
 } from "../lib/erp-domain";
+import {
+  buildWebStoreHostname,
+  parseWebStoreSubdomain,
+} from "../lib/web-store-domain";
 import { isDatabaseUniqueViolation } from "../lib/db-errors";
 import { getTenantDatabaseName } from "../lib/erp-tenant-database";
 import {
@@ -40,6 +47,47 @@ import {
 } from "../lib/erp-provisioning";
 
 const router: IRouter = Router();
+
+type TenantStoreCountStatus = "ready" | "not_ready" | "unavailable";
+
+type TenantStoreSummary = {
+  currentStores: number | null;
+  storeCountStatus: TenantStoreCountStatus;
+};
+
+async function fetchTenantStoreSummary(tenantId: number): Promise<TenantStoreSummary> {
+  const erpUrl = process.env["ERP_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!erpUrl || !secret) {
+    return { currentStores: null, storeCountStatus: "unavailable" };
+  }
+  try {
+    const response = await fetch(`${erpUrl}/api/internal/erp/store-summary/${tenantId}`, {
+      headers: { "X-Platform-Service-Secret": secret },
+    });
+    if (response.status === 409) {
+      return { currentStores: null, storeCountStatus: "not_ready" };
+    }
+    if (!response.ok) {
+      return { currentStores: null, storeCountStatus: "unavailable" };
+    }
+    const payload = await response.json() as {
+      tenantId?: unknown;
+      currentStores?: unknown;
+    };
+    if (payload.tenantId !== tenantId || !Number.isInteger(payload.currentStores)) {
+      return { currentStores: null, storeCountStatus: "unavailable" };
+    }
+    return {
+      currentStores: payload.currentStores as number,
+      storeCountStatus: "ready",
+    };
+  } catch {
+    return { currentStores: null, storeCountStatus: "unavailable" };
+  }
+}
 
 function hashErpCustomerLink(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -238,7 +286,7 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
     ? eq(erpTenantsTable.status, status)
     : undefined;
 
-  const tenants = await db
+  const tenantRows = await db
     .select({
       id: erpTenantsTable.id,
       ownerUserId: erpTenantsTable.ownerUserId,
@@ -257,17 +305,50 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
        databaseStatus: erpTenantsTable.databaseStatus,
        databaseProvisionedAt: erpTenantsTable.databaseProvisionedAt,
        databaseLastError: erpTenantsTable.databaseLastError,
+      featureFlags: erpTenantsTable.featureFlags,
+      webStoreStatus: erpTenantsTable.webStoreStatus,
+      webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
+      webStoreHostname: erpTenantsTable.webStoreHostname,
+      webStoreDomainStatus: erpTenantsTable.webStoreDomainStatus,
+      webStoreDomainActivatedAt: erpTenantsTable.webStoreDomainActivatedAt,
       createdAt: erpTenantsTable.createdAt,
       ownerEmail: usersTable.email,
       ownerFirstName: usersTable.firstName,
       ownerLastName: usersTable.lastName,
+      maxStores: customerEntitlementsTable.maxStores,
     })
     .from(erpTenantsTable)
     .leftJoin(usersTable, eq(erpTenantsTable.ownerUserId, usersTable.id))
+    .leftJoin(customerEntitlementsTable, eq(erpTenantsTable.ownerUserId, customerEntitlementsTable.userId))
     .where(conditions)
     .orderBy(desc(erpTenantsTable.createdAt));
 
+  const tenants = await Promise.all(
+    tenantRows.map(async (tenant) => ({
+      ...tenant,
+      ...(await fetchTenantStoreSummary(tenant.id)),
+    })),
+  );
+
   res.json({ tenants });
+});
+
+router.get("/admin/erp/tenants/:id/store-count", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+  const [tenant] = await db
+    .select({ id: erpTenantsTable.id })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, id))
+    .limit(1);
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+  res.json({ tenantId: id, ...(await fetchTenantStoreSummary(id)) });
 });
 
 router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
@@ -309,6 +390,10 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
         domainStatus: "inactive",
       })
       .returning();
+    await db
+      .insert(customerEntitlementsTable)
+      .values({ userId: ownerUserId, maxStores: 1 })
+      .onConflictDoNothing();
 
     let provisionedTenant = tenant;
     [provisionedTenant] = await db
@@ -345,7 +430,15 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
       req.log.error({ err: error, tenantId: tenant.id }, "ERP tenant database provisioning failed");
     }
 
-    res.status(201).json(provisionedTenant);
+    const [entitlement] = await db
+      .select({ maxStores: customerEntitlementsTable.maxStores })
+      .from(customerEntitlementsTable)
+      .where(eq(customerEntitlementsTable.userId, ownerUserId))
+      .limit(1);
+    res.status(201).json({
+      ...provisionedTenant,
+      maxStores: entitlement?.maxStores ?? null,
+    });
   } catch (error) {
     if (isDatabaseUniqueViolation(error)) {
       res.status(409).json({ error: "This ERP subdomain is already assigned" });
@@ -451,8 +544,29 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   const status = typeof body.status === "string" ? body.status : undefined;
   const domainStatus = typeof body.domainStatus === "string" ? body.domainStatus : undefined;
+  const webStoreStatus = typeof body.webStoreStatus === "string" ? body.webStoreStatus : undefined;
+  const webStoreDomainStatus = typeof body.webStoreDomainStatus === "string"
+    ? body.webStoreDomainStatus
+    : undefined;
   const allowedStatuses = ["pending", "active", "suspended", "expired", "converted"];
   const allowedDomainStatuses = ["inactive", "active"];
+  const allowedWebStoreStatuses = ["inactive", "active"];
+  const hasMaxStores = Object.prototype.hasOwnProperty.call(body, "maxStores");
+  let requestedMaxStores: number | null | undefined;
+  if (hasMaxStores) {
+    if (body.maxStores === null || body.maxStores === "") {
+      requestedMaxStores = null;
+    } else if (
+      typeof body.maxStores !== "number" ||
+      !Number.isInteger(body.maxStores) ||
+      body.maxStores < 1
+    ) {
+      res.status(400).json({ error: "maxStores must be a positive integer or null" });
+      return;
+    } else {
+      requestedMaxStores = body.maxStores;
+    }
+  }
 
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "Invalid tenant id" });
@@ -466,11 +580,23 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid ERP domain status" });
     return;
   }
+  if (webStoreStatus && !allowedWebStoreStatuses.includes(webStoreStatus)) {
+    res.status(400).json({ error: "Invalid Web Store status" });
+    return;
+  }
+  if (webStoreDomainStatus && !allowedDomainStatuses.includes(webStoreDomainStatus)) {
+    res.status(400).json({ error: "Invalid Web Store domain status" });
+    return;
+  }
   const [currentTenant] = await db
     .select({
       id: erpTenantsTable.id,
+      ownerUserId: erpTenantsTable.ownerUserId,
       subdomain: erpTenantsTable.subdomain,
+      status: erpTenantsTable.status,
       databaseStatus: erpTenantsTable.databaseStatus,
+      webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
+      featureFlags: erpTenantsTable.featureFlags,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.id, id))
@@ -494,9 +620,19 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     });
     return;
   }
+  if (webStoreStatus === "active" &&
+      (!["active", "converted"].includes(status ?? currentTenant.status) ||
+       currentTenant.databaseStatus !== "ready")) {
+    res.status(409).json({
+      error: "Activate the ERP account and provision its database before launching Web Store",
+      databaseStatus: currentTenant.databaseStatus,
+    });
+    return;
+  }
 
   const updates: Partial<typeof erpTenantsTable.$inferInsert> = {};
   let subdomainChanged = false;
+  let webStoreSubdomainChanged = false;
   if (status) {
     updates.status = status;
     if (status === "active" || status === "converted") {
@@ -558,30 +694,142 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     updates.trialEndsAt = trialEndsAt;
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (webStoreStatus) {
+    updates.webStoreStatus = webStoreStatus;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "webStoreSubdomain")) {
+    try {
+      const subdomain = parseWebStoreSubdomain(body.webStoreSubdomain);
+      if (webStoreDomainStatus === "active" && !subdomain) {
+        res.status(400).json({ error: "Assign a Web Store subdomain before activating it" });
+        return;
+      }
+      webStoreSubdomainChanged = subdomain !== currentTenant.webStoreSubdomain;
+      updates.webStoreSubdomain = subdomain;
+      updates.webStoreHostname = subdomain ? buildWebStoreHostname(subdomain) : null;
+      if (!subdomain || webStoreSubdomainChanged) {
+        updates.webStoreDomainStatus = "inactive";
+        updates.webStoreDomainActivatedAt = null;
+      }
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+  }
+  if (webStoreDomainStatus && !webStoreSubdomainChanged) {
+    if (webStoreDomainStatus === "active") {
+      const nextSubdomain =
+        typeof updates.webStoreSubdomain === "string" ? updates.webStoreSubdomain : undefined;
+      if (!nextSubdomain && !currentTenant.webStoreSubdomain) {
+        res.status(400).json({ error: "Assign a Web Store subdomain before activating it" });
+        return;
+      }
+      if (currentTenant.databaseStatus !== "ready") {
+        res.status(409).json({ error: "Provision the tenant database before activating the Web Store domain" });
+        return;
+      }
+      updates.webStoreDomainActivatedAt = new Date();
+    } else {
+      updates.webStoreDomainActivatedAt = null;
+    }
+    updates.webStoreDomainStatus = webStoreDomainStatus;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "featureFlags")) {
+    const rawFlags = body.featureFlags;
+    if (!rawFlags || typeof rawFlags !== "object" || Array.isArray(rawFlags)) {
+      res.status(400).json({ error: "featureFlags must be an object" });
+      return;
+    }
+    const nextFlags: ErpFeatureFlags = { ...defaultErpFeatureFlags, ...currentTenant.featureFlags };
+    for (const key of erpFeatureKeys) {
+      if (Object.prototype.hasOwnProperty.call(rawFlags, key)) {
+        if (typeof (rawFlags as Record<string, unknown>)[key] !== "boolean") {
+          res.status(400).json({ error: `featureFlags.${key} must be boolean` });
+          return;
+        }
+        nextFlags[key] = (rawFlags as Record<string, boolean>)[key];
+      }
+    }
+    updates.featureFlags = nextFlags;
+  }
+
+  if (Object.keys(updates).length === 0 && !hasMaxStores) {
     res.status(400).json({ error: "No valid updates were provided" });
     return;
   }
 
   let tenant: typeof erpTenantsTable.$inferSelect | undefined;
-  try {
-    [tenant] = await db
-      .update(erpTenantsTable)
-      .set(updates)
-      .where(eq(erpTenantsTable.id, id))
-      .returning();
-  } catch (error) {
-    if (isDatabaseUniqueViolation(error)) {
-      res.status(409).json({ error: "This ERP subdomain is already assigned" });
-      return;
+  if (Object.keys(updates).length > 0) {
+    try {
+      [tenant] = await db
+        .update(erpTenantsTable)
+        .set(updates)
+        .where(eq(erpTenantsTable.id, id))
+        .returning();
+    } catch (error) {
+      if (isDatabaseUniqueViolation(error)) {
+        res.status(409).json({ error: "This ERP subdomain is already assigned" });
+        return;
+      }
+      throw error;
     }
-    throw error;
+  } else {
+    [tenant] = await db
+      .select()
+      .from(erpTenantsTable)
+      .where(eq(erpTenantsTable.id, id))
+      .limit(1);
   }
   if (!tenant) {
     res.status(404).json({ error: "ERP tenant not found" });
     return;
   }
-  res.json(tenant);
+  let maxStores: number | null = null;
+  if (hasMaxStores) {
+    const [currentEntitlement] = await db
+      .select()
+      .from(customerEntitlementsTable)
+      .where(eq(customerEntitlementsTable.userId, currentTenant.ownerUserId));
+    const oldValues = currentEntitlement
+      ? {
+          maxStores: currentEntitlement.maxStores,
+          maxUsers: currentEntitlement.maxUsers,
+          storageGb: currentEntitlement.storageGb,
+        }
+      : null;
+    const newValues = {
+      maxStores: requestedMaxStores ?? null,
+      maxUsers: currentEntitlement?.maxUsers ?? null,
+      storageGb: currentEntitlement?.storageGb ?? null,
+    };
+    const [updatedEntitlement] = await db
+      .insert(customerEntitlementsTable)
+      .values({
+        userId: currentTenant.ownerUserId,
+        ...newValues,
+        updatedBy: req.user!.userId,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: customerEntitlementsTable.userId,
+        set: { ...newValues, updatedBy: req.user!.userId, updatedAt: new Date() },
+      })
+      .returning();
+    await db.insert(entitlementHistoryTable).values({
+      userId: currentTenant.ownerUserId,
+      changedBy: req.user!.userId,
+      oldValues,
+      newValues,
+    });
+    maxStores = updatedEntitlement?.maxStores ?? null;
+  } else {
+    const [entitlement] = await db
+      .select({ maxStores: customerEntitlementsTable.maxStores })
+      .from(customerEntitlementsTable)
+      .where(eq(customerEntitlementsTable.userId, currentTenant.ownerUserId));
+    maxStores = entitlement ? entitlement.maxStores : 1;
+  }
+  res.json({ ...tenant, maxStores });
 });
 
 router.delete("/admin/erp/tenants/:id/domain", async (req, res): Promise<void> => {
@@ -598,6 +846,33 @@ router.delete("/admin/erp/tenants/:id/domain", async (req, res): Promise<void> =
       hostname: null,
       domainStatus: "inactive",
       domainActivatedAt: null,
+    })
+    .where(eq(erpTenantsTable.id, id))
+    .returning();
+
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+
+  res.json(tenant);
+});
+
+router.delete("/admin/erp/tenants/:id/web-store-domain", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid Web Store tenant id" });
+    return;
+  }
+
+  const [tenant] = await db
+    .update(erpTenantsTable)
+    .set({
+      webStoreSubdomain: null,
+      webStoreHostname: null,
+      webStoreDomainStatus: "inactive",
+      webStoreDomainActivatedAt: null,
+      webStoreStatus: "inactive",
     })
     .where(eq(erpTenantsTable.id, id))
     .returning();

@@ -127,12 +127,25 @@ router.post("/auth/sso/exchange", async (req, res) => {
       .limit(1);
     let activeStore = store;
     if (!activeStore) {
-      [activeStore] = await db.insert(schema.storesTable).values({
-        platformTenantId: sso.tenantId,
-        nameAr: "متجر الشركة",
-        nameEn: "Company Store",
-        slug: `tenant-${sso.tenantId}`,
-      }).returning();
+      const [principalStore] = await db.select().from(schema.storesTable)
+        .where(and(
+          eq(schema.storesTable.slug, "principal"),
+          sql`${schema.storesTable.platformTenantId} IS NULL`,
+        ))
+        .limit(1);
+      if (principalStore) {
+        [activeStore] = await db.update(schema.storesTable)
+          .set({ platformTenantId: sso.tenantId })
+          .where(eq(schema.storesTable.id, principalStore.id))
+          .returning();
+      } else {
+        [activeStore] = await db.insert(schema.storesTable).values({
+          platformTenantId: sso.tenantId,
+          nameAr: "متجر الشركة",
+          nameEn: "Company Store",
+          slug: `tenant-${sso.tenantId}`,
+        }).returning();
+      }
     }
     await db.insert(schema.userStoresTable)
       .values({ userId: user.id, storeId: activeStore.id })
@@ -275,6 +288,7 @@ router.get("/auth/me", authenticate, async (req: AuthRequest, res) => {
       city: user.city ?? null,
       stores,
       currentStoreId: validCurrent,
+      features: req.tenantFeatures ?? {},
     });
   } catch (err) {
     req.log.error(err);

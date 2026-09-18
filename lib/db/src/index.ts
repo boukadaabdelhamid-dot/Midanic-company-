@@ -70,6 +70,23 @@ async function ensureErpCustomerLinksSchema(): Promise<void> {
   `);
 }
 
+async function ensurePasswordResetTokensSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "password_reset_tokens" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "token" text NOT NULL UNIQUE,
+      "expires_at" timestamp with time zone NOT NULL,
+      "used" boolean DEFAULT false NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "password_reset_tokens_user_id_idx"
+      ON "password_reset_tokens" ("user_id")
+  `);
+}
+
 async function ensureAdminSettingsSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "admin_settings" (
@@ -90,7 +107,8 @@ async function ensureAdminSettingsSchema(): Promise<void> {
       "theme" text DEFAULT 'dark' NOT NULL,
       "sidebar_style" text DEFAULT 'default' NOT NULL,
       "background_image_url" text,
-      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "feature_flags" jsonb DEFAULT '{"dashboard":true,"orders":true,"products":true,"inventory":true,"purchases":true,"customers":true,"suppliers":true,"hr":true,"accounting":true,"reports":true,"transfers":true,"caisse":true,"realtime":true,"alerts":true,"settings":true,"web_store":true}'::jsonb NOT NULL
     )
   `);
   await pool.query(`
@@ -164,7 +182,18 @@ async function ensureErpManagementSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "database_name" text,
       ADD COLUMN IF NOT EXISTS "database_status" text DEFAULT 'unprovisioned' NOT NULL,
       ADD COLUMN IF NOT EXISTS "database_provisioned_at" timestamp with time zone,
-      ADD COLUMN IF NOT EXISTS "database_last_error" text
+      ADD COLUMN IF NOT EXISTS "database_last_error" text,
+      ADD COLUMN IF NOT EXISTS "web_store_status" text DEFAULT 'inactive' NOT NULL,
+      ADD COLUMN IF NOT EXISTS "web_store_subdomain" text,
+      ADD COLUMN IF NOT EXISTS "web_store_hostname" text,
+      ADD COLUMN IF NOT EXISTS "web_store_domain_status" text DEFAULT 'inactive' NOT NULL,
+       ADD COLUMN IF NOT EXISTS "web_store_domain_activated_at" timestamp with time zone,
+       ADD COLUMN IF NOT EXISTS "feature_flags" jsonb DEFAULT '{"dashboard":true,"orders":true,"products":true,"inventory":true,"purchases":true,"customers":true,"suppliers":true,"hr":true,"accounting":true,"reports":true,"transfers":true,"caisse":true,"realtime":true,"alerts":true,"settings":true,"web_store":true}'::jsonb NOT NULL
+  `);
+  await pool.query(`
+    UPDATE "erp_tenants"
+    SET "feature_flags" = '{"dashboard":true,"orders":true,"products":true,"inventory":true,"purchases":true,"customers":true,"suppliers":true,"hr":true,"accounting":true,"reports":true,"transfers":true,"caisse":true,"realtime":true,"alerts":true,"settings":true,"web_store":true}'::jsonb
+    WHERE "feature_flags" IS NULL
   `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS "erp_tenants_owner_user_id_idx"
@@ -181,6 +210,22 @@ async function ensureErpManagementSchema(): Promise<void> {
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_hostname_uq"
     ON "erp_tenants" ("hostname") WHERE "hostname" IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_web_store_subdomain_uq"
+    ON "erp_tenants" ("web_store_subdomain") WHERE "web_store_subdomain" IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_web_store_hostname_uq"
+    ON "erp_tenants" ("web_store_hostname") WHERE "web_store_hostname" IS NOT NULL
+  `);
+  // ERP companies default to one store. Keep an explicitly configured
+  // entitlement (including NULL = unlimited) untouched.
+  await pool.query(`
+    INSERT INTO "customer_entitlements" ("user_id", "max_stores")
+    SELECT DISTINCT "owner_user_id", 1
+    FROM "erp_tenants"
+    ON CONFLICT ("user_id") DO NOTHING
   `);
 }
 
@@ -557,6 +602,7 @@ export async function runMigrations(): Promise<void> {
   await ensureUploadedAssetsSchema();
   await ensureCustomerProfileSchema();
   await ensureErpCustomerLinksSchema();
+  await ensurePasswordResetTokensSchema();
   await ensureEntitlementsSchema();
   await ensureAdminSettingsSchema();
   await ensureErpManagementSchema();

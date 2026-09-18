@@ -1,6 +1,7 @@
 import { db, schema } from "./lib/db";
 import bcrypt from "bcryptjs";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and, isNull } from "drizzle-orm";
+import { getTenantDatabaseContext } from "./lib/db";
 
 /**
  * bootstrap() — Production-safe initialisation.
@@ -17,8 +18,23 @@ import { eq, asc } from "drizzle-orm";
  * Safe to call multiple times (idempotent via onConflictDoNothing).
  */
 export async function bootstrap() {
+  const tenantContext = getTenantDatabaseContext();
+
+  // Tenant databases must have one canonical store. The legacy bootstrap
+  // created "principal" without a tenant id, which made the SSO path create
+  // a second store in a freshly published tenant.
+  if (tenantContext) {
+    await db.update(schema.storesTable)
+      .set({ platformTenantId: tenantContext.tenantId })
+      .where(and(
+        eq(schema.storesTable.slug, "principal"),
+        isNull(schema.storesTable.platformTenantId),
+      ));
+  }
+
   // ── 1. Magasin Principal ──────────────────────────────────────────────────
   await db.insert(schema.storesTable).values({
+    ...(tenantContext ? { platformTenantId: tenantContext.tenantId } : {}),
     nameAr: "ميدانيك الرئيسي",
     nameEn: "Midanic Principal",
     slug: "principal",
