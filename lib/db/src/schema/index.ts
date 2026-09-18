@@ -9,3 +9,4 @@ export * from "./notifications";
 export * from "./entitlements";
 export * from "./admin-settings";
 export * from "./erp-management";
+export * from "./password-reset-tokens";
