@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const erpTenantStatusValues = [
@@ -20,6 +20,50 @@ export const erpTenantDatabaseStatusValues = [
 
 export type ErpTenantDatabaseStatus = (typeof erpTenantDatabaseStatusValues)[number];
 
+export const webStoreStatusValues = ["inactive", "active"] as const;
+export type WebStoreStatus = (typeof webStoreStatusValues)[number];
+
+export const erpFeatureKeys = [
+  "dashboard",
+  "orders",
+  "products",
+  "inventory",
+  "purchases",
+  "customers",
+  "suppliers",
+  "hr",
+  "accounting",
+  "reports",
+  "transfers",
+  "caisse",
+  "realtime",
+  "alerts",
+  "settings",
+  "web_store",
+] as const;
+
+export type ErpFeatureKey = (typeof erpFeatureKeys)[number];
+export type ErpFeatureFlags = Record<ErpFeatureKey, boolean>;
+
+export const defaultErpFeatureFlags: ErpFeatureFlags = {
+  dashboard: true,
+  orders: true,
+  products: true,
+  inventory: true,
+  purchases: true,
+  customers: true,
+  suppliers: true,
+  hr: true,
+  accounting: true,
+  reports: true,
+  transfers: true,
+  caisse: true,
+  realtime: true,
+  alerts: true,
+  settings: true,
+  web_store: true,
+};
+
 export const erpTenantsTable = pgTable("erp_tenants", {
   id: serial("id").primaryKey(),
   ownerUserId: integer("owner_user_id")
@@ -40,11 +84,19 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   databaseStatus: text("database_status").notNull().default("unprovisioned"),
   databaseProvisionedAt: timestamp("database_provisioned_at", { withTimezone: true }),
   databaseLastError: text("database_last_error"),
+  webStoreStatus: text("web_store_status").notNull().default("inactive"),
+  webStoreSubdomain: text("web_store_subdomain"),
+  webStoreHostname: text("web_store_hostname"),
+  webStoreDomainStatus: text("web_store_domain_status").notNull().default("inactive"),
+  webStoreDomainActivatedAt: timestamp("web_store_domain_activated_at", { withTimezone: true }),
+  featureFlags: jsonb("feature_flags").$type<ErpFeatureFlags>().notNull().default(defaultErpFeatureFlags),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   uniqueIndex("erp_tenants_subdomain_uq").on(table.subdomain),
   uniqueIndex("erp_tenants_hostname_uq").on(table.hostname),
+  uniqueIndex("erp_tenants_web_store_subdomain_uq").on(table.webStoreSubdomain),
+  uniqueIndex("erp_tenants_web_store_hostname_uq").on(table.webStoreHostname),
 ]);
 
 export type ErpTenant = typeof erpTenantsTable.$inferSelect;
