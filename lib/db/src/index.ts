@@ -611,5 +611,8 @@ export async function runMigrations(): Promise<void> {
 }
 
 export * from "./schema";
+// Keep the ERP feature contract explicit for bundled consumers. Some esbuild
+// dependency graphs do not surface values through the nested schema barrel.
+export { erpFeatureKeys, defaultErpFeatureFlags } from "./schema/erp-management";
 export { adminSettingsTable } from "./schema/admin-settings";
 export type { AdminSettings } from "./schema/admin-settings";
