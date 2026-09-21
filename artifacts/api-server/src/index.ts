@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { configureR2CorsFromEnvironment } from "./lib/objectStorage";
 import { ensureCoreCatalog, ensureProductionAdmin, seedDatabase } from "./lib/seed";
 import { runMigrations } from "@workspace/db";
 
@@ -24,6 +25,17 @@ runMigrations()
   .then(async () => {
     logger.info("Database migrations applied successfully");
     await ensureCoreCatalog();
+    try {
+      const cors = await configureR2CorsFromEnvironment();
+      if (cors.configured) {
+        logger.info(
+          { originCount: cors.originCount },
+          "Cloudflare R2 CORS policy synchronized",
+        );
+      }
+    } catch (error) {
+      logger.error({ err: error }, "Cloudflare R2 CORS synchronization failed");
+    }
     app.listen(port, () => {
       logger.info({ port }, "Server listening");
       // Auto-seed only in development — never run in production to avoid
