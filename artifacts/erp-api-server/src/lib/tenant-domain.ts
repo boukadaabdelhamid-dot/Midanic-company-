@@ -9,6 +9,7 @@ export type PlatformTenantDomain = {
   ownerUserId: number;
   status: string;
   domainStatus: string;
+  databaseStatus: string;
   canAccess: boolean;
 };
 
@@ -122,6 +123,7 @@ export async function resolvePlatformTenantDomain(
         tenantId: value.tenantId,
         status: value.status,
         domainStatus: value.domainStatus,
+        databaseStatus: value.databaseStatus,
       });
     }
     domainCache.set(normalized, { expiresAt: now + 5_000, value });
