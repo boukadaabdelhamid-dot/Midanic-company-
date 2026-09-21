@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { configureR2CorsFromEnvironment } from "./lib/objectStorage";
 import { ensureCoreCatalog, ensureProductionAdmin, seedDatabase } from "./lib/seed";
+import { reconcileUnprovisionedErpTenants } from "./lib/erp-tenant-reconciliation";
 import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -38,6 +39,9 @@ runMigrations()
     }
     app.listen(port, () => {
       logger.info({ port }, "Server listening");
+      reconcileUnprovisionedErpTenants().catch((err) => {
+        logger.error({ err }, "ERP tenant database reconciliation crashed");
+      });
       // Auto-seed only in development — never run in production to avoid
       // inserting predictable credentials into a live environment.
       if (process.env.NODE_ENV === "development") {
