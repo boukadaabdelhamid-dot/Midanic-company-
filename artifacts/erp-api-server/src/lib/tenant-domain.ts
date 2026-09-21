@@ -54,12 +54,12 @@ export function getRequestTenantHostname(req: TenantDomainRequest): string | nul
     if (originHostname) return originHostname;
   }
 
-  const hostHostname = normalizeTenantHostname(requestHeader(req, "Host"));
-  if (hostHostname) return hostHostname;
   if (process.env["TRUST_PROXY"] === "1") {
     const forwardedHostname = normalizeTenantHostname(requestHeader(req, "X-Forwarded-Host"));
     if (forwardedHostname) return forwardedHostname;
   }
+  const hostHostname = normalizeTenantHostname(requestHeader(req, "Host"));
+  if (hostHostname) return hostHostname;
   return null;
 }
 

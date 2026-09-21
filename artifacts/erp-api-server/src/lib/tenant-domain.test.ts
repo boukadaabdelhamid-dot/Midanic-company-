@@ -58,6 +58,15 @@ test("tenant domains and stores fail closed on cross-company mismatches", async 
       })),
       "plattin.midanic.com",
     );
+    process.env["TRUST_PROXY"] = "1";
+    assert.equal(
+      getRequestTenantHostname(requestWith({
+        Host: "midanic-erp-api-production.up.railway.app",
+        "X-Forwarded-Host": "bkd.midanic.com",
+      })),
+      "bkd.midanic.com",
+    );
+    delete process.env["TRUST_PROXY"];
     assert.equal(
       await verifyTenantDomainRequest(
         requestWith({ Host: "plattin.midanic.com" }),
