@@ -1,6 +1,6 @@
 import { Storage } from "@google-cloud/storage";
 import { Readable } from "stream";
-import { randomUUID } from "crypto";
+import { createHash, createHmac, randomUUID } from "crypto";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
@@ -92,9 +92,17 @@ class LocalFile implements StorageFile {
   }
 }
 
-type StorageMode = "gcs" | "replit" | "local";
+type StorageMode = "r2" | "gcs" | "replit" | "local";
 
 function detectStorageMode(): StorageMode {
+  if (
+    process.env.CLOUDFLARE_R2_ACCOUNT_ID &&
+    process.env.CLOUDFLARE_R2_BUCKET_NAME &&
+    process.env.CLOUDFLARE_R2_ACCESS_KEY_ID &&
+    process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
+  ) {
+    return "r2";
+  }
   // Explicit GCS service account — Railway production with a GCS bucket.
   if (process.env.GOOGLE_CREDENTIALS_JSON) return "gcs";
   // Replit-managed Object Storage — only when the bucket paths are configured.
@@ -167,6 +175,95 @@ export function getStorageMode(): StorageMode {
 /** Absolute base directory used in local storage mode. */
 export function getLocalStorageBase(): string {
   return getLocalBase();
+}
+
+class R2File implements StorageFile {
+  constructor(private readonly objectKey: string) {}
+
+  async exists(): Promise<[boolean]> {
+    const response = await fetch(
+      await createR2PresignedURL({
+        objectKey: this.objectKey,
+        method: "HEAD",
+        expiresInSeconds: 300,
+      }),
+      { method: "HEAD" },
+    );
+    if (response.status === 404) return [false];
+    if (!response.ok) {
+      throw new Error(`R2 HEAD failed with status ${response.status}`);
+    }
+    return [true];
+  }
+
+  createReadStream(): NodeJS.ReadableStream {
+    const objectKey = this.objectKey;
+    return Readable.from(
+      (async function* () {
+        const response = await fetch(
+          await createR2PresignedURL({
+            objectKey,
+            method: "GET",
+            expiresInSeconds: 300,
+          }),
+        );
+        if (response.status === 404) throw new ObjectNotFoundError();
+        if (!response.ok || !response.body) {
+          throw new Error(`R2 GET failed with status ${response.status}`);
+        }
+        for await (const chunk of Readable.fromWeb(
+          response.body as ReadableStream<Uint8Array>,
+        )) {
+          yield chunk;
+        }
+      })(),
+    );
+  }
+
+  async getMetadata(): Promise<
+    [{ contentType?: string; size?: number | string }]
+  > {
+    const response = await fetch(
+      await createR2PresignedURL({
+        objectKey: this.objectKey,
+        method: "HEAD",
+        expiresInSeconds: 300,
+      }),
+      { method: "HEAD" },
+    );
+    if (response.status === 404) throw new ObjectNotFoundError();
+    if (!response.ok) {
+      throw new Error(`R2 HEAD failed with status ${response.status}`);
+    }
+    return [
+      {
+        contentType:
+          response.headers.get("content-type") || "application/octet-stream",
+        size: response.headers.get("content-length") || undefined,
+      },
+    ];
+  }
+
+  async save(
+    buffer: Buffer,
+    options: { contentType: string },
+  ): Promise<void> {
+    const response = await fetch(
+      await createR2PresignedURL({
+        objectKey: this.objectKey,
+        method: "PUT",
+        expiresInSeconds: 900,
+      }),
+      {
+        method: "PUT",
+        headers: { "Content-Type": options.contentType },
+        body: buffer,
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`R2 PUT failed with status ${response.status}`);
+    }
+  }
 }
 
 /**
@@ -253,6 +350,7 @@ export class ObjectStorageService {
   getPublicObjectSearchPaths(): string[] {
     const mode = getMode();
     if (mode === "local") return [path.join(getLocalBase(), "public")];
+    if (mode === "r2") return ["public"];
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
     const paths = Array.from(
       new Set(pathsStr.split(",").map(p => p.trim()).filter(p => p.length > 0))
@@ -264,6 +362,7 @@ export class ObjectStorageService {
   getPrivateObjectDir(): string {
     const mode = getMode();
     if (mode === "local") return path.join(getLocalBase(), "private");
+    if (mode === "r2") return "/private";
     const dir = process.env.PRIVATE_OBJECT_DIR || "";
     if (!dir) throw new Error("PRIVATE_OBJECT_DIR not set.");
     return dir;
@@ -271,6 +370,11 @@ export class ObjectStorageService {
 
   async searchPublicObject(filePath: string): Promise<StorageFile | null> {
     const mode = getMode();
+    if (mode === "r2") {
+      const file = new R2File(`public/${filePath.replace(/^\/+/, "")}`);
+      const [exists] = await file.exists();
+      return exists ? file : null;
+    }
     if (mode === "local") {
       const root = path.join(getLocalBase(), "public");
       let resolved: string;
@@ -307,6 +411,15 @@ export class ObjectStorageService {
   ): Promise<{ objectPath: string; publicUrl: string }> {
     const objectId = randomUUID();
     const mode = getMode();
+    if (mode === "r2") {
+      const objectKey = `uploads/${objectId}`;
+      const file = new R2File(objectKey);
+      await file.save(buffer, { contentType });
+      return {
+        objectPath: `/objects/${objectKey}`,
+        publicUrl: buildPublicUrl(objectId),
+      };
+    }
     if (mode === "local") {
       const root = path.join(getLocalBase(), "private", "uploads");
       // objectId is a UUID — no traversal risk, but still validate with safeJoin
@@ -325,6 +438,13 @@ export class ObjectStorageService {
 
   async getObjectEntityUploadURL(): Promise<string> {
     const mode = getMode();
+    if (mode === "r2") {
+      return createR2PresignedURL({
+        objectKey: `uploads/${randomUUID()}`,
+        method: "PUT",
+        expiresInSeconds: 900,
+      });
+    }
     if (mode === "local") {
       throw new Error(
         "Signed upload URLs are not supported in local storage mode. Use POST /api/uploads instead."
@@ -354,6 +474,12 @@ export class ObjectStorageService {
     if (parts.length < 2) throw new ObjectNotFoundError();
     const entityId = parts.slice(1).join("/");
     const mode = getMode();
+    if (mode === "r2") {
+      const file = new R2File(entityId);
+      const [exists] = await file.exists();
+      if (!exists) throw new ObjectNotFoundError();
+      return file;
+    }
     if (mode === "local") {
       const root = path.join(getLocalBase(), "private");
       let filePath: string;
@@ -372,4 +498,113 @@ export class ObjectStorageService {
     if (!exists) throw new ObjectNotFoundError();
     return objectFile as unknown as StorageFile;
   }
+}
+
+function getR2Config(): {
+  accountId: string;
+  bucketName: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  endpoint: string;
+} {
+  const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID?.trim();
+  const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME?.trim();
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey =
+    process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY?.trim();
+  if (!accountId || !bucketName || !accessKeyId || !secretAccessKey) {
+    throw new Error(
+      "Cloudflare R2 is not configured. Set CLOUDFLARE_R2_ACCOUNT_ID, " +
+        "CLOUDFLARE_R2_BUCKET_NAME, CLOUDFLARE_R2_ACCESS_KEY_ID, and " +
+        "CLOUDFLARE_R2_SECRET_ACCESS_KEY.",
+    );
+  }
+  return {
+    accountId,
+    bucketName,
+    accessKeyId,
+    secretAccessKey,
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+  };
+}
+
+function encodeRfc3986(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function encodeR2Path(objectKey: string): string {
+  return `/${objectKey.split("/").map(encodeRfc3986).join("/")}`;
+}
+
+function toAmzDate(date: Date): { short: string; full: string } {
+  const iso = date.toISOString().replace(/[-:]/g, "");
+  return {
+    short: iso.slice(0, 8),
+    full: `${iso.slice(0, 15)}Z`,
+  };
+}
+
+function hmac(key: Buffer | string, value: string): Buffer {
+  return createHmac("sha256", key).update(value).digest();
+}
+
+async function createR2PresignedURL({
+  objectKey,
+  method,
+  expiresInSeconds,
+}: {
+  objectKey: string;
+  method: "GET" | "PUT" | "HEAD";
+  expiresInSeconds: number;
+}): Promise<string> {
+  const config = getR2Config();
+  const now = new Date();
+  const { short: dateStamp, full: amzDate } = toAmzDate(now);
+  const region = "auto";
+  const service = "s3";
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const host = `${config.accountId}.r2.cloudflarestorage.com`;
+  const canonicalUri = `/${encodeRfc3986(config.bucketName)}${encodeR2Path(objectKey)}`;
+  const query: Record<string, string> = {
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${config.accessKeyId}/${credentialScope}`,
+    "X-Amz-Date": amzDate,
+    "X-Amz-Expires": String(expiresInSeconds),
+    "X-Amz-SignedHeaders": "host",
+  };
+  const canonicalQueryString = Object.entries(query)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
+    .join("&");
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQueryString,
+    `host:${host}\n`,
+    "host",
+    "UNSIGNED-PAYLOAD",
+  ].join("\n");
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    createHash("sha256").update(canonicalRequest).digest("hex"),
+  ].join("\n");
+  const signingKey = hmac(
+    hmac(
+      hmac(hmac(`AWS4${config.secretAccessKey}`, dateStamp), region),
+      service,
+    ),
+    "aws4_request",
+  );
+  query["X-Amz-Signature"] = createHmac("sha256", signingKey)
+    .update(stringToSign)
+    .digest("hex");
+  const queryString = Object.entries(query)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
+    .join("&");
+  return `${config.endpoint}/${encodeRfc3986(config.bucketName)}${encodeR2Path(objectKey)}?${queryString}`;
 }
