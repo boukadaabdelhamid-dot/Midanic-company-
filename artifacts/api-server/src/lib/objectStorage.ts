@@ -554,6 +554,124 @@ function hmac(key: Buffer | string, value: string): Buffer {
   return createHmac('sha256', key).update(value).digest();
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Keep the R2 bucket CORS policy aligned with the domains that perform direct
+ * browser uploads. The policy is only changed when the environment variable is
+ * explicitly configured, so deployments that manage CORS elsewhere are left
+ * untouched.
+ */
+export async function configureR2CorsFromEnvironment(): Promise<{
+  configured: boolean;
+  originCount: number;
+}> {
+  const origins = Array.from(
+    new Set(
+      (process.env.CLOUDFLARE_R2_ALLOWED_ORIGINS ?? '')
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+    ),
+  );
+  if (origins.length === 0) {
+    return { configured: false, originCount: 0 };
+  }
+
+  const config = getR2Config();
+  const body = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">',
+    '<CORSRule>',
+    ...origins.map(
+      (origin) => `<AllowedOrigin>${escapeXml(origin)}</AllowedOrigin>`,
+    ),
+    '<AllowedMethod>GET</AllowedMethod>',
+    '<AllowedMethod>HEAD</AllowedMethod>',
+    '<AllowedMethod>PUT</AllowedMethod>',
+    '<AllowedHeader>content-type</AllowedHeader>',
+    '<ExposeHeader>ETag</ExposeHeader>',
+    '<MaxAgeSeconds>3600</MaxAgeSeconds>',
+    '</CORSRule>',
+    '</CORSConfiguration>',
+  ].join('');
+
+  const now = new Date();
+  const { short: dateStamp, full: amzDate } = toAmzDate(now);
+  const region = 'auto';
+  const service = 's3';
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const host = `${config.accountId}.r2.cloudflarestorage.com`;
+  const canonicalUri = `/${encodeRfc3986(config.bucketName)}`;
+  const payloadHash = createHash('sha256').update(body).digest('hex');
+  const canonicalHeaders = [
+    'content-type:application/xml',
+    `host:${host}`,
+    `x-amz-content-sha256:${payloadHash}`,
+    `x-amz-date:${amzDate}`,
+    '',
+  ].join('\n');
+  const signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
+  const canonicalRequest = [
+    'PUT',
+    canonicalUri,
+    'cors=',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    createHash('sha256').update(canonicalRequest).digest('hex'),
+  ].join('\n');
+  const signingKey = hmac(
+    hmac(
+      hmac(hmac(`AWS4${config.secretAccessKey}`, dateStamp), region),
+      service,
+    ),
+    'aws4_request',
+  );
+  const signature = createHmac('sha256', signingKey)
+    .update(stringToSign)
+    .digest('hex');
+  const authorization = [
+    `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(', ');
+
+  const response = await fetch(
+    `${config.endpoint}/${encodeRfc3986(config.bucketName)}?cors`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/xml',
+        'X-Amz-Content-Sha256': payloadHash,
+        'X-Amz-Date': amzDate,
+      },
+      body,
+    },
+  );
+  if (!response.ok) {
+    const details = (await response.text()).slice(0, 500);
+    throw new Error(
+      `Failed to configure R2 CORS (HTTP ${response.status})${details ? `: ${details}` : ''}`,
+    );
+  }
+
+  return { configured: true, originCount: origins.length };
+}
+
 async function createR2PresignedURL({
   objectKey,
   method,
