@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import { db, schema, runWithTenantDatabase } from "./db";
 import type { AuthRequest } from "./auth";
 import {
@@ -34,27 +34,50 @@ export async function resolvePublicStore(req: PublicStoreRequest, res: Response,
       return;
     }
 
-    const resolveInCurrentDatabase = async () => {
-      const slug =
+    const requestedSlug =
         (req.params["slug"] as string | undefined) ||
         (req.query["store"] as string | undefined) ||
-        (req.headers["x-store-slug"] as string | undefined) ||
-        // A company Web Store represents its tenant's canonical store when
-        // no explicit store selector is supplied.
-        (domain ? "principal" : undefined);
+        (req.headers["x-store-slug"] as string | undefined);
 
-      if (!slug) {
-        res.status(400).json({ error: "Store slug is required", code: "STORE_CONTEXT_REQUIRED" });
-        return;
+    const resolveInCurrentDatabase = async () => {
+      let store: typeof schema.storesTable.$inferSelect | undefined;
+
+      if (requestedSlug) {
+        [store] = await db.select().from(schema.storesTable)
+          .where(and(
+            eq(schema.storesTable.slug, requestedSlug),
+            eq(schema.storesTable.isActive, true),
+            domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
+          ))
+          .limit(1);
+      } else {
+        // A company may have several stores, while the public hostname does
+        // not carry a store slug. Prefer the populated store so a newly
+        // provisioned empty "principal" store does not hide the real catalog.
+        const [candidate] = await db.select({ id: schema.storesTable.id })
+          .from(schema.storesTable)
+          .leftJoin(
+            schema.productsTable,
+            and(
+              eq(schema.productsTable.storeId, schema.storesTable.id),
+              eq(schema.productsTable.isActive, true),
+            ),
+          )
+          .where(and(
+            eq(schema.storesTable.isActive, true),
+            domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
+          ))
+          .groupBy(schema.storesTable.id)
+          .orderBy(desc(sql`count(${schema.productsTable.id})`), asc(schema.storesTable.id))
+          .limit(1);
+
+        if (candidate) {
+          [store] = await db.select().from(schema.storesTable)
+            .where(eq(schema.storesTable.id, candidate.id))
+            .limit(1);
+        }
       }
 
-      const [store] = await db.select().from(schema.storesTable)
-        .where(and(
-          eq(schema.storesTable.slug, slug),
-          eq(schema.storesTable.isActive, true),
-          domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
-        ))
-        .limit(1);
       if (!store) {
         res.status(404).json({ error: "Store not found or inactive", code: "STORE_NOT_FOUND" });
         return;

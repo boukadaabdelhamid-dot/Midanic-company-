@@ -34,11 +34,12 @@ export default function Products() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: productsRes, isLoading } = useGetProducts({
+  const { data: productsRes, isLoading, isError } = useGetProducts({
     search: search || undefined,
     filterCatalogueType: activeType,
     limit: 24,
   });
+  const products = productsRes?.products ?? [];
 
   return (
     <div className="container mx-auto px-4 py-12 md:py-20">
@@ -110,10 +111,12 @@ export default function Products() {
                 </div>
               ))}
             </div>
-          ) : productsRes?.products.length === 0 ? (
+          ) : isError || products.length === 0 ? (
             <div className="text-center py-32 bg-muted/20 border border-border/40 rounded-xl flex flex-col items-center justify-center">
               <p className="text-xl text-muted-foreground font-serif mb-6">
-                {lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : 'No products found matching your criteria.'}
+                {isError
+                  ? (lang === 'ar' ? 'تعذّر تحميل المنتجات حالياً.' : 'Products could not be loaded right now.')
+                  : (lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : 'No products found matching your criteria.')}
               </p>
               <Button
                 variant="outline"
@@ -126,7 +129,7 @@ export default function Products() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
-              {productsRes?.products.map((product) => (
+              {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>

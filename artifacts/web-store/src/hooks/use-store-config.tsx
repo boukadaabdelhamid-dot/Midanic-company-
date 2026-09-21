@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getApiBase } from "../lib/api-base";
-import { getStoreRequestHeaders } from "../lib/store-headers";
+import { getExplicitStoreSlug, getStoreRequestHeaders } from "../lib/store-headers";
 
 const API_BASE = getApiBase();
 
@@ -43,28 +43,16 @@ const SAFE_DEFAULTS: StoreConfig = {
 
 const StoreConfigContext = createContext<StoreConfig>(SAFE_DEFAULTS);
 
-function getSlug(): string {
-  try {
-    const url = new URL(window.location.href);
-    const fromQuery = url.searchParams.get("store");
-    if (fromQuery) return fromQuery;
-    return (
-      localStorage.getItem("midanic_store_slug") ??
-      (import.meta.env.VITE_STORE_SLUG as string | undefined) ??
-      "principal"
-    );
-  } catch {
-    return (import.meta.env.VITE_STORE_SLUG as string | undefined) ?? "principal";
-  }
-}
-
 export function StoreConfigProvider({ children }: { children: React.ReactNode }) {
-  const slug = getSlug();
+  const slug = getExplicitStoreSlug();
 
   const { data } = useQuery<StoreConfig>({
     queryKey: ["store-config", slug],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/stores/${encodeURIComponent(slug)}/config`, {
+      const endpoint = slug
+        ? `/api/stores/${encodeURIComponent(slug)}/config`
+        : "/api/stores/public/config";
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         headers: getStoreRequestHeaders(),
       });
       if (!res.ok) return SAFE_DEFAULTS;

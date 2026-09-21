@@ -390,6 +390,43 @@ router.put("/erp/stores/web-settings", authenticate, requireTenantAdmin, require
 });
 
 // GET /stores/:slug/config — PUBLIC, no auth required
+// When no slug is supplied, resolvePublicStore selects the tenant's populated
+// public store. An explicit ?store=... or X-Store-Slug still takes precedence.
+router.get("/stores/public/config", resolvePublicStore, async (req: PublicStoreRequest, res) => {
+  try {
+    const [store] = await db.select({
+      id: schema.storesTable.id,
+      nameAr: schema.storesTable.nameAr,
+      nameEn: schema.storesTable.nameEn,
+      logoUrl: schema.storesTable.logoUrl,
+    })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, req.currentStoreId!))
+      .limit(1);
+    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    const [settings] = await db.select().from(schema.storeWebSettingsTable)
+      .where(eq(schema.storeWebSettingsTable.storeId, store.id));
+    const s = settings ?? WS_DEFAULTS;
+    res.json({
+      nameAr: store.nameAr,
+      nameEn: store.nameEn,
+      logoUrl: store.logoUrl ?? null,
+      showPrices: s.showPrices,
+      showStock: s.showStock,
+      acceptOrders: s.acceptOrders,
+      minOrderAmount: Number(s.minOrderAmount ?? 0),
+      bannerUrl: s.bannerUrl,
+      description: s.description,
+      facebookUrl: s.facebookUrl,
+      instagramUrl: s.instagramUrl,
+      tiktokUrl: s.tiktokUrl,
+      whatsappNumber: s.whatsappNumber,
+      featuredProductIds: (s.featuredProductIds as number[]) ?? [],
+      featuredCategoryIds: (s.featuredCategoryIds as number[]) ?? [],
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
+});
+
 router.get("/stores/:slug/config", resolvePublicStore, async (req: PublicStoreRequest, res) => {
   try {
     const [store] = await db.select({
