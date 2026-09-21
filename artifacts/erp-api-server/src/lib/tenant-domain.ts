@@ -5,6 +5,7 @@ export type TenantDomainRequest = {
 
 export type PlatformTenantDomain = {
   hostname: string;
+  webStoreHostname?: string | null;
   tenantId: number;
   ownerUserId: number;
   status: string;
@@ -43,7 +44,7 @@ function hostnameFromOrigin(value: string | undefined): string | null {
 function requestHeader(req: TenantDomainRequest, name: string): string | undefined {
   const fromExpress = req.header?.(name);
   if (fromExpress) return fromExpress;
-  const raw = req.headers[name.toLowerCase()];
+  const raw = req.headers?.[name.toLowerCase()];
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
@@ -60,8 +61,20 @@ export function getRequestTenantHostname(req: TenantDomainRequest): string | nul
     if (forwardedHostname) return forwardedHostname;
   }
   const hostHostname = normalizeTenantHostname(requestHeader(req, "Host"));
-  if (hostHostname) return hostHostname;
-  return null;
+  const originHostname = hostnameFromOrigin(requestHeader(req, "Origin"));
+
+  // The Web Store is often deployed on a separate public origin from the
+  // ERP API. In that case Host is the shared API hostname while Origin is the
+  // company's Web Store hostname. Prefer the origin only when the request
+  // host is not already a trusted company hostname.
+  if (
+    originHostname &&
+    isConfiguredTenantHostname(originHostname) &&
+    !isConfiguredTenantHostname(hostHostname)
+  ) {
+    return originHostname;
+  }
+  return hostHostname ?? originHostname;
 }
 
 export function tenantStoreMatches(
@@ -73,10 +86,13 @@ export function tenantStoreMatches(
 
 export function isConfiguredTenantHostname(hostname: string | null): boolean {
   if (!hostname) return false;
-  const rootDomain = normalizeTenantHostname(
+  const roots = [
     process.env["ERP_TENANT_ROOT_DOMAIN"] ?? "midanic.com",
-  );
-  return Boolean(rootDomain) && hostname.endsWith(`.${rootDomain}`);
+    process.env["WEB_STORE_ROOT_DOMAIN"] ?? "store.midanic.com",
+  ]
+    .map(normalizeTenantHostname)
+    .filter((root): root is string => Boolean(root));
+  return roots.some((root) => hostname.endsWith(`.${root}`));
 }
 
 export async function resolvePlatformTenantDomain(
@@ -111,7 +127,8 @@ export async function resolvePlatformTenantDomain(
     }
     const value = await response.json() as PlatformTenantDomain;
     if (
-      value.hostname !== normalized ||
+      value.hostname !== normalized &&
+      value.webStoreHostname !== normalized ||
       !Number.isInteger(value.tenantId) ||
       !Number.isInteger(value.ownerUserId)
     ) {

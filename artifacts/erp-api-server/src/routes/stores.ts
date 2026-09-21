@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, schema } from "../lib/db";
 import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
 import { getRequestTenantHostname, isConfiguredTenantHostname, resolvePlatformTenantDomain } from "../lib/tenant-domain";
+import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
 const router = Router();
 
@@ -389,9 +390,8 @@ router.put("/erp/stores/web-settings", authenticate, requireTenantAdmin, require
 });
 
 // GET /stores/:slug/config — PUBLIC, no auth required
-router.get("/stores/:slug/config", async (req, res) => {
+router.get("/stores/:slug/config", resolvePublicStore, async (req: PublicStoreRequest, res) => {
   try {
-    const slug = req.params["slug"] as string;
     const [store] = await db.select({
       id: schema.storesTable.id,
       nameAr: schema.storesTable.nameAr,
@@ -399,7 +399,7 @@ router.get("/stores/:slug/config", async (req, res) => {
       logoUrl: schema.storesTable.logoUrl,
     })
       .from(schema.storesTable)
-      .where(eq(schema.storesTable.slug, slug))
+      .where(eq(schema.storesTable.id, req.currentStoreId!))
       .limit(1);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const [settings] = await db.select().from(schema.storeWebSettingsTable)

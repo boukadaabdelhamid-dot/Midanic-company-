@@ -3,6 +3,7 @@ import { eq, and, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
 import { authenticate, requireAdmin, requireStaff, requireStore, requirePermission, type AuthRequest } from "../lib/auth";
+import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
 const attributeSchema = z.object({
   nameAr: z.string().min(1, "nameAr is required"),
@@ -154,6 +155,19 @@ router.delete("/erp/settings/products/brands/:id", authenticate, requireStaff, r
 });
 
 // ── Product Types (system-wide, no storeId) ──────────────────────────────────
+
+// Public Web Store catalogue filters must read the same tenant database as the
+// products endpoint. The ERP settings route below remains staff-protected.
+router.get("/product-types", resolvePublicStore, async (req: PublicStoreRequest, res) => {
+  try {
+    const items = await db.select().from(schema.productTypesTable)
+      .orderBy(schema.productTypesTable.id);
+    res.json(items);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/erp/settings/products/types", authenticate, requireStaff, requirePermission("settings", "view"), async (req: AuthRequest, res) => {
   try {

@@ -11,6 +11,7 @@ import { useLang } from "@/hooks/use-lang";
 import { useStoreConfig } from "@/hooks/use-store-config";
 import { AlertTriangle } from "lucide-react";
 import { getApiBase } from "../lib/api-base";
+import { getStoreRequestHeaders } from "../lib/store-headers";
 
 const API_BASE = getApiBase();
 
@@ -24,7 +25,9 @@ export default function Home() {
   const { data: productTypes, isLoading: isLoadingTypes } = useQuery<ProductType[]>({
     queryKey: ["/api/product-types"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/product-types`);
+      const res = await fetch(`${API_BASE}/api/product-types`, {
+        headers: getStoreRequestHeaders(),
+      });
       if (!res.ok) throw new Error("Failed to fetch product types");
       return res.json() as Promise<ProductType[]>;
     },

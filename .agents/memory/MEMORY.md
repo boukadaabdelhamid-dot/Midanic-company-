@@ -21,3 +21,4 @@
 - [Railway wildcard DNS validation](railway-wildcard-dns-validation.md) — Cloudflare-proxied wildcard and ACME CNAMEs hide Railway targets; use DNS-only until ownership and TLS validate
 - [ERP tenant database reconciliation](erp-tenant-database-reconciliation.md) — active legacy tenants may lack dedicated databases; reconcile only unprovisioned/interrupted records idempotently at startup
 - [Tenant-admin route boundary](tenant-admin-route-boundary.md) — company owners use tenant-aware authorization; never expose or seed the global platform admin in tenant data
+- [Public Web Store tenant routing](public-web-store-tenant-routing.md) — anonymous storefront requests must resolve the hostname through Platform before selecting the tenant database

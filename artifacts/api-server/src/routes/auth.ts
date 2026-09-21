@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { db, usersTable, erpTenantsTable, passwordResetTokensTable, refreshTokensTable } from "@workspace/db";
-import { and, eq, isNotNull, lt, desc } from "drizzle-orm";
+import { and, eq, isNotNull, lt, desc, or } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import {
   RegisterBody,
@@ -281,6 +281,7 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
       hostname: erpTenantsTable.hostname,
+      webStoreHostname: erpTenantsTable.webStoreHostname,
       domainStatus: erpTenantsTable.domainStatus,
       databaseStatus: erpTenantsTable.databaseStatus,
     })
@@ -520,11 +521,15 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
       hostname: erpTenantsTable.hostname,
+      webStoreHostname: erpTenantsTable.webStoreHostname,
       domainStatus: erpTenantsTable.domainStatus,
       databaseStatus: erpTenantsTable.databaseStatus,
     })
     .from(erpTenantsTable)
-    .where(eq(erpTenantsTable.hostname, hostname))
+    .where(or(
+      eq(erpTenantsTable.hostname, hostname),
+      eq(erpTenantsTable.webStoreHostname, hostname),
+    ))
     .limit(1);
   const trialExpired =
     tenant?.status === "active" &&
@@ -541,7 +546,8 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
     return;
   }
   res.json({
-    hostname,
+    hostname: tenant.hostname ?? hostname,
+    webStoreHostname: tenant.webStoreHostname,
     tenantId: tenant.id,
     ownerUserId: tenant.ownerUserId,
     status,

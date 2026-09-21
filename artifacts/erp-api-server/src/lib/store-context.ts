@@ -1,12 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, schema } from "./db";
+import { db, schema, runWithTenantDatabase } from "./db";
 import type { AuthRequest } from "./auth";
 import {
   getRequestTenantHostname,
   isConfiguredTenantHostname,
   resolvePlatformTenantDomain,
   tenantStoreMatches,
+  resolvePlatformTenantDatabase,
 } from "./tenant-domain";
 
 /**
@@ -20,63 +21,75 @@ export interface PublicStoreRequest extends AuthRequest {
 
 export async function resolvePublicStore(req: PublicStoreRequest, res: Response, next: NextFunction) {
   try {
-    const slug =
-      (req.query["store"] as string | undefined) ||
-      (req.headers["x-store-slug"] as string | undefined) ||
-      undefined;
-
-    if (!slug) {
-      res.status(400).json({ error: "Store slug is required", code: "STORE_CONTEXT_REQUIRED" });
-      return;
-    }
-    const [store] = await db.select().from(schema.storesTable)
-      .where(and(eq(schema.storesTable.slug, slug), eq(schema.storesTable.isActive, true)))
-      .limit(1);
-    if (!store) {
-      res.status(404).json({ error: "Store not found or inactive", code: "STORE_NOT_FOUND" });
-      return;
-    }
     const requestHostname = getRequestTenantHostname(req);
-    if (isConfiguredTenantHostname(requestHostname)) {
-      const domain = await resolvePlatformTenantDomain(requestHostname!);
-      if (
-        domain?.canAccess !== true ||
-        !tenantStoreMatches(domain.tenantId, store.platformTenantId)
-      ) {
+    const domain = isConfiguredTenantHostname(requestHostname)
+      ? await resolvePlatformTenantDomain(requestHostname!)
+      : null;
+
+    if (isConfiguredTenantHostname(requestHostname) && domain?.canAccess !== true) {
+      res.status(403).json({
+        error: "This company Web Store domain is unknown or inactive",
+        code: "TENANT_DOMAIN_UNAVAILABLE",
+      });
+      return;
+    }
+
+    const resolveInCurrentDatabase = async () => {
+      const slug =
+        (req.params["slug"] as string | undefined) ||
+        (req.query["store"] as string | undefined) ||
+        (req.headers["x-store-slug"] as string | undefined) ||
+        // A company Web Store represents its tenant's canonical store when
+        // no explicit store selector is supplied.
+        (domain ? "principal" : undefined);
+
+      if (!slug) {
+        res.status(400).json({ error: "Store slug is required", code: "STORE_CONTEXT_REQUIRED" });
+        return;
+      }
+
+      const [store] = await db.select().from(schema.storesTable)
+        .where(and(
+          eq(schema.storesTable.slug, slug),
+          eq(schema.storesTable.isActive, true),
+          domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
+        ))
+        .limit(1);
+      if (!store) {
+        res.status(404).json({ error: "Store not found or inactive", code: "STORE_NOT_FOUND" });
+        return;
+      }
+
+      if (domain && !tenantStoreMatches(domain.tenantId, store.platformTenantId)) {
         res.status(403).json({
           error: "This store does not belong to the current ERP company domain",
           code: "TENANT_STORE_MISMATCH",
         });
         return;
       }
-    }
-    if (store.platformTenantId && process.env["PLATFORM_API_URL"]) {
-      const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
-        process.env["PLATFORM_SSO_SECRET"] ??
-        process.env["SESSION_SECRET"];
-      if (!secret) {
-        res.status(503).json({ error: "Platform control is not configured" });
-        return;
-      }
-      try {
-        const platformUrl = process.env["PLATFORM_API_URL"]!.replace(/\/+$/, "");
-        const access = await fetch(`${platformUrl}/api/internal/erp/access/tenant/${store.platformTenantId}`, {
-          headers: { "X-Platform-Service-Secret": secret },
+
+      req.currentStoreId = store.id;
+      req.currentStoreSlug = store.slug;
+      next();
+    };
+
+    if (domain) {
+      const tenantDatabase = await resolvePlatformTenantDatabase(domain.tenantId);
+      if (!tenantDatabase || tenantDatabase.databaseStatus !== "ready" || !tenantDatabase.databaseName) {
+        res.status(503).json({
+          error: "ERP tenant database is not ready",
+          code: "TENANT_DATABASE_UNAVAILABLE",
         });
-        const body = await access.json() as { canAccess?: boolean };
-        if (!access.ok || body.canAccess !== true) {
-          res.status(403).json({ error: "This store is disabled by Platform", code: "PLATFORM_STORE_INACTIVE" });
-          return;
-        }
-      } catch (err) {
-        req.log.error(err);
-        res.status(503).json({ error: "Platform control is unavailable" });
         return;
       }
+      await runWithTenantDatabase(
+        { tenantId: domain.tenantId, databaseName: tenantDatabase.databaseName },
+        resolveInCurrentDatabase,
+      );
+      return;
     }
-    req.currentStoreId = store.id;
-    req.currentStoreSlug = store.slug;
-    next();
+
+    await resolveInCurrentDatabase();
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
