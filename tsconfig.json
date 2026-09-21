@@ -7,6 +7,12 @@
       "path": "./lib/db"
     },
     {
+      "path": "./lib/erp-db"
+    },
+    {
+      "path": "./lib/erp-api-zod"
+    },
+    {
       "path": "./lib/api-client-react"
     },
     {

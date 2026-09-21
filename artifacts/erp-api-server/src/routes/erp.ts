@@ -4218,7 +4218,7 @@ router.post("/erp/customers/:id/import-to-stores", authenticate, requireStaff, r
                 contactType: srcContact.contactType,
               }).returning({ id: schema.contactsTable.id });
               resolvedContactId = nc.id;
-              await linkContactsGlobally(tx, srcContact.id, resolvedContactId);
+              await linkContactsGlobally(tx, srcContact.id, nc.id);
             }
             await tx.update(schema.customerProfilesTable)
               .set({ contactId: resolvedContactId })
@@ -4249,7 +4249,7 @@ router.post("/erp/customers/:id/import-to-stores", authenticate, requireStaff, r
               }
             }
 
-            await recomputeContactBalance(tx, resolvedContactId);
+            await recomputeContactBalance(tx, linkedContactId);
             // Do NOT call syncLinkedContactBalances here: the contact may have balance 0
             // and would clobber the source store's real balance before the authoritative
             // syncLinkedContactBalances(srcContact) runs after the loop.
@@ -4314,7 +4314,7 @@ router.post("/erp/customers/:id/import-to-stores", authenticate, requireStaff, r
               contactType: srcContact.contactType,
             }).returning({ id: schema.contactsTable.id });
             targetContactId = nc.id;
-            await linkContactsGlobally(tx, srcContact.id, targetContactId);
+            await linkContactsGlobally(tx, srcContact.id, nc.id);
           }
         }
 

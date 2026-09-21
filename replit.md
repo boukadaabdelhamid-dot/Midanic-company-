@@ -4,12 +4,18 @@ A SaaS platform with a React/Vite frontend, Express 5 API server, and PostgreSQL
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm install --frozen-lockfile` — restore all workspace dependencies after import
+- `pnpm --filter @workspace/midanic-web run dev` — run the main Midanic web app
+- `pnpm --filter @workspace/api-server run dev` — run the platform API
+- `pnpm --filter @workspace/erp run dev` — run the ERP web app
+- `pnpm --filter @workspace/erp-api-server run dev` — run the ERP API
+- `pnpm --filter @workspace/web-store run dev` — run the storefront
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` (provided by Replit PostgreSQL) and `SESSION_SECRET`
+- In Replit, use the managed artifact workflows rather than assigning ports manually.
 
 ## Stack
 
@@ -22,7 +28,11 @@ A SaaS platform with a React/Vite frontend, Express 5 API server, and PostgreSQL
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/midanic-web` — main platform frontend
+- `artifacts/api-server` — platform API
+- `artifacts/erp` and `artifacts/erp-api-server` — ERP frontend and API
+- `artifacts/web-store` — customer storefront
+- `lib/db` and `lib/erp-db` — platform and ERP database packages
 
 ## Architecture decisions
 

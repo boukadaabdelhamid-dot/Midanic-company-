@@ -70,6 +70,7 @@ export interface AuthRequest extends Request {
   user?: JwtPayload;
   currentStoreId?: number;
   isPlatformService?: boolean;
+  tenantFeatures?: Record<string, unknown>;
 }
 
 export async function enforcePlatformAccess(req: TenantDomainRequest, user: JwtPayload): Promise<boolean> {

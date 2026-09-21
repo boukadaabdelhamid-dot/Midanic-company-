@@ -163,18 +163,24 @@ export async function seedDatabase(): Promise<void> {
   });
 
   // Products
-  const [erp] = await db.insert(productsTable).values({
-    name: "Midanic ERP",
-    slug: "midanic-erp",
-    description: "A comprehensive enterprise resource planning system built for modern businesses. Manage your entire operation — inventory, accounting, HR, sales, and more — from a single powerful platform.",
-    shortDescription: "Complete ERP solution for growing businesses",
-    category: "erp",
-    featured: true,
-    published: true,
-    trialDays: 30,
-    basePrice: 299,
-    sortOrder: 1,
-  }).returning();
+  const [existingErp] = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.slug, "midanic-erp"));
+  const [erp] = existingErp
+    ? [existingErp]
+    : await db.insert(productsTable).values({
+        name: "Midanic ERP",
+        slug: "midanic-erp",
+        description: "A comprehensive enterprise resource planning system built for modern businesses. Manage your entire operation — inventory, accounting, HR, sales, and more — from a single powerful platform.",
+        shortDescription: "Complete ERP solution for growing businesses",
+        category: "erp",
+        featured: true,
+        published: true,
+        trialDays: 30,
+        basePrice: 299,
+        sortOrder: 1,
+      }).returning();
 
   const [driving] = await db.insert(productsTable).values({
     name: "Midanic Driving School",
