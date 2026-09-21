@@ -1,3 +1,5 @@
+import { getCompanyErpOrigin } from "./api-base";
+
 /**
  * Headers shared by generated and manual Web Store API requests.
  *
@@ -7,6 +9,13 @@
  */
 export function getExplicitStoreSlug(): string | null {
   try {
+    // A company hostname represents exactly one ERP store. Ignore and clear
+    // legacy store selectors so they cannot redirect this company storefront.
+    if (getCompanyErpOrigin()) {
+      localStorage.removeItem("midanic_store_slug");
+      return null;
+    }
+
     const url = new URL(window.location.href);
     const fromQuery = url.searchParams.get("store");
     if (fromQuery) {

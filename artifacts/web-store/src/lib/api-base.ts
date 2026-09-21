@@ -8,9 +8,27 @@
  * Using BASE_PATH as prefix makes every request go to /store/api/*,
  * which the Vite proxy rewrites to /api/* and forwards to 8082.
  *
- * In production VITE_API_URL is set explicitly.
+ * Company storefronts use the matching company ERP origin directly:
+ *   acme.store.midanic.com -> acme.midanic.com
+ * This guarantees the Web Store reads the same API and database as ERP.
  */
+export function getCompanyErpOrigin(): string | null {
+  if (typeof window === "undefined") return null;
+  const hostname = window.location.hostname.toLowerCase();
+  const suffix = ".store.midanic.com";
+  if (!hostname.endsWith(suffix)) return null;
+
+  const companyLabel = hostname.slice(0, -suffix.length);
+  if (!companyLabel || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(companyLabel)) {
+    return null;
+  }
+  return `https://${companyLabel}.midanic.com`;
+}
+
 export function getApiBase(): string {
+  const companyErpOrigin = getCompanyErpOrigin();
+  if (companyErpOrigin) return companyErpOrigin;
+
   const explicit = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
   if (explicit) return explicit.replace(/\/+$/, "");
   return ((import.meta.env.BASE_URL as string | undefined) ?? "").replace(/\/+$/, "");
