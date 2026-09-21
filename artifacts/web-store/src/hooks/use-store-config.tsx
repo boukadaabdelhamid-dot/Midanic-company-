@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getApiBase } from "../lib/api-base";
+import { getStoreRequestHeaders } from "../lib/store-headers";
 
 const API_BASE = getApiBase();
 
@@ -63,7 +64,9 @@ export function StoreConfigProvider({ children }: { children: React.ReactNode })
   const { data } = useQuery<StoreConfig>({
     queryKey: ["store-config", slug],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/stores/${encodeURIComponent(slug)}/config`);
+      const res = await fetch(`${API_BASE}/api/stores/${encodeURIComponent(slug)}/config`, {
+        headers: getStoreRequestHeaders(),
+      });
       if (!res.ok) return SAFE_DEFAULTS;
       const json = await res.json();
       return {

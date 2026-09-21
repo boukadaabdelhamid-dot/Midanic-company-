@@ -30,6 +30,13 @@ export function normalizeTenantHostname(value: unknown): string | null {
   return hostname;
 }
 
+function normalizeConfiguredRoot(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const withoutProtocol = value.trim().toLowerCase().replace(/^https?:\/\//, "");
+  const withoutPath = withoutProtocol.split("/", 1)[0] ?? "";
+  return normalizeTenantHostname(withoutPath.replace(/^\*\./, ""));
+}
+
 function hostnameFromOrigin(value: string | undefined): string | null {
   if (!value) return null;
   try {
@@ -85,14 +92,52 @@ export function tenantStoreMatches(
 }
 
 export function isConfiguredTenantHostname(hostname: string | null): boolean {
-  if (!hostname) return false;
+  const normalizedHostname = normalizeTenantHostname(hostname);
+  if (!normalizedHostname) return false;
   const roots = [
-    process.env["ERP_TENANT_ROOT_DOMAIN"] ?? "midanic.com",
-    process.env["WEB_STORE_ROOT_DOMAIN"] ?? "store.midanic.com",
+    process.env["ERP_TENANT_ROOT_DOMAIN"],
+    process.env["WEB_STORE_ROOT_DOMAIN"],
+    // Keep the platform's canonical domains recognized even if a Railway
+    // variable contains a wildcard such as "*.store.midanic.com" or is
+    // temporarily missing during a deployment.
+    "midanic.com",
+    "store.midanic.com",
   ]
-    .map(normalizeTenantHostname)
+    .map(normalizeConfiguredRoot)
     .filter((root): root is string => Boolean(root));
-  return roots.some((root) => hostname.endsWith(`.${root}`));
+  return roots.some((root) => normalizedHostname.endsWith(`.${root}`));
+}
+
+function getTenantLookupCandidates(hostname: string): string[] {
+  const normalized = normalizeTenantHostname(hostname);
+  if (!normalized) return [];
+
+  const candidates = [normalized];
+  const webStoreRoots = [
+    process.env["WEB_STORE_ROOT_DOMAIN"],
+    "store.midanic.com",
+  ]
+    .map(normalizeConfiguredRoot)
+    .filter((root): root is string => Boolean(root));
+  const erpRoots = [
+    process.env["ERP_TENANT_ROOT_DOMAIN"],
+    "midanic.com",
+  ]
+    .map(normalizeConfiguredRoot)
+    .filter((root): root is string => Boolean(root));
+
+  for (const webStoreRoot of webStoreRoots) {
+    const suffix = `.${webStoreRoot}`;
+    if (!normalized.endsWith(suffix)) continue;
+    const tenantLabel = normalized.slice(0, -suffix.length);
+    if (!tenantLabel) continue;
+    for (const erpRoot of erpRoots) {
+      const derived = normalizeTenantHostname(`${tenantLabel}.${erpRoot}`);
+      if (derived && !candidates.includes(derived)) candidates.push(derived);
+    }
+  }
+
+  return candidates;
 }
 
 export async function resolvePlatformTenantDomain(
@@ -114,37 +159,40 @@ export async function resolvePlatformTenantDomain(
   }
 
   try {
-    const response = await fetch(
-      `${baseUrl}/api/internal/erp/domain/${encodeURIComponent(normalized)}`,
-      { headers: { "X-Platform-Service-Secret": secret } },
-    );
-    if (!response.ok) {
-      console.warn("[tenant-domain] Platform domain lookup failed", {
-        hostname: normalized,
-        statusCode: response.status,
-      });
-      return null;
+    for (const candidate of getTenantLookupCandidates(normalized)) {
+      const response = await fetch(
+        `${baseUrl}/api/internal/erp/domain/${encodeURIComponent(candidate)}`,
+        { headers: { "X-Platform-Service-Secret": secret } },
+      );
+      if (!response.ok) continue;
+
+      const value = await response.json() as PlatformTenantDomain;
+      const matchesCandidate =
+        value.hostname === candidate || value.webStoreHostname === candidate;
+      if (
+        !matchesCandidate ||
+        !Number.isInteger(value.tenantId) ||
+        !Number.isInteger(value.ownerUserId)
+      ) {
+        continue;
+      }
+      if (value.canAccess !== true) {
+        console.warn("[tenant-domain] Platform rejected tenant domain access", {
+          hostname: normalized,
+          tenantId: value.tenantId,
+          status: value.status,
+          domainStatus: value.domainStatus,
+          databaseStatus: value.databaseStatus,
+        });
+      }
+      domainCache.set(normalized, { expiresAt: now + 5_000, value });
+      return value;
     }
-    const value = await response.json() as PlatformTenantDomain;
-    if (
-      value.hostname !== normalized &&
-      value.webStoreHostname !== normalized ||
-      !Number.isInteger(value.tenantId) ||
-      !Number.isInteger(value.ownerUserId)
-    ) {
-      return null;
-    }
-    if (value.canAccess !== true) {
-      console.warn("[tenant-domain] Platform rejected tenant domain access", {
-        hostname: normalized,
-        tenantId: value.tenantId,
-        status: value.status,
-        domainStatus: value.domainStatus,
-        databaseStatus: value.databaseStatus,
-      });
-    }
-    domainCache.set(normalized, { expiresAt: now + 5_000, value });
-    return value;
+
+    console.warn("[tenant-domain] Platform domain lookup failed", {
+      hostname: normalized,
+    });
+    return null;
   } catch {
     return null;
   }
