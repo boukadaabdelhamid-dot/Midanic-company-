@@ -2275,7 +2275,7 @@ router.put("/erp/purchase-orders/:id", authenticate, requireStaff, requireStore,
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.put("/erp/purchase-orders/:id/receive", authenticate, requireStaff, requireStore, requirePermission("purchases", "edit"), async (req: AuthRequest, res) => {
+router.put("/erp/purchase-orders/:id/receive", authenticate, requireStaff, requireStore, requirePermission("purchases", "receive"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const actorUserId = req.user!.id;

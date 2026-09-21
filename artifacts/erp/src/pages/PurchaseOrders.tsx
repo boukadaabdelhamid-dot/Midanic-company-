@@ -479,7 +479,11 @@ export default function PurchaseOrders() {
                                 disabled={po.status !== "pending"}
                                 onClick={() => {
                                   receivePO.mutate({ id: po.id }, {
-                                    onSettled: () => qc.invalidateQueries({ queryKey: [...PO_QUERY_BASE_KEY] }),
+                                    onSuccess: () => {
+                                      void qc.invalidateQueries({ queryKey: [...PO_QUERY_BASE_KEY] });
+                                      alert(t("Bon d'achat clôturé avec succès.", "تم إغلاق سند الشراء بنجاح."));
+                                    },
+                                    onError: (err) => alert(`Erreur: ${(err as Error).message}`),
                                   });
                                 }}
                               >
@@ -603,7 +607,12 @@ export default function PurchaseOrders() {
         }}
         onClose={(po) => {
           receivePO.mutate({ id: po.id }, {
-            onSettled: () => { qc.invalidateQueries({ queryKey: [...PO_QUERY_BASE_KEY] }); setEditorOpen(false); },
+            onSuccess: () => {
+              void qc.invalidateQueries({ queryKey: [...PO_QUERY_BASE_KEY] });
+              setEditorOpen(false);
+              alert(t("Bon d'achat clôturé avec succès.", "تم إغلاق سند الشراء بنجاح."));
+            },
+            onError: (err) => alert(`Erreur: ${(err as Error).message}`),
           });
         }}
         onDelete={(po) => {
