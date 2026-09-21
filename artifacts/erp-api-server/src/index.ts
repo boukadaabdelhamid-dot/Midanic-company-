@@ -1098,6 +1098,37 @@ async function runWebSettingsMigration(targetPool: Pool = pool) {
 }
 
 const tenantInitializationJobs = new Map<string, Promise<void>>();
+const REQUIRED_TENANT_TABLES = [
+  "users",
+  "stores",
+  "products",
+  "orders",
+  "order_items",
+  "purchase_orders",
+  "transactions",
+  "caisses",
+  "customer_profiles",
+  "suppliers",
+] as const;
+
+async function verifyTenantSchema(targetPool: Pool, tenantId: number): Promise<void> {
+  const result = await targetPool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'erp'
+        AND table_name = ANY($1::text[])`,
+    [REQUIRED_TENANT_TABLES],
+  );
+  const existing = new Set(result.rows.map((row) => row.table_name));
+  const missing = REQUIRED_TENANT_TABLES.filter((table) => !existing.has(table));
+  if (missing.length > 0) {
+    throw new Error(`Tenant ${tenantId} schema is incomplete; missing: ${missing.join(", ")}`);
+  }
+  logger.info(
+    { tenantId, verifiedTableCount: existing.size },
+    "Tenant database required tables verified",
+  );
+}
 
 function initializeTenantDatabase(
   tenantId: number,
@@ -1138,6 +1169,7 @@ function initializeTenantDatabase(
           await runStaffEmployeeBackfill(tenantPool);
         },
       );
+      await verifyTenantSchema(tenantPool, tenantId);
     } finally {
       await lockClient.query("SELECT pg_advisory_unlock($1, $2)", [742318, tenantId])
         .catch(() => undefined);

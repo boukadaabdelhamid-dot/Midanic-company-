@@ -5773,6 +5773,10 @@ router.put("/erp/sale-orders/:id/cloture", authenticate, requireStaff, requireSt
     const today = new Date().toISOString().split("T")[0];
     const isPos = existing.order_source === "pos";
     const isOnline = existing.order_source === "online";
+    const requestedVersement = Number(req.body?.versement ?? 0);
+    const versement = Number.isFinite(requestedVersement)
+      ? Math.min(Math.max(0, requestedVersement), totalAmount)
+      : 0;
     const prefix = isOnline ? "WS" : isPos ? "VR" : "BV";
     const refCode = `${prefix}-${String(id).padStart(6, "0")}`;
     const sourceLabel = isOnline ? "Commande en ligne" : isPos ? "Vente rapide" : "Bon de vente";
@@ -5834,8 +5838,28 @@ router.put("/erp/sale-orders/:id/cloture", authenticate, requireStaff, requireSt
           balanceAfter: newBalance.toFixed(2),
         });
       } else if (paymentMethod === "a_terme" && customerId && totalAmount > 0) {
-        // Record as customer receivable (positive delta = customer owes store)
-        await mutateCustomerBalance(tx, customerId, storeId, { delta: totalAmount });
+        // A partial payment is cash received now; only the remainder becomes
+        // customer receivable.
+        if (versement > 0) {
+          const caisse = await ensureCaisse(storeId, actorUserId, tx);
+          cloturedCaisseId = caisse.id;
+          const { oldBalance, newBalance } = await applyCaisseDelta(tx, caisse.id, versement);
+          await tx.insert(schema.caisseMovementsTable).values({
+            caisseId: caisse.id,
+            type: "credit",
+            amount: versement.toFixed(2),
+            reason: "sale",
+            orderId: id,
+            actorUserId,
+            notes: `${sourceLabel} ${refCode} - acompte ${customerName}`,
+            balanceBefore: oldBalance.toFixed(2),
+            balanceAfter: newBalance.toFixed(2),
+          });
+        }
+        const remainingReceivable = totalAmount - versement;
+        if (remainingReceivable > 0) {
+          await mutateCustomerBalance(tx, customerId, storeId, { delta: remainingReceivable });
+        }
       }
     });
 

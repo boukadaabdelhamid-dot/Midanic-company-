@@ -3,14 +3,12 @@ import React, { useRef, useState, useMemo, useEffect } from "react";
 import {
   useGetProducts,
   useGetErpCustomers,
-  useCreateOrder,
-  useUpdateOrderStatus,
   getGetTransactionsQueryKey,
   getGetErpCustomersQueryKey,
   type Product,
   type CustomerSummary,
 } from "@workspace/erp-api-client-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useMe } from "@/hooks/use-me";
 import { useLang } from "@/hooks/use-lang";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,10 +75,53 @@ export default function Pos() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const currency = lang === "ar" ? "دج" : "DA";
+  const apiBase = getApiBase();
   const { data: productsResp } = useGetProducts({ limit: 9999, inStockOnly: true });
   const { data: _custRes } = useGetErpCustomers({ limit: 9999 });
-  const createOrder = useCreateOrder();
-  const updateOrderStatus = useUpdateOrderStatus();
+  const submitSale = useMutation({
+    mutationFn: async (sale: {
+      customerUserId: number;
+      customerName: string;
+      customerPhone: string;
+      items: { productId: number; quantity: number; unitPrice: number }[];
+      paymentMethod: "comptant" | "a_terme";
+      versement: number;
+    }) => {
+      const token = localStorage.getItem("midanic_token");
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token ?? ""}`,
+      };
+      const createResponse = await fetch(`${apiBase}/api/erp/sale-orders`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(sale),
+      });
+      const created = await createResponse.json().catch(() => ({})) as {
+        id?: number;
+        error?: string;
+      };
+      if (!createResponse.ok || typeof created.id !== "number") {
+        throw new Error(created.error || `HTTP ${createResponse.status}`);
+      }
+
+      const closeResponse = await fetch(
+        `${apiBase}/api/erp/sale-orders/${created.id}/cloture`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ versement: sale.versement }),
+        },
+      );
+      const closed = await closeResponse.json().catch(() => ({})) as {
+        error?: string;
+      };
+      if (!closeResponse.ok) {
+        throw new Error(closed.error || `HTTP ${closeResponse.status}`);
+      }
+      return { id: created.id };
+    },
+  });
   const [invoice, setInvoice] = useState<{ data: InvoiceData; auto: boolean } | null>(null);
   const [proformaOpen, setProformaOpen] = useState(false);
 
@@ -89,7 +130,6 @@ export default function Pos() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p as ProductFull])), [products]);
 
-  const apiBase = getApiBase();
   const { data: extraBarcodesData = [] } = useQuery<{ barcode: string; productId: number }[]>({
     queryKey: ["extra-barcodes-all"],
     queryFn: async () => {
@@ -396,54 +436,41 @@ export default function Pos() {
     const appliedVersement = opts.mode === "terme"
       ? Math.min(Math.max(0, versement), net)
       : 0;
-    createOrder.mutate(
+    submitSale.mutate(
       {
-        data: {
-          customerName,
-          customerPhone: buyer.phone?.trim() || "0000000000",
-          customerAddress: "Vente comptoir",
-          items,
-          linkedCustomerId: buyer.id,
-          paymentMode: opts.mode,
-          versement: appliedVersement,
-        },
+        customerUserId: buyer.id,
+        customerName,
+        customerPhone: buyer.phone?.trim() || "0000000000",
+        items,
+        paymentMethod: opts.mode === "terme" ? "a_terme" : "comptant",
+        versement: appliedVersement,
       },
       {
         onSuccess: (order) => {
-          // Automatically mark the order as delivered — no manual step needed
-          updateOrderStatus.mutate(
-            { id: order.id, data: { status: "delivered" } },
-            {
-              onSettled: () => {
-                void qc.invalidateQueries({ queryKey: getGetTransactionsQueryKey() });
-                // Refresh customer list so the updated credit balance shows.
-                void qc.invalidateQueries({ queryKey: getGetErpCustomersQueryKey() });
-                // Delete the loaded draft now that the sale is confirmed.
-                const draftToDelete = activeDraftId;
-                if (draftToDelete !== null) void discardActiveDraft(draftToDelete);
-                setPaymentOpen(false);
-                if (opts.impression) {
-                  const data: InvoiceData = {
-                    kind: "sale",
-                    number: `FV-${String(order.id).padStart(6, "0")}`,
-                    date: new Date(),
-                    store,
-                    party: {
-                      name: customerName,
-                      phone: buyer.phone ?? null,
-                    },
-                    lines: snapshotLines,
-                    showTva: !!store?.showTvaByDefault,
-                    tvaRate: parseFloat(store?.tvaRate ?? "19"),
-                    notes: opts.mode === "terme" ? t("Vente à terme", "بيع بالأجل") : undefined,
-                  };
-                  setInvoice({ data, auto: true });
-                }
-                resetSale();
-                setEmptyState(true);
+          void qc.invalidateQueries({ queryKey: getGetTransactionsQueryKey() });
+          void qc.invalidateQueries({ queryKey: getGetErpCustomersQueryKey() });
+          const draftToDelete = activeDraftId;
+          if (draftToDelete !== null) void discardActiveDraft(draftToDelete);
+          setPaymentOpen(false);
+          if (opts.impression) {
+            const data: InvoiceData = {
+              kind: "sale",
+              number: `FV-${String(order.id).padStart(6, "0")}`,
+              date: new Date(),
+              store,
+              party: {
+                name: customerName,
+                phone: buyer.phone ?? null,
               },
-            }
-          );
+              lines: snapshotLines,
+              showTva: !!store?.showTvaByDefault,
+              tvaRate: parseFloat(store?.tvaRate ?? "19"),
+              notes: opts.mode === "terme" ? t("Vente à terme", "بيع بالأجل") : undefined,
+            };
+            setInvoice({ data, auto: true });
+          }
+          resetSale();
+          setEmptyState(true);
         },
         onError: (err) => alert(`Erreur: ${(err as Error).message}`),
       }
@@ -777,7 +804,7 @@ export default function Pos() {
         net={net} client={client}
         versement={versement} setVersement={setVersement}
         onConfirm={handlePaymentConfirm}
-        isPending={createOrder.isPending || updateOrderStatus.isPending}
+        isPending={submitSale.isPending}
       />
 
       <DraftsDialog
