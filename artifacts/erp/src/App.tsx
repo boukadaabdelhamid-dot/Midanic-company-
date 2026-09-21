@@ -149,7 +149,15 @@ function SsoExchange() {
         window.history.replaceState({}, "", `${import.meta.env.BASE_URL}home`);
         window.location.href = `${import.meta.env.BASE_URL}home`.replace(/\/+/g, "/");
       })
-      .catch(() => setMessage("تعذر تسجيل الدخول الموحد. قد يكون الوصول موقوفاً من Platform."));
+      .catch((error: unknown) => {
+        const reason =
+          error instanceof Error && error.message
+            ? ` (${error.message})`
+            : "";
+        setMessage(
+          `تعذر تسجيل الدخول الموحد. قد يكون الوصول موقوفاً من Platform.${reason}`,
+        );
+      });
   }, [setToken, setStores]);
 
   return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">{message}</div>;
