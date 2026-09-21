@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { eq, desc, asc, sql, and, gt, ne, or, inArray, isNull, notLike, ilike } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, type AuthRequest } from "../lib/auth";
+import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, type AuthRequest } from "../lib/auth";
 import { broadcastToAdmins, broadcastCaisseChanged } from "../lib/ws";
 import { ensureCaisse } from "./caisses";
 import {
@@ -683,7 +683,7 @@ router.get("/erp/permissions/me", authenticate, requireStore, async (req: AuthRe
 });
 
 // GET /erp/permissions/users — admin: list all non-customer users for permissions management
-router.get("/erp/permissions/users", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.get("/erp/permissions/users", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const users = await db
       .select({
@@ -696,7 +696,19 @@ router.get("/erp/permissions/users", authenticate, requireAdmin, requireStore, a
       })
       .from(schema.usersTable)
       .leftJoin(schema.employeesTable, eq(schema.employeesTable.userId, schema.usersTable.id))
-      .where(ne(schema.usersTable.role, "customer"))
+       .where(and(
+         ne(schema.usersTable.role, "customer"),
+         ne(schema.usersTable.email, "admin@midanic.com"),
+         req.user!.platformTenantId === undefined
+           ? undefined
+           : sql`EXISTS (
+               SELECT 1
+               FROM user_stores us
+               JOIN stores s ON s.id = us.store_id
+               WHERE us.user_id = ${schema.usersTable.id}
+                 AND s.platform_tenant_id = ${req.user!.platformTenantId}
+             )`,
+       ))
       .orderBy(schema.usersTable.id);
     console.log(`[permissions/users] Retrieved ${users.length} non-customer users`);
     res.json(users);
@@ -704,7 +716,7 @@ router.get("/erp/permissions/users", authenticate, requireAdmin, requireStore, a
 });
 
 // GET /erp/permissions/:userId — admin: read any employee's permissions
-router.get("/erp/permissions/:userId", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.get("/erp/permissions/:userId", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const userId = pid(req, "userId");
     if (!Number.isFinite(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
@@ -715,7 +727,7 @@ router.get("/erp/permissions/:userId", authenticate, requireAdmin, requireStore,
 });
 
 // PUT /erp/permissions/:userId — admin: bulk-upsert permissions for an employee
-router.put("/erp/permissions/:userId", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.put("/erp/permissions/:userId", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const userId = pid(req, "userId");
     if (!Number.isFinite(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
@@ -794,7 +806,8 @@ router.get("/erp/employees", authenticate, requireStaff, requireStore, requirePe
       LEFT JOIN caisses c
         ON c.owner_user_id = e.user_id
         AND c.kind         = 'staff'
-      WHERE e.store_id = ${storeId}
+       WHERE e.store_id = ${storeId}
+         AND (u.email IS NULL OR lower(trim(u.email)) <> 'admin@midanic.com')
       ORDER BY e.name
     `);
     res.json(result.rows);
@@ -4899,7 +4912,7 @@ router.delete("/erp/price-tiers/:id", authenticate, requireAdmin, async (req, re
 
 // ─── Staff (system users with admin/employee role) ────────────────
 // Cross-store: list & manage users, plus their per-store grants.
-router.get("/erp/staff", authenticate, requireAdmin, async (req, res) => {
+router.get("/erp/staff", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const rows = await db.execute(sql`
       SELECT u.id, u.name, u.email, u.role, u.phone, u.created_at,
@@ -4910,14 +4923,25 @@ router.get("/erp/staff", authenticate, requireAdmin, async (req, res) => {
           '[]'::json
         ) AS stores
       FROM users u
-      WHERE u.role IN ('admin', 'employee')
+       WHERE u.role IN ('admin', 'employee')
+         AND lower(trim(u.email)) <> 'admin@midanic.com'
+         AND (
+           ${req.user!.platformTenantId === undefined}
+           OR EXISTS (
+             SELECT 1
+             FROM user_stores tenant_us
+             JOIN stores tenant_s ON tenant_s.id = tenant_us.store_id
+             WHERE tenant_us.user_id = u.id
+               AND tenant_s.platform_tenant_id = ${req.user!.platformTenantId}
+           )
+         )
       ORDER BY u.created_at DESC
     `);
     res.json(rows.rows);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/staff", authenticate, requireAdmin, async (req, res) => {
+router.post("/erp/staff", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, email: rawStaffEmail, password, role, phone, storeIds } = req.body || {};
     if (!name || !rawStaffEmail || !password) {
@@ -4947,9 +4971,23 @@ router.post("/erp/staff", authenticate, requireAdmin, async (req, res) => {
     // to the first active store when none are explicitly specified. Employees
     // may now be assigned to multiple stores (multi-store access).
     let targetStoreIds: number[] = Array.isArray(storeIds) ? storeIds.filter((n: unknown) => Number.isInteger(n)) : [];
+    if (req.user!.platformTenantId !== undefined && targetStoreIds.length > 0) {
+      const tenantStores = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(and(
+          inArray(schema.storesTable.id, targetStoreIds),
+          eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+        ));
+      targetStoreIds = tenantStores.map((s) => s.id);
+    }
     if (targetStoreIds.length === 0) {
       const all = await db.select({ id: schema.storesTable.id }).from(schema.storesTable)
-        .where(eq(schema.storesTable.isActive, true)).orderBy(schema.storesTable.id);
+        .where(and(
+          eq(schema.storesTable.isActive, true),
+          req.user!.platformTenantId === undefined
+            ? undefined
+            : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+        )).orderBy(schema.storesTable.id);
       if (wantedRole === "admin") targetStoreIds = all.map(s => s.id);
       else if (all.length) targetStoreIds = [all[0].id];
     }
@@ -4988,7 +5026,7 @@ router.post("/erp/staff", authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/erp/staff/:id/stores", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.put("/erp/staff/:id/stores", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const targetId = pid(req, "id");
     const { storeIds } = req.body || {};
@@ -4999,6 +5037,18 @@ router.put("/erp/staff/:id/stores", authenticate, requireAdmin, async (req: Auth
     if (storeIds.length === 0) {
       res.status(400).json({ error: "A staff member must have access to at least one store" });
       return;
+    }
+    if (req.user!.platformTenantId !== undefined) {
+      const tenantStores = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(and(
+          inArray(schema.storesTable.id, storeIds as number[]),
+          eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+        ));
+      if (tenantStores.length !== storeIds.length) {
+        res.status(403).json({ error: "Cannot assign stores outside this ERP tenant" });
+        return;
+      }
     }
     const [target] = await db.select({ role: schema.usersTable.role })
       .from(schema.usersTable).where(eq(schema.usersTable.id, targetId)).limit(1);
@@ -5017,7 +5067,7 @@ router.put("/erp/staff/:id/stores", authenticate, requireAdmin, async (req: Auth
 
 // PUT /erp/staff/:id/role — admin: promote employee → admin or demote admin → employee.
 // Cannot change your own role. Cannot demote the last remaining admin.
-router.put("/erp/staff/:id/role", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.put("/erp/staff/:id/role", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const targetId = pid(req, "id");
     const { role } = req.body || {};
@@ -5054,7 +5104,7 @@ router.put("/erp/staff/:id/role", authenticate, requireAdmin, async (req: AuthRe
 
 // PUT /erp/staff/:id/password — admin: reset a staff member's password.
 // Stores a fresh bcrypt hash; never reads or returns the existing password.
-router.put("/erp/staff/:id/password", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.put("/erp/staff/:id/password", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const targetId = pid(req, "id");
     const { password } = req.body || {};
@@ -5077,7 +5127,7 @@ router.put("/erp/staff/:id/password", authenticate, requireAdmin, async (req: Au
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/erp/staff/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.delete("/erp/staff/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const targetId = pid(req, "id");
     if (req.user?.id === targetId) {

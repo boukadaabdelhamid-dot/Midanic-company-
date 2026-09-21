@@ -18,3 +18,6 @@
 - [GitHub sync path](github-sync-path.md) — Local Git may expose only GitSafe; use the connected GitHub proxy for repository pushes
 - [Customer profile saves](customer-profile-saves.md) — Profile edits preserve canonical balances and return the store-scoped detail after an atomic update
 - [Mixed-language UI prevention](mixed-language-ui.md) — Any visible JSX literal bypasses the active locale, including decorative dashboard previews and admin controls
+- [Railway wildcard DNS validation](railway-wildcard-dns-validation.md) — Cloudflare-proxied wildcard and ACME CNAMEs hide Railway targets; use DNS-only until ownership and TLS validate
+- [ERP tenant database reconciliation](erp-tenant-database-reconciliation.md) — active legacy tenants may lack dedicated databases; reconcile only unprovisioned/interrupted records idempotently at startup
+- [Tenant-admin route boundary](tenant-admin-route-boundary.md) — company owners use tenant-aware authorization; never expose or seed the global platform admin in tenant data

@@ -7,4 +7,4 @@ Cloudflare R2 buckets used for direct browser uploads must define CORS rules for
 
 **Why:** The API can successfully generate a presigned URL and R2 credentials can be valid, yet browsers report only `Failed to fetch` when the bucket has no CORS configuration.
 
-**How to apply:** When adding or replacing an external object-storage bucket, configure CORS for every real web origin before debugging application upload code; test both the preflight and the actual `PUT` with an `Origin` header.
+**How to apply:** Allow the origin that actually serves the admin UI. Until the custom dashboard domain is active, this includes `midanic-platform-production.up.railway.app`; keep `app.midanic.com` ready for the cutover. Manage the list through Railway and verify preflight returns `204`.

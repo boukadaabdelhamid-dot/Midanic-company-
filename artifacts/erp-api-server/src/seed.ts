@@ -6,11 +6,10 @@ import { getTenantDatabaseContext } from "./lib/db";
 /**
  * bootstrap() — Production-safe initialisation.
  *
- * Creates ONLY the bare minimum required for a fresh tenant:
+ * Creates ONLY the bare minimum required for a fresh ERP database:
  *   1. Magasin Principal (slug = "principal")
- *   2. Compte Administrateur  (admin@midanic.com / admin1234)
- *   3. Caisse Principale  (kind = "main")
- *   4. System-wide lookup tables: product types, price tiers, customer classifications
+ *   2. Caisse Principale  (kind = "main")
+ *   3. System-wide lookup tables: product types, price tiers, customer classifications
  *
  * Nothing else is created — no demo products, employees, suppliers,
  * customers, orders, transactions, or coupons.
@@ -50,47 +49,36 @@ export async function bootstrap() {
   if (!principal) throw new Error("Failed to ensure principal store.");
 
   // ── 2. Compte Administrateur ──────────────────────────────────────────────
-  // Look up by ROLE, not by the hardcoded email — if the admin ever changes
-  // their email the old address vanishes from the DB, causing a duplicate
-  // admin row to be inserted on every subsequent server restart.
-  // We insert the default account only when NO admin exists at all (first boot).
-  const [existingAdmin] = await db
-    .select({ id: schema.usersTable.id })
-    .from(schema.usersTable)
-    .where(eq(schema.usersTable.role, "admin"))
-    .orderBy(asc(schema.usersTable.id))
-    .limit(1);
+  // The global Midanic Admin is only a local-development account. It must
+  // never be seeded into an isolated tenant database, where it would appear
+  // as one of the company's employees.
+  if (!tenantContext) {
+    const [existingAdmin] = await db
+      .select({ id: schema.usersTable.id })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.role, "admin"))
+      .orderBy(asc(schema.usersTable.id))
+      .limit(1);
 
-  if (!existingAdmin) {
-    const adminHash = await bcrypt.hash("admin1234", 10);
-    await db.insert(schema.usersTable).values({
-      name: "Midanic Admin",
-      email: "admin@midanic.com",
-      passwordHash: adminHash,
-      role: "admin",
-      preferredLang: "ar",
-    }).onConflictDoNothing();
+    if (!existingAdmin) {
+      const adminHash = await bcrypt.hash("admin1234", 10);
+      await db.insert(schema.usersTable).values({
+        name: "Midanic Admin",
+        email: "admin@midanic.com",
+        passwordHash: adminHash,
+        role: "admin",
+        preferredLang: "ar",
+      }).onConflictDoNothing();
+    }
   }
 
-  const [adminUser] = await db
-    .select({ id: schema.usersTable.id })
-    .from(schema.usersTable)
-    .where(eq(schema.usersTable.role, "admin"))
-    .orderBy(asc(schema.usersTable.id))
-    .limit(1);
-
-  if (adminUser) {
-    await db.insert(schema.userStoresTable).values({
-      userId: adminUser.id,
-      storeId: principal.id,
-    }).onConflictDoNothing();
-
-    // ── 3. Caisse Principale ────────────────────────────────────────────────
-    await db.insert(schema.caissesTable).values({
-      kind: "main",
-      balance: "0",
-    }).onConflictDoNothing();
-  }
+  // ── 3. Caisse Principale ────────────────────────────────────────────────
+  // This is tenant data and must exist independently of the global admin
+  // account. Tenant owners are provisioned later through Platform SSO.
+  await db.insert(schema.caissesTable).values({
+    kind: "main",
+    balance: "0",
+  }).onConflictDoNothing();
 
   // ── 4. Lookup tables (system-wide, always safe to insert) ─────────────────
 

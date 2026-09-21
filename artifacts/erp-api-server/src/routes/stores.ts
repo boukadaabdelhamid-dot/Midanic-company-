@@ -101,10 +101,14 @@ router.get("/erp/stores/all", authenticate, async (req: AuthRequest, res) => {
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// Admin: list all stores with item-count to drive UI delete-disable.
-router.get("/erp/stores", authenticate, requireAdmin, async (req, res) => {
+// Tenant admin: list the stores belonging to the current ERP tenant.
+router.get("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
-    const rows = await db.select().from(schema.storesTable).orderBy(schema.storesTable.id);
+    const rows = await db.select().from(schema.storesTable)
+      .where(req.user!.platformTenantId === undefined
+        ? undefined
+        : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId))
+      .orderBy(schema.storesTable.id);
     const counts = await db.execute<{ store_id: number; total: string | number }>(sql`
       SELECT store_id, SUM(c)::int AS total FROM (
         SELECT store_id, COUNT(*)::int AS c FROM products      GROUP BY store_id UNION ALL
@@ -124,7 +128,7 @@ router.get("/erp/stores", authenticate, requireAdmin, async (req, res) => {
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/stores", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const { nameAr, nameEn, slug, isActive, address, phone, logoUrl, tvaRate, showTvaByDefault, nif, rc, ai } = req.body || {};
     if (!nameAr || !nameEn || !slug) {
@@ -140,6 +144,7 @@ router.post("/erp/stores", authenticate, requireAdmin, async (req: AuthRequest, 
     }
     const [store] = await db.insert(schema.storesTable).values({
       nameAr, nameEn, slug: cleanSlug,
+      ...(req.user!.platformTenantId !== undefined ? { platformTenantId: req.user!.platformTenantId } : {}),
       isActive: isActive !== false,
       address: address ?? null,
       phone: phone ?? null,
@@ -156,7 +161,7 @@ router.post("/erp/stores", authenticate, requireAdmin, async (req: AuthRequest, 
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.patch("/erp/stores/:id", authenticate, requireAdmin, async (req, res) => {
+router.patch("/erp/stores/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
     const b = req.body || {};
@@ -183,15 +188,29 @@ router.patch("/erp/stores/:id", authenticate, requireAdmin, async (req, res) => 
       return;
     }
     const [store] = await db.update(schema.storesTable).set(update)
-      .where(eq(schema.storesTable.id, id)).returning();
+      .where(and(
+        eq(schema.storesTable.id, id),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      )).returning();
     if (!store) { res.status(404).json({ error: "Not found" }); return; }
     res.json(store);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/erp/stores/:id", authenticate, requireAdmin, async (req, res) => {
+router.delete("/erp/stores/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
+    const [ownedStore] = await db.select({ id: schema.storesTable.id })
+      .from(schema.storesTable)
+      .where(and(
+        eq(schema.storesTable.id, id),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      )).limit(1);
+    if (!ownedStore) { res.status(404).json({ error: "Not found" }); return; }
     // Refuse if the store has any tenant rows.
     const counts = await db.execute(sql`
       SELECT
@@ -221,7 +240,7 @@ router.delete("/erp/stores/:id", authenticate, requireAdmin, async (req, res) =>
 });
 
 // User-store grants
-router.get("/erp/stores/:id/users", authenticate, requireAdmin, async (req, res) => {
+router.get("/erp/stores/:id/users", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const storeId = pid(req, "id");
     const rows = await db.select({
@@ -232,7 +251,13 @@ router.get("/erp/stores/:id/users", authenticate, requireAdmin, async (req, res)
     })
       .from(schema.userStoresTable)
       .innerJoin(schema.usersTable, eq(schema.userStoresTable.userId, schema.usersTable.id))
-      .where(eq(schema.userStoresTable.storeId, storeId));
+      .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
+      .where(and(
+        eq(schema.userStoresTable.storeId, storeId),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      ));
     res.json(rows);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
