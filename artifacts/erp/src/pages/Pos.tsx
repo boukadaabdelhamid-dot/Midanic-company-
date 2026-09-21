@@ -28,6 +28,7 @@ import {
 import InvoiceDialog from "@/components/InvoiceDialog";
 import type { InvoiceData } from "@/components/InvoiceTemplate";
 import { useCurrentStore } from "@/hooks/use-current-store";
+import { useStoreContext } from "@/hooks/use-store";
 import { Row } from "@/components/pos/Row";
 import { ClientPickerButton } from "@/components/pos/ClientPickerButton";
 import { ProductPickerDialog } from "@/components/pos/ProductPickerDialog";
@@ -53,9 +54,9 @@ type PersistedPosState = {
   versement: number;
 };
 
-function readPersistedPosState(): PersistedPosState | null {
+function readPersistedPosState(storageKey: string): PersistedPosState | null {
   try {
-    const raw = localStorage.getItem(POS_LS_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedPosState;
     if (!Array.isArray(parsed.lines)) return null;
@@ -72,10 +73,12 @@ export default function Pos() {
   const qc = useQueryClient();
   const { user } = useMe();
   const store = useCurrentStore();
+  const { currentStoreId } = useStoreContext();
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const currency = lang === "ar" ? "دج" : "DA";
   const apiBase = getApiBase();
+  const posStorageKey = `${POS_LS_KEY}:${window.location.hostname}:${currentStoreId ?? "none"}`;
   const { data: productsResp } = useGetProducts({ limit: 9999, inStockOnly: true });
   const { data: _custRes } = useGetErpCustomers({ limit: 9999 });
   const submitSale = useMutation({
@@ -170,7 +173,7 @@ export default function Pos() {
   });
 
   // Restore POS state from localStorage on first mount (lazy initializer runs once).
-  const [_restoredState] = useState<PersistedPosState | null>(() => readPersistedPosState());
+  const [_restoredState] = useState<PersistedPosState | null>(() => readPersistedPosState(posStorageKey));
 
   const [lines, setLines] = useState<CartLine[]>(() => _restoredState?.lines ?? []);
   const [code, setCode] = useState("");
@@ -207,16 +210,32 @@ export default function Pos() {
   // Persist POS state to localStorage whenever the cart has items.
   useEffect(() => {
     if (lines.length === 0) {
-      localStorage.removeItem(POS_LS_KEY);
+      localStorage.removeItem(posStorageKey);
       return;
     }
     const state: PersistedPosState = { lines, activeDraftId, draftCustomerName, clientId: client?.id ?? null, versement };
     try {
-      localStorage.setItem(POS_LS_KEY, JSON.stringify(state));
+      localStorage.setItem(posStorageKey, JSON.stringify(state));
     } catch {
       // Storage quota exceeded — non-critical, ignore.
     }
-  }, [lines, activeDraftId, draftCustomerName, client, versement]);
+  }, [lines, activeDraftId, draftCustomerName, client, versement, posStorageKey]);
+
+  // A cart saved by an older build used one global localStorage key and could
+  // leak product IDs across company domains or stores. Keep only products
+  // returned for the current authenticated store before a sale can be sent.
+  useEffect(() => {
+    if (!productsResp || lines.length === 0) return;
+    const validProductIds = new Set(products.map((product) => product.id));
+    if (lines.every((line) => validProductIds.has(line.productId))) return;
+    setLines((current) => current.filter((line) => validProductIds.has(line.productId)));
+    setActiveDraftId(null);
+    setDraftCustomerName(null);
+    alert(t(
+      "Des articles d'un autre magasin ont été retirés du panier. Veuillez les ajouter depuis le catalogue actuel.",
+      "تم حذف منتجات تابعة لمتجر آخر من السلة. أعد إضافتها من قائمة منتجات المتجر الحالي.",
+    ));
+  }, [productsResp, products, lines, t]);
 
   const codeRef = useRef<HTMLInputElement>(null);
   const editLineRef = useRef(editLine);
