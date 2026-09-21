@@ -96,6 +96,7 @@ import type {
   GetPayslipsParams,
   GetProductProfitReportParams,
   GetProductsParams,
+  GetSuppliersResponse,
   GetSupplierReportParams,
   HealthStatus,
   InventoryCountItem,
@@ -5509,8 +5510,8 @@ export const getGetSuppliersUrl = () => {
 
 export const getSuppliers = async (
   options?: RequestInit,
-): Promise<Supplier[]> => {
-  return customFetch<Supplier[]>(getGetSuppliersUrl(), {
+): Promise<GetSuppliersResponse> => {
+  return customFetch<GetSuppliersResponse>(getGetSuppliersUrl(), {
     ...options,
     method: "GET",
   });

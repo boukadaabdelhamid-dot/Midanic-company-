@@ -1379,7 +1379,7 @@ export default function SmartPurchase() {
 
   const families = useMemo(() => filterOpts?.families ?? [], [filterOpts]);
   const brands   = useMemo(() => filterOpts?.brands   ?? [], [filterOpts]);
-  const suppliers = useMemo(() => suppliersData ?? [], [suppliersData]);
+  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData]);
 
   // Build query params — stockFilter included so tab changes reset pagination
   const queryParams = useMemo(() => {

@@ -956,6 +956,13 @@ export interface Supplier {
   createdAt?: string;
 }
 
+export interface GetSuppliersResponse {
+  data: Supplier[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type SupplierOperationType =
   (typeof SupplierOperationType)[keyof typeof SupplierOperationType];
 
