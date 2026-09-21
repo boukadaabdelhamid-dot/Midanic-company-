@@ -246,6 +246,96 @@ router.post("/auth/login", async (req, res) => {
     const login = async () => {
       // Mobile keyboards auto-capitalize and add stray spaces — match case-insensitively.
       const email = String(rawEmail).trim().toLowerCase();
+
+      // The tenant owner authenticates against the Platform account first.
+      // This also repairs a tenant database where the owner has not yet been
+      // provisioned by SSO (or still carries an older password hash).
+      if (tenantDomain) {
+        try {
+          const platformCredentials = await getPlatformCredentials(tenantDomain.ownerUserId);
+          const isPlatformOwner =
+            platformCredentials.isActive &&
+            platformCredentials.email.trim().toLowerCase() === email &&
+            await bcrypt.compare(password, platformCredentials.passwordHash);
+
+          if (isPlatformOwner) {
+            const [platformUser] = await db.select().from(schema.usersTable)
+              .where(eq(schema.usersTable.platformUserId, tenantDomain.ownerUserId))
+              .limit(1);
+            const [emailUser] = platformUser ? [platformUser] : await db.select().from(schema.usersTable)
+              .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`)
+              .limit(1);
+
+            let owner = emailUser;
+            if (!owner) {
+              [owner] = await db.insert(schema.usersTable).values({
+                platformUserId: tenantDomain.ownerUserId,
+                name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || "Midanic User",
+                email: platformCredentials.email.toLowerCase(),
+                passwordHash: platformCredentials.passwordHash,
+                role: "admin",
+                phone: platformCredentials.phone,
+                address: platformCredentials.address,
+              }).returning();
+            } else {
+              [owner] = await db.update(schema.usersTable)
+                .set({
+                  platformUserId: tenantDomain.ownerUserId,
+                  name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || owner.name,
+                  email: platformCredentials.email.toLowerCase(),
+                  passwordHash: platformCredentials.passwordHash,
+                  role: "admin",
+                  phone: platformCredentials.phone,
+                  address: platformCredentials.address,
+                  isActive: true,
+                })
+                .where(eq(schema.usersTable.id, owner.id))
+                .returning();
+            }
+
+            const [store] = await db.select().from(schema.storesTable)
+              .where(eq(schema.storesTable.platformTenantId, tenantDomain.tenantId))
+              .limit(1);
+            if (!store) {
+              res.status(503).json({
+                error: "ERP tenant store is unavailable",
+                code: "TENANT_STORE_UNAVAILABLE",
+              });
+              return;
+            }
+
+            await db.insert(schema.userStoresTable)
+              .values({ userId: owner.id, storeId: store.id })
+              .onConflictDoNothing();
+
+            const token = signToken({
+              id: owner.id,
+              email: owner.email,
+              role: "tenant_admin",
+              currentStoreId: store.id,
+              platformUserId: tenantDomain.ownerUserId,
+              platformTenantId: tenantDomain.tenantId,
+              tenantHostname: tenantDomain.hostname,
+            });
+            res.json({
+              token,
+              user: {
+                id: owner.id,
+                name: owner.name,
+                email: owner.email,
+                role: owner.role,
+                preferredLang: owner.preferredLang,
+              },
+              stores: [store],
+              currentStoreId: store.id,
+            });
+            return;
+          }
+        } catch (syncError) {
+          req.log.warn({ err: syncError }, "Platform owner authentication unavailable during ERP login");
+        }
+      }
+
       const [user] = await db.select().from(schema.usersTable)
         .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
       if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
@@ -278,7 +368,7 @@ router.post("/auth/login", async (req, res) => {
       const token = signToken({
         id: user.id,
         email: user.email,
-        role: user.role,
+        role: user.role === "admin" && tenantDomain ? "tenant_admin" : user.role,
         currentStoreId,
         ...(tenantDomain
           ? {
