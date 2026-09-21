@@ -7,6 +7,9 @@ import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verify
 import { listUserStores } from "../lib/store-context";
 import { sendPasswordResetEmail } from "../lib/email";
 import {
+  getRequestTenantHostname,
+  isConfiguredTenantHostname,
+  resolvePlatformTenantDomain,
   resolvePlatformTenantDatabase,
   tenantStoreMatches,
   verifyTenantDomainRequest,
@@ -219,48 +222,102 @@ router.post("/auth/login", async (req, res) => {
       res.status(400).json({ error: "email and password required" });
       return;
     }
-    // Mobile keyboards auto-capitalize and add stray spaces — match case-insensitively.
-    const email = String(rawEmail).trim().toLowerCase();
-    const [user] = await db.select().from(schema.usersTable)
-      .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
-    if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
-    let valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid && user.platformUserId) {
-      try {
-        const platformCredentials = await getPlatformCredentials(user.platformUserId);
-        valid = platformCredentials.isActive && await bcrypt.compare(password, platformCredentials.passwordHash);
-        if (valid) {
-          await db.update(schema.usersTable).set({
-            email: platformCredentials.email.toLowerCase(),
-            passwordHash: platformCredentials.passwordHash,
-            name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || user.name,
-            phone: platformCredentials.phone,
-            address: platformCredentials.address,
-          }).where(eq(schema.usersTable.id, user.id));
-        }
-      } catch (syncError) {
-        req.log.warn({ err: syncError }, "Platform credential sync unavailable during ERP login");
-      }
+    const hostname = getRequestTenantHostname(req);
+    const isTenantDomain = isConfiguredTenantHostname(hostname);
+    const tenantDomain = isTenantDomain && hostname
+      ? await resolvePlatformTenantDomain(hostname)
+      : null;
+
+    if (isTenantDomain && tenantDomain?.canAccess !== true) {
+      res.status(403).json({
+        error: "This ERP company domain is inactive or unknown",
+        code: "TENANT_DOMAIN_INACTIVE",
+      });
+      return;
     }
-    if (!valid) { res.status(401).json({ error: "Invalid credentials" }); return; }
-    if (!user.isActive) { res.status(403).json({ error: "Account disabled" }); return; }
+    if (process.env["NODE_ENV"] === "production" && !tenantDomain) {
+      res.status(403).json({
+        error: "Direct ERP login must use an active company domain",
+        code: "TENANT_DOMAIN_REQUIRED",
+      });
+      return;
+    }
 
-    const allStores = (user.role === "admin" || user.role === "employee")
-      ? await listUserStores(user.id)
-      : [];
-    // Only allow active stores into the picker / auto-select.
-    const stores = allStores.filter((s) => s.isActive);
+    const login = async () => {
+      // Mobile keyboards auto-capitalize and add stray spaces — match case-insensitively.
+      const email = String(rawEmail).trim().toLowerCase();
+      const [user] = await db.select().from(schema.usersTable)
+        .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
+      if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
+      let valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid && user.platformUserId) {
+        try {
+          const platformCredentials = await getPlatformCredentials(user.platformUserId);
+          valid = platformCredentials.isActive && await bcrypt.compare(password, platformCredentials.passwordHash);
+          if (valid) {
+            await db.update(schema.usersTable).set({
+              email: platformCredentials.email.toLowerCase(),
+              passwordHash: platformCredentials.passwordHash,
+              name: `${platformCredentials.firstName} ${platformCredentials.lastName}`.trim() || user.name,
+              phone: platformCredentials.phone,
+              address: platformCredentials.address,
+            }).where(eq(schema.usersTable.id, user.id));
+          }
+        } catch (syncError) {
+          req.log.warn({ err: syncError }, "Platform credential sync unavailable during ERP login");
+        }
+      }
+      if (!valid) { res.status(401).json({ error: "Invalid credentials" }); return; }
+      if (!user.isActive) { res.status(403).json({ error: "Account disabled" }); return; }
 
-    // Auto-select if exactly one active store; otherwise leave unset.
-    const currentStoreId = stores.length === 1 ? stores[0].id : null;
-    const token = signToken({ id: user.id, email: user.email, role: user.role, currentStoreId });
+      const allStores = (user.role === "admin" || user.role === "employee")
+        ? await listUserStores(user.id, tenantDomain?.tenantId)
+        : [];
+      const stores = allStores.filter((s) => s.isActive);
+      const currentStoreId = stores.length === 1 ? stores[0].id : null;
+      const token = signToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        currentStoreId,
+        ...(tenantDomain
+          ? {
+              platformUserId: tenantDomain.ownerUserId,
+              platformTenantId: tenantDomain.tenantId,
+              tenantHostname: tenantDomain.hostname,
+            }
+          : {}),
+      });
 
-    res.json({
-      token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, preferredLang: user.preferredLang },
-      stores,
-      currentStoreId,
-    });
+      res.json({
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, preferredLang: user.preferredLang },
+        stores,
+        currentStoreId,
+      });
+    };
+
+    if (tenantDomain) {
+      const tenantDatabase = await resolvePlatformTenantDatabase(tenantDomain.tenantId);
+      if (
+        !tenantDatabase ||
+        tenantDatabase.databaseStatus !== "ready" ||
+        !tenantDatabase.databaseName
+      ) {
+        res.status(503).json({
+          error: "ERP tenant database is unavailable",
+          code: "TENANT_DATABASE_UNAVAILABLE",
+        });
+        return;
+      }
+      await runWithTenantDatabase(
+        { tenantId: tenantDomain.tenantId, databaseName: tenantDatabase.databaseName },
+        login,
+      );
+      return;
+    }
+
+    await login();
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
