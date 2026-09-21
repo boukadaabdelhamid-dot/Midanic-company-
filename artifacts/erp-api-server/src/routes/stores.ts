@@ -3,7 +3,6 @@ import { eq, sql, ilike, or, and } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
 import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
-import { getRequestTenantHostname, isConfiguredTenantHostname, resolvePlatformTenantDomain } from "../lib/tenant-domain";
 import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
 const router = Router();
@@ -11,28 +10,17 @@ const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number =>
   parseInt(req.params[key] as string);
 
-// Public-ish: list active stores (used by storefront to populate a switcher)
-router.get("/stores/public", async (req, res) => {
+// Public: the company hostname maps to the same single store used by its ERP.
+router.get("/stores/public", resolvePublicStore, async (req: PublicStoreRequest, res) => {
   try {
-    const hostname = getRequestTenantHostname(req);
-    const domain = isConfiguredTenantHostname(hostname)
-      ? await resolvePlatformTenantDomain(hostname!)
-      : null;
-    if (isConfiguredTenantHostname(hostname) && domain?.canAccess !== true) {
-      res.status(403).json({ error: "This ERP company domain is inactive" });
-      return;
-    }
     const stores = await db.select({
       id: schema.storesTable.id,
       nameAr: schema.storesTable.nameAr,
       nameEn: schema.storesTable.nameEn,
       slug: schema.storesTable.slug,
     }).from(schema.storesTable)
-      .where(and(
-        eq(schema.storesTable.isActive, true),
-        domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
-      ))
-      .orderBy(schema.storesTable.id);
+      .where(eq(schema.storesTable.id, req.currentStoreId!))
+      .limit(1);
     res.json(stores);
   } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
 });

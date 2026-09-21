@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { db, schema, runWithTenantDatabase } from "./db";
 import type { AuthRequest } from "./auth";
 import {
@@ -42,40 +42,53 @@ export async function resolvePublicStore(req: PublicStoreRequest, res: Response,
     const resolveInCurrentDatabase = async () => {
       let store: typeof schema.storesTable.$inferSelect | undefined;
 
-      if (requestedSlug) {
+      if (domain) {
+        // A company hostname represents one ERP and one public store. Resolve
+        // the store linked to the platform owner so anonymous Web Store
+        // requests use the same store context as the owner's ERP session.
+        const [ownerLink] = await db.select({ store: schema.storesTable })
+          .from(schema.usersTable)
+          .innerJoin(
+            schema.userStoresTable,
+            eq(schema.userStoresTable.userId, schema.usersTable.id),
+          )
+          .innerJoin(
+            schema.storesTable,
+            eq(schema.storesTable.id, schema.userStoresTable.storeId),
+          )
+          .where(and(
+            eq(schema.usersTable.platformUserId, domain.ownerUserId),
+            eq(schema.storesTable.platformTenantId, domain.tenantId),
+            eq(schema.storesTable.isActive, true),
+          ))
+          .orderBy(asc(schema.userStoresTable.createdAt), asc(schema.storesTable.id))
+          .limit(1);
+        store = ownerLink?.store;
+
+        // Before the owner has logged in for the first time there may be no
+        // user-store link yet. The tenant store created during provisioning is
+        // the canonical fallback; never choose by product count.
+        if (!store) {
+          [store] = await db.select().from(schema.storesTable)
+            .where(and(
+              eq(schema.storesTable.platformTenantId, domain.tenantId),
+              eq(schema.storesTable.isActive, true),
+            ))
+            .orderBy(asc(schema.storesTable.id))
+            .limit(1);
+        }
+      } else if (requestedSlug) {
         [store] = await db.select().from(schema.storesTable)
           .where(and(
             eq(schema.storesTable.slug, requestedSlug),
             eq(schema.storesTable.isActive, true),
-            domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
           ))
           .limit(1);
       } else {
-        // A company may have several stores, while the public hostname does
-        // not carry a store slug. Prefer the populated store so a newly
-        // provisioned empty "principal" store does not hide the real catalog.
-        const [candidate] = await db.select({ id: schema.storesTable.id })
-          .from(schema.storesTable)
-          .leftJoin(
-            schema.productsTable,
-            and(
-              eq(schema.productsTable.storeId, schema.storesTable.id),
-              eq(schema.productsTable.isActive, true),
-            ),
-          )
-          .where(and(
-            eq(schema.storesTable.isActive, true),
-            domain ? eq(schema.storesTable.platformTenantId, domain.tenantId) : undefined,
-          ))
-          .groupBy(schema.storesTable.id)
-          .orderBy(desc(sql`count(${schema.productsTable.id})`), asc(schema.storesTable.id))
+        [store] = await db.select().from(schema.storesTable)
+          .where(eq(schema.storesTable.isActive, true))
+          .orderBy(asc(schema.storesTable.id))
           .limit(1);
-
-        if (candidate) {
-          [store] = await db.select().from(schema.storesTable)
-            .where(eq(schema.storesTable.id, candidate.id))
-            .limit(1);
-        }
       }
 
       if (!store) {
