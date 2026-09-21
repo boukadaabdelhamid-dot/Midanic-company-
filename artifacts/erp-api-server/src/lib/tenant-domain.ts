@@ -101,7 +101,13 @@ export async function resolvePlatformTenantDomain(
       `${baseUrl}/api/internal/erp/domain/${encodeURIComponent(normalized)}`,
       { headers: { "X-Platform-Service-Secret": secret } },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("[tenant-domain] Platform domain lookup failed", {
+        hostname: normalized,
+        statusCode: response.status,
+      });
+      return null;
+    }
     const value = await response.json() as PlatformTenantDomain;
     if (
       value.hostname !== normalized ||
@@ -109,6 +115,14 @@ export async function resolvePlatformTenantDomain(
       !Number.isInteger(value.ownerUserId)
     ) {
       return null;
+    }
+    if (value.canAccess !== true) {
+      console.warn("[tenant-domain] Platform rejected tenant domain access", {
+        hostname: normalized,
+        tenantId: value.tenantId,
+        status: value.status,
+        domainStatus: value.domainStatus,
+      });
     }
     domainCache.set(normalized, { expiresAt: now + 5_000, value });
     return value;
