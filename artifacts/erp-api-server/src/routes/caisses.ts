@@ -160,11 +160,17 @@ router.get("/erp/caisses", authenticate, requireStaff, requireStore, requirePerm
       rows = await db.select().from(schema.caissesTable)
         .orderBy(desc(schema.caissesTable.kind), schema.caissesTable.id);
     } else {
-      // Non-admin staff: only their own caisse (no main, no colleagues').
+      // Non-admin staff: their own caisse plus the global main caisse as a
+      // read-only summary. Do not expose colleagues' personal caisses.
       rows = await db.select().from(schema.caissesTable)
         .where(and(
-          eq(schema.caissesTable.kind, "staff"),
-          eq(schema.caissesTable.ownerUserId, userId),
+          or(
+            eq(schema.caissesTable.kind, "main"),
+            and(
+              eq(schema.caissesTable.kind, "staff"),
+              eq(schema.caissesTable.ownerUserId, userId),
+            ),
+          ),
         ));
     }
 
