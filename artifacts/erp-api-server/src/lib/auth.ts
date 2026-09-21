@@ -52,8 +52,8 @@ export function verifyToken(token: string): JwtPayload {
 
 export function verifyPlatformSsoToken(token: string): PlatformSsoPayload {
   const secret =
-    process.env["PLATFORM_SSO_SECRET"] ??
     process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
     process.env["SESSION_SECRET"] ??
     process.env["JWT_SECRET"];
   if (!secret) {

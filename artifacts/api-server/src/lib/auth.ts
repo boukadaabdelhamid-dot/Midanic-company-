@@ -31,8 +31,8 @@ export function generateErpSsoToken(payload: {
   hostname: string;
 }): string {
   const ssoSecret =
-    process.env.PLATFORM_SSO_SECRET ??
     process.env.PLATFORM_SERVICE_SECRET ??
+    process.env.PLATFORM_SSO_SECRET ??
     ACCESS_TOKEN_SECRET;
   return jwt.sign(
     { ...payload, aud: "erp", purpose: "sso" },
