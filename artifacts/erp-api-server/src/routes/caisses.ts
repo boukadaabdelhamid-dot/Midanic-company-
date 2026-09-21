@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, or, desc, inArray, gte, lt, sql } from "drizzle-orm";
 import { db, schema } from "../lib/db";
-import { authenticate, requireStaff, requireStore, requireAdmin, isAdmin, requirePermission, type AuthRequest } from "../lib/auth";
+import { authenticate, requireStaff, requireStore, requireTenantAdmin, isAdmin, requirePermission, type AuthRequest } from "../lib/auth";
 import { broadcastToStoreUsers, broadcastToUsers, broadcastCaisseChanged } from "../lib/ws";
 import { applyCaisseDelta, lockCaissesById } from "../lib/balance-sync";
 
@@ -37,6 +37,12 @@ async function userHasStoreAccess(req: AuthRequest, storeId: number): Promise<bo
 async function adminHasStoreAccess(req: AuthRequest, storeId: number): Promise<boolean> {
   if (!isAdmin(req)) return false;
   return userHasStoreAccess(req, storeId);
+}
+
+// A company owner is a caisse administrator inside the isolated tenant, but
+// is deliberately not a global platform admin.
+function isCaisseAdmin(req: AuthRequest): boolean {
+  return isAdmin(req) || req.user?.role === "tenant_admin";
 }
 
 /**
@@ -131,7 +137,7 @@ async function transferWasHeld(transferId: number): Promise<boolean> {
 // only view/act on their own personal caisse.
 async function canSeeCaisse(req: AuthRequest, c: { ownerUserId: number | null }): Promise<boolean> {
   if (!req.user) return false;
-  if (isAdmin(req)) return true;
+  if (isCaisseAdmin(req)) return true;
   return c.ownerUserId !== null && c.ownerUserId === req.user.id;
 }
 
@@ -155,8 +161,8 @@ router.get("/erp/caisses", authenticate, requireStaff, requireStore, requirePerm
     await ensureCaisse(storeId, userId);
 
     let rows: Array<typeof schema.caissesTable.$inferSelect>;
-    if (isAdmin(req)) {
-      // Global model: admins see every caisse (the single main + all staff).
+    if (isCaisseAdmin(req)) {
+      // Company/platform admins see every caisse in this isolated ERP database.
       rows = await db.select().from(schema.caissesTable)
         .orderBy(desc(schema.caissesTable.kind), schema.caissesTable.id);
     } else {
@@ -196,7 +202,7 @@ router.get("/erp/caisses", authenticate, requireStaff, requireStore, requirePerm
 // the next midnight as the exclusive upper bound). Example:
 // from=2026-05-01&to=2026-05-01 covers all of May 1st;
 // from=2026-05-01&to=2026-05-03 covers May 1st through May 3rd.
-router.get("/erp/caisses/reports", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.get("/erp/caisses/reports", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const { from: fromRaw, to: toRaw } = req.query as Record<string, string | undefined>;
@@ -386,7 +392,7 @@ router.get("/erp/caisse-transfers", authenticate, requireStaff, requireStore, as
     const myCaisse = await ensureCaisse(storeId, userId);
 
     const conditions = [eq(schema.caisseTransfersTable.storeId, storeId)];
-    if (!isAdmin(req)) {
+    if (!isCaisseAdmin(req)) {
       conditions.push(or(
         eq(schema.caisseTransfersTable.senderCaisseId, myCaisse.id),
         eq(schema.caisseTransfersTable.recipientCaisseId, myCaisse.id),
@@ -457,7 +463,7 @@ router.post("/erp/caisse-transfers", authenticate, requireStaff, requireStore, a
     let senderCaisse: typeof schema.caissesTable.$inferSelect;
     const hasSenderOverride = senderCaisseIdRaw !== undefined && senderCaisseIdRaw !== null && senderCaisseIdRaw !== "";
     if (hasSenderOverride) {
-      if (!isAdmin(req)) {
+      if (!isCaisseAdmin(req)) {
         res.status(403).json({ error: "Only admins can send from the main caisse" }); return;
       }
       const sid = Number(senderCaisseIdRaw);
@@ -549,7 +555,7 @@ router.post("/erp/caisse-transfers/:id/accept", authenticate, requireStaff, requ
     // Authorization: the recipient owner, or — for the main caisse — any
     // admin of the store.
     const canDecide = recipientCaisse.kind === "main"
-      ? isAdmin(req)
+      ? isCaisseAdmin(req)
       : recipientCaisse.ownerUserId === userId;
     if (!canDecide) {
       res.status(403).json({ error: "Only the recipient can accept" }); return;
@@ -656,7 +662,7 @@ router.post("/erp/caisse-transfers/:id/reject", authenticate, requireStaff, requ
       .where(eq(schema.caissesTable.id, t.recipientCaisseId)).limit(1);
     if (!recipientCaisse) { res.status(404).json({ error: "Recipient caisse not found" }); return; }
     const canDecide = recipientCaisse.kind === "main"
-      ? isAdmin(req)
+      ? isCaisseAdmin(req)
       : recipientCaisse.ownerUserId === userId;
     if (!canDecide) {
       res.status(403).json({ error: "Only the recipient can reject" }); return;
@@ -760,7 +766,7 @@ router.post("/erp/caisse-transfers/:id/cancel", authenticate, requireStaff, requ
 // Body: { caisseId, amount, notes? } — moves money from a staff caisse
 // into the store's main caisse. Admin only; caisse must be in a store
 // the admin has membership in.
-router.post("/erp/caisses/admin/deposit", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.post("/erp/caisses/admin/deposit", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
     const caisseIdRaw = Number(req.body?.caisseId);
@@ -771,7 +777,7 @@ router.post("/erp/caisses/admin/deposit", authenticate, requireAdmin, requireSto
     const c = await loadCaisseOr404(caisseIdRaw);
     if (!c) { res.status(404).json({ error: "Caisse not found" }); return; }
     if (c.kind !== "staff") { res.status(400).json({ error: "Source must be a staff caisse" }); return; }
-    // Global caisses are org-wide: any admin (enforced by requireAdmin) may operate.
+      // Global caisses are org-wide: any company/platform caisse admin may operate.
     const main = await ensureCaisse(c.storeId, null);
     const amountStr = amount.toFixed(2);
     const notes = typeof req.body?.notes === "string" ? req.body.notes : null;
@@ -818,7 +824,7 @@ router.post("/erp/caisses/admin/deposit", authenticate, requireAdmin, requireSto
 });
 
 // ─── Admin: withdraw (main → caisse) ───────────────────────────────
-router.post("/erp/caisses/admin/withdraw", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.post("/erp/caisses/admin/withdraw", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
     const caisseIdRaw = Number(req.body?.caisseId);
@@ -829,7 +835,7 @@ router.post("/erp/caisses/admin/withdraw", authenticate, requireAdmin, requireSt
     const c = await loadCaisseOr404(caisseIdRaw);
     if (!c) { res.status(404).json({ error: "Caisse not found" }); return; }
     if (c.kind !== "staff") { res.status(400).json({ error: "Destination must be a staff caisse" }); return; }
-    // Global caisses are org-wide: any admin (enforced by requireAdmin) may operate.
+      // Global caisses are org-wide: any company/platform caisse admin may operate.
     const main = await ensureCaisse(c.storeId, null);
     const amountStr = amount.toFixed(2);
     const notes = typeof req.body?.notes === "string" ? req.body.notes : null;
@@ -880,7 +886,7 @@ router.post("/erp/caisses/admin/withdraw", authenticate, requireAdmin, requireSt
 // reads the current balance, computes the signed delta, and records an
 // "adjustment" movement with an auto-generated "Ancien: X → Nouveau: Y" note
 // (same shape as /erp/suppliers/:id/adjust and /erp/customers/:id/adjust).
-router.post("/erp/caisses/admin/adjust", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.post("/erp/caisses/admin/adjust", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
     const caisseIdRaw = Number(req.body?.caisseId);
@@ -895,7 +901,7 @@ router.post("/erp/caisses/admin/adjust", authenticate, requireAdmin, requireStor
 
     const c = await loadCaisseOr404(caisseIdRaw);
     if (!c) { res.status(404).json({ error: "Caisse not found" }); return; }
-    // Global caisses are org-wide: any admin (enforced by requireAdmin) may operate.
+    // Global caisses are org-wide: any company/platform caisse admin may operate.
 
     const movement = await db.transaction(async (tx) => {
       // Row-lock the caisse for the whole read-compute-write so two concurrent
@@ -1127,7 +1133,7 @@ router.get("/erp/caisse-transfer-recipients", authenticate, requireStaff, requir
         inArray(schema.usersTable.role, ["admin", "employee"]),
       ))
       .orderBy(schema.usersTable.name);
-    const includeMe = req.query.includeMe === "true" && isAdmin(req);
+    const includeMe = req.query.includeMe === "true" && isCaisseAdmin(req);
     res.json(includeMe ? rows : rows.filter(r => r.id !== userId));
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });

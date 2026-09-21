@@ -1,7 +1,7 @@
 import { getGetMeQueryKey, useGetMe } from "@workspace/erp-api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 
-export type Role = "admin" | "employee" | "customer";
+export type Role = "admin" | "tenant_admin" | "employee" | "customer";
 
 export function useMe() {
   const { token } = useAuth();
@@ -12,9 +12,11 @@ export function useMe() {
   return {
     user: data ?? null,
     role,
-    isAdmin: role === "admin",
+    // In the ERP UI, a tenant owner is an administrator of their company.
+    // The API still distinguishes this from the global platform admin.
+    isAdmin: role === "admin" || role === "tenant_admin",
     isEmployee: role === "employee",
-    isStaff: role === "admin" || role === "employee",
+    isStaff: role === "admin" || role === "tenant_admin" || role === "employee",
     isLoading: !!token && isLoading,
   };
 }
