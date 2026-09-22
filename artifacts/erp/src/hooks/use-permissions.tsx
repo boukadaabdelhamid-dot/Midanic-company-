@@ -19,6 +19,7 @@ export type PermSection =
   | "attendance"
   | "leaves"
   | "accounting"
+  | "reports"
   | "web_store"
   | "alerts"
   | "transfers";

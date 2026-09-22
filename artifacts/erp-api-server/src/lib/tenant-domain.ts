@@ -11,6 +11,8 @@ export type PlatformTenantDomain = {
   status: string;
   domainStatus: string;
   databaseStatus: string;
+  featureFlags?: Record<string, boolean>;
+  maxStores?: number | null;
   canAccess: boolean;
 };
 

@@ -51,13 +51,18 @@ type NavGroup = {
 
 type NavEntry = NavItem | NavGroup;
 
+function featureForSection(section: PermSection): string {
+  if (section === "employees" || section === "attendance" || section === "leaves") return "hr";
+  return section;
+}
+
 const navEntries: NavEntry[] = [
   { href: "/home", icon: Home, labelEn: "Home", labelAr: "الرئيسية" },
   { href: "/mon-compte", icon: User, labelEn: "Mon Compte", labelAr: "حسابي" },
   { href: "/dashboard", icon: LayoutDashboard, labelEn: "Dashboard", labelAr: "لوحة التحكم", section: "dashboard" },
   { href: "/realtime", icon: Activity, labelEn: "Temps Réel", labelAr: "الوقت الفعلي", section: "realtime" },
   { href: "/caisse", icon: Wallet, labelEn: "Caisses", labelAr: "الصناديق", section: "caisse" },
-  { href: "/caisse/reports", icon: BarChart2, labelEn: "Rapport caisses", labelAr: "تقرير الصناديق", adminOnly: true },
+  { href: "/caisse/reports", icon: BarChart2, labelEn: "Rapport caisses", labelAr: "تقرير الصناديق", adminOnly: true, section: "caisse" },
   {
     group: true,
     icon: ShoppingCart,
@@ -79,13 +84,13 @@ const navEntries: NavEntry[] = [
   { href: "/customers", icon: UserCheck, labelEn: "Clients", labelAr: "العملاء", section: "customers" },
   { href: "/suppliers", icon: Truck, labelEn: "Fournisseurs", labelAr: "الموردون", section: "suppliers" },
   { href: "/employees", icon: Users, labelEn: "Employés", labelAr: "الموظفون", section: "employees" },
-  { href: "/staff", icon: Shield, labelEn: "Accès / Staff", labelAr: "إدارة الحسابات", adminOnly: true },
+  { href: "/staff", icon: Shield, labelEn: "Accès / Staff", labelAr: "إدارة الحسابات", adminOnly: true, section: "employees" },
   { href: "/permissions", icon: KeyRound, labelEn: "Permissions", labelAr: "الصلاحيات", adminOnly: true },
-  { href: "/stores", icon: StoreIcon, labelEn: "Magasins", labelAr: "المتاجر", adminOnly: true },
+  { href: "/stores", icon: StoreIcon, labelEn: "Magasins", labelAr: "المتاجر", adminOnly: true, section: "settings" },
   { href: "/attendance", icon: Clock, labelEn: "Présences", labelAr: "الحضور", section: "attendance" },
   { href: "/leaves", icon: Calendar, labelEn: "Congés", labelAr: "الإجازات", section: "leaves" },
   { href: "/accounting", icon: CreditCard, labelEn: "Comptabilité", labelAr: "المحاسبة", section: "accounting" },
-  { href: "/reports", icon: TrendingUp, labelEn: "Rapports", labelAr: "التقارير", adminOnly: true },
+  { href: "/reports", icon: TrendingUp, labelEn: "Rapports", labelAr: "التقارير", adminOnly: true, section: "reports" },
   {
     group: true,
     icon: Settings,
@@ -254,12 +259,13 @@ function useAlertsBadgeCount(): number {
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { isAdmin, user } = useMe();
+  const { isAdmin, user, features } = useMe();
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const userId = (user as { id?: number | string } | null)?.id ?? null;
   const { can } = usePermissions();
   const visibleEntries = navEntries.filter((it) => {
+    if (it.section && features[featureForSection(it.section)] === false) return false;
     if (it.adminOnly && !isAdmin) return false;
     if ("group" in it) {
       if (it.section && !isAdmin) return can(it.section, "view");
@@ -330,8 +336,9 @@ export function Sidebar() {
           if ("group" in entry) {
             const { icon: Icon, labelEn, labelAr, children } = entry;
             const visibleChildren = isAdmin
-              ? children
+              ? children.filter((child) => !child.section || features[featureForSection(child.section)] !== false)
               : children.filter((child) => {
+                  if (child.section && features[featureForSection(child.section)] === false) return false;
                   if (child.adminOnly) return false;
                   if (!child.permAction) return true;
                   if (!entry.section) return true;

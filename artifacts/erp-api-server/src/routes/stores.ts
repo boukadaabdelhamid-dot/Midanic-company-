@@ -124,6 +124,27 @@ router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthReq
       res.status(400).json({ error: "nameAr, nameEn, slug required" });
       return;
     }
+    const configuredMaxStores = req.tenantFeatures?.maxStores;
+    if (typeof configuredMaxStores === "number" && Number.isInteger(configuredMaxStores)) {
+      const [{ count: currentStoreCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.storesTable)
+        .where(and(
+          eq(schema.storesTable.isActive, true),
+          req.user!.platformTenantId === undefined
+            ? undefined
+            : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+        ));
+      if (Number(currentStoreCount) >= configuredMaxStores) {
+        res.status(409).json({
+          error: `This company has reached its store limit (${configuredMaxStores})`,
+          code: "STORE_LIMIT_REACHED",
+          maxStores: configuredMaxStores,
+          currentStores: Number(currentStoreCount),
+        });
+        return;
+      }
+    }
     const cleanSlug = String(slug).trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
     const dup = await db.select({ id: schema.storesTable.id })
       .from(schema.storesTable).where(eq(schema.storesTable.slug, cleanSlug)).limit(1);

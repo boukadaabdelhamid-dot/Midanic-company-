@@ -1300,6 +1300,52 @@ app.get("/api/internal/erp/health/:tenantId", async (req, res): Promise<void> =>
   }
 });
 
+// Platform Admin uses this service-only endpoint for the live store usage
+// displayed beside each ERP tenant. The count must come from the tenant
+// database, not from Platform's control-plane tables.
+app.get("/api/internal/erp/store-summary/:tenantId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenantId = Number(req.params.tenantId);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+
+  try {
+    const registered = await resolvePlatformTenantDatabase(tenantId);
+    if (!registered || registered.databaseStatus !== "ready" || !registered.databaseName) {
+      res.status(409).json({ error: "ERP tenant database is not ready" });
+      return;
+    }
+    if (registered.databaseName !== `erp_tenant_${tenantId}`) {
+      res.status(409).json({ error: "ERP tenant database registry mismatch" });
+      return;
+    }
+
+    const tenantPool = getTenantDatabasePool(registered.databaseName);
+    const result = await tenantPool.query<{ current_stores: string | number }>(
+      `SELECT COUNT(*)::int AS current_stores
+       FROM stores
+       WHERE is_active = TRUE AND platform_tenant_id = $1`,
+      [tenantId],
+    );
+    res.json({
+      tenantId,
+      currentStores: Number(result.rows[0]?.current_stores ?? 0),
+    });
+  } catch (error) {
+    logger.error({ err: error, tenantId }, "ERP tenant store summary failed");
+    res.status(503).json({ error: "ERP tenant store summary unavailable" });
+  }
+});
+
 app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
   const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
     process.env["PLATFORM_SSO_SECRET"] ??

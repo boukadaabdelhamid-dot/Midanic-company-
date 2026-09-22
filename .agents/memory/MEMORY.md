@@ -15,10 +15,12 @@
 - [Railway monorepo builds](railway-monorepo-builds.md) — Railway service Dockerfiles use the repository root as context; never clone a stale external repository during builds
 - [Railway redeploy verification](railway-redeploy-verification.md) — A current GitHub commit does not prove Railway deployed it; compare live HTML asset hashes and verify the service trigger separately
 - [ERP route corruption check](erp-route-corruption-check.md) — Syntax errors at line 1 in ERP routes can indicate committed source truncation; inspect file beginnings before debugging downstream code
-- [GitHub sync path](github-sync-path.md) — Local Git may expose only GitSafe; use the connected GitHub proxy for repository pushes
+- [GitHub sync path](github-sync-path.md) — Use the GitHub proxy and a regular-shell tree snapshot; CodeExecution git output can create false path diffs
 - [Customer profile saves](customer-profile-saves.md) — Profile edits preserve canonical balances and return the store-scoped detail after an atomic update
 - [Mixed-language UI prevention](mixed-language-ui.md) — Any visible JSX literal bypasses the active locale, including decorative dashboard previews and admin controls
 - [Railway wildcard DNS validation](railway-wildcard-dns-validation.md) — Cloudflare-proxied wildcard and ACME CNAMEs hide Railway targets; use DNS-only until ownership and TLS validate
 - [ERP tenant database reconciliation](erp-tenant-database-reconciliation.md) — active legacy tenants may lack dedicated databases; reconcile only unprovisioned/interrupted records idempotently at startup
 - [Tenant-admin route boundary](tenant-admin-route-boundary.md) — company owners use tenant-aware authorization; never expose or seed the global platform admin in tenant data
 - [Public Web Store tenant routing](public-web-store-tenant-routing.md) — anonymous storefront requests must resolve the hostname through Platform before selecting the tenant database
+- [Railway custom-domain targets](railway-custom-domain-targets.md) — validate Cloudflare CNAMEs against Railway domainStatus; custom domains may use random Railway targets rather than service-domain names
+- [ERP password authority](erp-password-authority.md) — linked ERP accounts must use Platform as the sole password authority; never accept a stale local hash as fallback

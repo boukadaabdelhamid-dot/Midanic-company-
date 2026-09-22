@@ -9,9 +9,13 @@ export function useMe() {
     query: { queryKey: getGetMeQueryKey(), enabled: !!token, staleTime: 60_000, retry: false },
   });
   const role = (data?.role ?? null) as Role | null;
+  const features = (data as (typeof data & {
+    features?: Record<string, boolean | number | null>;
+  }) | undefined)?.features ?? {};
   return {
     user: data ?? null,
     role,
+    features,
     // In the ERP UI, a tenant owner is an administrator of their company.
     // The API still distinguishes this from the global platform admin.
     isAdmin: role === "admin" || role === "tenant_admin",

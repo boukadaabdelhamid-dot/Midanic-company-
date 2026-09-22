@@ -59,6 +59,11 @@ function is401(error: unknown): boolean {
   );
 }
 
+function featureForSection(section: PermSection): string {
+  if (section === "employees" || section === "attendance" || section === "leaves") return "hr";
+  return section;
+}
+
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error) => { if (is401(error)) forceLogout("expired"); },
@@ -85,7 +90,7 @@ function ProtectedRoute({
 }) {
   const { token, logout } = useAuth();
   const { currentStoreId } = useStoreContext();
-  const { isAdmin, isStaff, role, isLoading, user } = useMe();
+  const { isAdmin, isStaff, role, isLoading, user, features } = useMe();
   const { can, isLoaded: permsLoaded } = usePermissions();
   // Customer accounts are the normal Midanic ERP audience. Access is
   // enforced by the platform API; do not treat the customer role as a staff
@@ -96,6 +101,7 @@ function ProtectedRoute({
   const stores = (user as { stores?: unknown[] } | null)?.stores ?? [];
   if (!currentStoreId && stores.length > 0) return <Redirect to="/select-store" />;
   if (adminOnly && !isAdmin) return <Redirect to="/home" />;
+  if (section && features[featureForSection(section)] === false) return <Redirect to="/home" />;
   if (section && !isAdmin) {
     if (!permsLoaded) return <Layout><div className="p-6 text-sm text-muted-foreground">…</div></Layout>;
     if (!can(section, "view")) return <Redirect to="/home" />;
@@ -178,7 +184,7 @@ function Router() {
         {token ? <Redirect to="/home" /> : <Redirect to="/login" />}
       </Route>
       <Route path="/stores">
-        <ProtectedRoute component={Stores} adminOnly />
+        <ProtectedRoute component={Stores} adminOnly section="settings" />
       </Route>
       <Route path="/home">
         <ProtectedHome />
@@ -244,10 +250,10 @@ function Router() {
         <ProtectedRoute component={Permissions} adminOnly />
       </Route>
       <Route path="/reports">
-        <ProtectedRoute component={Reports} adminOnly />
+        <ProtectedRoute component={Reports} adminOnly section="reports" />
       </Route>
       <Route path="/caisse/reports">
-        <ProtectedRoute component={CaisseReports} adminOnly />
+        <ProtectedRoute component={CaisseReports} adminOnly section="caisse" />
       </Route>
       <Route path="/caisse">
         <ProtectedRoute component={Caisse} section="caisse" />

@@ -79,6 +79,7 @@ export interface User {
   preferredLang?: UserPreferredLang;
   stores?: Store[];
   currentStoreId?: number | null;
+  features?: Record<string, boolean | number | null>;
 }
 
 export interface AuthResponse {

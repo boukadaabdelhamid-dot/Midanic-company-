@@ -1,6 +1,14 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, usersTable, erpTenantsTable, passwordResetTokensTable, refreshTokensTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  erpTenantsTable,
+  passwordResetTokensTable,
+  refreshTokensTable,
+  defaultErpFeatureFlags,
+  customerEntitlementsTable,
+} from "@workspace/db";
 import { and, eq, isNotNull, lt, desc, or } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -556,8 +564,14 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       webStoreHostname: erpTenantsTable.webStoreHostname,
       domainStatus: erpTenantsTable.domainStatus,
       databaseStatus: erpTenantsTable.databaseStatus,
+      featureFlags: erpTenantsTable.featureFlags,
+      maxStores: customerEntitlementsTable.maxStores,
     })
     .from(erpTenantsTable)
+    .leftJoin(
+      customerEntitlementsTable,
+      eq(erpTenantsTable.ownerUserId, customerEntitlementsTable.userId),
+    )
     .where(or(
       eq(erpTenantsTable.hostname, hostname),
       eq(erpTenantsTable.webStoreHostname, hostname),
@@ -585,6 +599,11 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
     status,
     domainStatus: tenant.domainStatus,
     databaseStatus: tenant.databaseStatus,
+    featureFlags: {
+      ...defaultErpFeatureFlags,
+      ...(tenant.featureFlags ?? {}),
+    },
+    maxStores: tenant.maxStores ?? null,
     canAccess,
   });
 });

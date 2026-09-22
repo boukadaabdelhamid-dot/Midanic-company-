@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "crypto";
 import {
   resolvePlatformTenantDatabase,
+  resolvePlatformTenantDomain,
   tenantStoreMatches,
   verifyTenantDomainRequest,
   type TenantDomainRequest,
@@ -99,16 +100,61 @@ export interface AuthRequest extends Request {
   currentStoreId?: number;
   isPlatformService?: boolean;
   tenantFeatures?: Record<string, unknown>;
+  featureDisabled?: string;
 }
 
-export async function enforcePlatformAccess(req: TenantDomainRequest, user: JwtPayload): Promise<boolean> {
+export async function enforcePlatformAccess(
+  req: AuthRequest | TenantDomainRequest,
+  user: JwtPayload,
+): Promise<boolean> {
   if (!user.platformUserId) return process.env["NODE_ENV"] !== "production";
   if (!user.platformTenantId || !user.tenantHostname) return false;
-  return verifyTenantDomainRequest(req, {
+  const allowed = await verifyTenantDomainRequest(req, {
     hostname: user.tenantHostname,
     tenantId: user.platformTenantId,
     ownerUserId: user.platformUserId,
   });
+  if (!allowed) return false;
+
+  // Platform is the source of truth for tenant feature access. Keep the
+  // resolved flags on the request so /auth/me and route guards use the same
+  // server-side decision as the hostname check.
+  const featureRequest = req as AuthRequest;
+  const domain = await resolvePlatformTenantDomain(user.tenantHostname);
+  if (domain?.tenantId === user.platformTenantId && domain.ownerUserId === user.platformUserId) {
+    featureRequest.tenantFeatures = {
+      ...(domain.featureFlags ?? {}),
+      maxStores: domain.maxStores ?? null,
+    };
+    const disabledFeature = featureForRequestPath(
+      "originalUrl" in req ? req.originalUrl : undefined,
+    );
+    if (disabledFeature && featureRequest.tenantFeatures?.[disabledFeature] === false) {
+      featureRequest.featureDisabled = disabledFeature;
+    }
+  }
+  return true;
+}
+
+function featureForRequestPath(path: string | undefined): string | null {
+  const value = path ?? "";
+  const rules: Array<[RegExp, string]> = [
+    [/\/erp\/products(?:\/|$)/, "products"],
+    [/\/erp\/(orders|cart)(?:\/|$)/, "orders"],
+    [/\/erp\/(purchase-orders|purchases)(?:\/|$)/, "purchases"],
+    [/\/erp\/inventory(?:\/|$)/, "inventory"],
+    [/\/erp\/customers(?:\/|$)/, "customers"],
+    [/\/erp\/suppliers(?:\/|$)/, "suppliers"],
+    [/\/erp\/(employees|attendance|leaves|staff)(?:\/|$)/, "hr"],
+    [/\/erp\/accounting(?:\/|$)/, "accounting"],
+    [/\/erp\/reports(?:\/|$)/, "reports"],
+    [/\/erp\/transfers(?:\/|$)/, "transfers"],
+    [/\/erp\/caisses(?:\/|$)/, "caisse"],
+    [/\/erp\/alerts(?:\/|$)/, "alerts"],
+    [/\/erp\/(settings|stores)(?:\/|$)/, "settings"],
+    [/\/erp\/.*web-store|\/web-store(?:\/|$)/, "web_store"],
+  ];
+  return rules.find(([pattern]) => pattern.test(value))?.[1] ?? null;
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
@@ -141,6 +187,13 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       res.status(403).json({
         error: "ERP tenant domain is unknown, inactive, or does not match this session",
         code: "TENANT_DOMAIN_MISMATCH",
+      });
+      return;
+    }
+    if (req.featureDisabled) {
+      res.status(403).json({
+        error: "This ERP feature is disabled for the company",
+        code: "FEATURE_DISABLED",
       });
       return;
     }
@@ -216,6 +269,21 @@ export function requireTenantAdmin(req: AuthRequest, res: Response, next: NextFu
     return;
   }
   next();
+}
+
+/**
+ * Enforce a company-level feature flag after authenticate. Undefined flags are
+ * allowed for legacy/local ERP accounts; Platform-managed tenants receive the
+ * complete flag set from the Platform domain lookup.
+ */
+export function requireFeature(feature: string) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (req.tenantFeatures && req.tenantFeatures[feature] === false) {
+      res.status(403).json({ error: "This ERP feature is disabled for the company", code: "FEATURE_DISABLED" });
+      return;
+    }
+    next();
+  };
 }
 
 /**
@@ -332,6 +400,13 @@ export async function optionalAuth(req: AuthRequest, res: Response, next: NextFu
         });
         return;
       }
+      if (req.featureDisabled) {
+        res.status(403).json({
+          error: "This ERP feature is disabled for the company",
+          code: "FEATURE_DISABLED",
+        });
+        return;
+      }
       if (typeof req.user.currentStoreId === "number") {
         req.currentStoreId = req.user.currentStoreId;
       }
@@ -434,6 +509,13 @@ export async function optionalAuthStrict(req: AuthRequest, res: Response, next: 
         res.status(403).json({
           error: "ERP tenant domain is unknown, inactive, or does not match this session",
           code: "TENANT_DOMAIN_MISMATCH",
+        });
+        return;
+      }
+      if (req.featureDisabled) {
+        res.status(403).json({
+          error: "This ERP feature is disabled for the company",
+          code: "FEATURE_DISABLED",
         });
         return;
       }
