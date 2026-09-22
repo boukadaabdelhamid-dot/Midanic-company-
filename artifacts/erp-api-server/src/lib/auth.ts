@@ -22,6 +22,26 @@ function resolveJwtSecret(): string {
 
 const JWT_SECRET: string = resolveJwtSecret();
 
+export async function updatePlatformPassword(userId: number, newPassword: string): Promise<void> {
+  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!baseUrl || !secret) throw new Error("Platform credential sync is not configured");
+
+  const response = await fetch(`${baseUrl}/api/internal/erp/credentials/${userId}/password`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Platform-Service-Secret": secret,
+    },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!response.ok) {
+    throw new Error(`Platform password update failed (${response.status})`);
+  }
+}
+
 export type JwtPayload = {
   id: number;
   email: string;

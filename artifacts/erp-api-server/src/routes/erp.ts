@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { eq, desc, asc, sql, and, gt, ne, or, inArray, isNull, notLike, ilike } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, type AuthRequest } from "../lib/auth";
+import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, updatePlatformPassword, type AuthRequest } from "../lib/auth";
 import { broadcastToAdmins, broadcastCaisseChanged } from "../lib/ws";
 import { ensureCaisse } from "./caisses";
 import {
@@ -5112,12 +5112,24 @@ router.put("/erp/staff/:id/password", authenticate, requireTenantAdmin, async (r
       res.status(400).json({ error: "Password must be at least 6 characters" });
       return;
     }
-    const [target] = await db.select({ role: schema.usersTable.role })
+    const [target] = await db.select({
+      role: schema.usersTable.role,
+      platformUserId: schema.usersTable.platformUserId,
+    })
       .from(schema.usersTable).where(eq(schema.usersTable.id, targetId)).limit(1);
     if (!target) { res.status(404).json({ error: "Staff not found" }); return; }
     if (target.role === "customer") {
       res.status(400).json({ error: "Not a staff account" });
       return;
+    }
+    if (target.platformUserId) {
+      try {
+        await updatePlatformPassword(target.platformUserId, password);
+      } catch (syncError) {
+        req.log.error({ err: syncError }, "Platform password update unavailable during staff password reset");
+        res.status(503).json({ error: "Platform password service is unavailable" });
+        return;
+      }
     }
     const passwordHash = await bcrypt.hash(password, 10);
     await db.update(schema.usersTable)
