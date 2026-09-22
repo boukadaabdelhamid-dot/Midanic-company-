@@ -43,6 +43,26 @@ async function getPlatformCredentials(userId: number): Promise<PlatformCredentia
   return await response.json() as PlatformCredentials;
 }
 
+async function updatePlatformPassword(userId: number, newPassword: string): Promise<void> {
+  const baseUrl = process.env["PLATFORM_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!baseUrl || !secret) throw new Error("Platform credential sync is not configured");
+
+  const response = await fetch(`${baseUrl}/api/internal/erp/credentials/${userId}/password`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Platform-Service-Secret": secret,
+    },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!response.ok) {
+    throw new Error(`Platform password update failed (${response.status})`);
+  }
+}
+
 router.post("/auth/sso/exchange", async (req, res) => {
   try {
     const rawToken = typeof req.body?.token === "string" ? req.body.token : "";
@@ -339,8 +359,8 @@ router.post("/auth/login", async (req, res) => {
       const [user] = await db.select().from(schema.usersTable)
         .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
       if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
-      let valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid && user.platformUserId) {
+      let valid = false;
+      if (user.platformUserId) {
         try {
           const platformCredentials = await getPlatformCredentials(user.platformUserId);
           valid = platformCredentials.isActive && await bcrypt.compare(password, platformCredentials.passwordHash);
@@ -356,6 +376,8 @@ router.post("/auth/login", async (req, res) => {
         } catch (syncError) {
           req.log.warn({ err: syncError }, "Platform credential sync unavailable during ERP login");
         }
+      } else {
+        valid = await bcrypt.compare(password, user.passwordHash);
       }
       if (!valid) { res.status(401).json({ error: "Invalid credentials" }); return; }
       if (!user.isActive) { res.status(403).json({ error: "Account disabled" }); return; }
@@ -505,9 +527,39 @@ router.put("/auth/me/password", authenticate, async (req: AuthRequest, res) => {
     }
     const [user] = await db.select().from(schema.usersTable).where(eq(schema.usersTable.id, req.user!.id)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    const valid = await bcrypt.compare(String(currentPassword), user.passwordHash);
+    let platformCredentials: PlatformCredentials | null = null;
+    if (user.platformUserId) {
+      try {
+        platformCredentials = await getPlatformCredentials(user.platformUserId);
+      } catch (syncError) {
+        req.log.error({ err: syncError }, "Platform credential lookup unavailable during password change");
+        res.status(503).json({ error: "Platform password service is unavailable" });
+        return;
+      }
+      if (!platformCredentials.isActive) {
+        res.status(403).json({ error: "Platform account is inactive" });
+        return;
+      }
+    }
+
+    const validLocal = await bcrypt.compare(String(currentPassword), user.passwordHash);
+    const validPlatform = platformCredentials
+      ? await bcrypt.compare(String(currentPassword), platformCredentials.passwordHash)
+      : false;
+    const valid = validLocal || validPlatform;
     if (!valid) { res.status(401).json({ error: "Current password is incorrect" }); return; }
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
+
+    if (platformCredentials) {
+      try {
+        await updatePlatformPassword(user.platformUserId!, String(newPassword));
+      } catch (syncError) {
+        req.log.error({ err: syncError }, "Platform password update unavailable");
+        res.status(503).json({ error: "Platform password service is unavailable" });
+        return;
+      }
+    }
+
     await db.update(schema.usersTable).set({ passwordHash }).where(eq(schema.usersTable.id, req.user!.id));
     res.json({ success: true });
   } catch (err) {

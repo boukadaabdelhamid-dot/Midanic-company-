@@ -405,6 +405,38 @@ router.get("/internal/erp/credentials/:userId", async (req, res): Promise<void> 
   res.json(user);
 });
 
+router.put("/internal/erp/credentials/:userId/password", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const userId = Number(req.params.userId);
+  const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+  if (!Number.isInteger(userId) || userId <= 0 || newPassword.length < 6) {
+    res.status(400).json({ error: "Invalid user id or password" });
+    return;
+  }
+
+  const [user] = await db.select({ id: usersTable.id, role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!user || user.role !== "customer") {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(usersTable)
+    .set({ passwordHash })
+    .where(eq(usersTable.id, userId));
+  res.json({ success: true });
+});
+
 router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<void> => {
   const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
     process.env["PLATFORM_SSO_SECRET"] ??
