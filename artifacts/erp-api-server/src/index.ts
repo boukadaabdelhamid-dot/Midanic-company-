@@ -1333,8 +1333,7 @@ app.get("/api/internal/erp/store-summary/:tenantId", async (req, res): Promise<v
     const result = await tenantPool.query<{ current_stores: string | number }>(
       `SELECT COUNT(*)::int AS current_stores
        FROM stores
-       WHERE is_active = TRUE AND platform_tenant_id = $1`,
-      [tenantId],
+       WHERE is_active = TRUE`,
     );
     res.json({
       tenantId,

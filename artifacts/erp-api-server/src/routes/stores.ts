@@ -129,12 +129,10 @@ router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthReq
       const [{ count: currentStoreCount }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.storesTable)
-        .where(and(
-          eq(schema.storesTable.isActive, true),
-          req.user!.platformTenantId === undefined
-            ? undefined
-            : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
-        ));
+        // Each Platform tenant has its own database. Counting inside that
+        // database is the tenant boundary and also handles legacy stores
+        // whose platform_tenant_id was not backfilled.
+        .where(eq(schema.storesTable.isActive, true));
       if (Number(currentStoreCount) >= configuredMaxStores) {
         res.status(409).json({
           error: `This company has reached its store limit (${configuredMaxStores})`,
