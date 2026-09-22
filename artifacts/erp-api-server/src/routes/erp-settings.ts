@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, and, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireStaff, requireStore, requirePermission, type AuthRequest } from "../lib/auth";
+import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, requirePermission, type AuthRequest } from "../lib/auth";
 import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
 const attributeSchema = z.object({
@@ -177,7 +177,7 @@ router.get("/erp/settings/products/types", authenticate, requireStaff, requirePe
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/types", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/types", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const parsed = typeAttributeSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" }); return; }
@@ -197,7 +197,7 @@ router.post("/erp/settings/products/types", authenticate, requireAdmin, async (r
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.put("/erp/settings/products/types/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.put("/erp/settings/products/types/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
     const parsed = typeAttributeSchema.safeParse(req.body);
@@ -221,7 +221,7 @@ router.put("/erp/settings/products/types/:id", authenticate, requireAdmin, async
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/erp/settings/products/types/:id", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.delete("/erp/settings/products/types/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");
     const inUse = await db.select({ id: schema.productsTable.id })
