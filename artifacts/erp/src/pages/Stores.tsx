@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import {
   useGetErpStores, useCreateErpStore, useUpdateErpStore, useDeleteErpStore,
-  getGetErpStoresQueryKey,
+  getGetErpStoresQueryKey, getGetMeQueryKey,
 } from "@workspace/erp-api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLang } from "@/hooks/use-lang";
+import { useStoreContext } from "@/hooks/use-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ export default function Stores() {
   const qc = useQueryClient();
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const { currentStoreId, setStores } = useStoreContext();
   const { data: stores, isLoading } = useGetErpStores();
   const create = useCreateErpStore();
   const update = useUpdateErpStore();
@@ -41,7 +43,13 @@ export default function Stores() {
   const [form, setForm] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetErpStoresQueryKey() });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: getGetErpStoresQueryKey() });
+    // The sidebar and the store switcher read their list from /auth/me.
+    // Refresh it after an admin creates or deletes a store so the current
+    // session does not keep showing a stale one-store list.
+    void qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+  };
 
   const handleSave = () => {
     setError(null);
@@ -68,7 +76,16 @@ export default function Stores() {
       });
     } else {
       create.mutate({ data: { ...payload, slug: form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") } }, {
-        onSuccess: () => { invalidate(); setOpen(false); setForm(empty); },
+        onSuccess: (created) => {
+          const nextStores = [
+            ...(stores ?? []).filter((store) => store.id !== created.id),
+            created,
+          ];
+          setStores(nextStores, currentStoreId);
+          invalidate();
+          setOpen(false);
+          setForm(empty);
+        },
         onError: (e: unknown) => setError((e as { message?: string })?.message ?? "Erreur"),
       });
     }
@@ -78,7 +95,10 @@ export default function Stores() {
     if (itemCount > 0) return;
     if (!confirm(t(`Supprimer ${name} ?`, `حذف ${name} ؟`))) return;
     del.mutate({ id }, {
-      onSuccess: invalidate,
+      onSuccess: () => {
+        setStores((stores ?? []).filter((store) => store.id !== id), currentStoreId);
+        invalidate();
+      },
       onError: (e: unknown) => alert((e as { message?: string })?.message ?? "Erreur"),
     });
   };
