@@ -841,7 +841,11 @@ async function runMigrations(targetPool: Pool = pool) {
   logger.info({ applied, skipped }, "DB migrations done.");
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
   await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
-  await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "stores_platform_tenant_id_uq" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
+  // A tenant database can contain multiple stores. Older deployments
+  // created a unique partial index here, which made the second store fail
+  // with a 500 before the configured maxStores limit could be evaluated.
+  await targetPool.query(`DROP INDEX IF EXISTS "erp"."stores_platform_tenant_id_uq"`);
+  await targetPool.query(`CREATE INDEX IF NOT EXISTS "stores_platform_tenant_id_idx" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
   await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
 }
 
