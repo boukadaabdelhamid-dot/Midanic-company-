@@ -46,12 +46,15 @@ function buildHtml(resetUrl: string): string {
 
 async function sendViaBrevoApi(options: SendResetEmailOptions): Promise<void> {
   const { to, resetUrl } = options;
-  const apiKey = process.env["BREVO_API_KEY"]!;
+  const apiKey = process.env["SMTP_API_BREVO"] ?? process.env["BREVO_API_KEY"];
+  if (!apiKey) {
+    throw new Error("Brevo API key is not configured");
+  }
   const smtpUser = process.env["SMTP_USER"];
-  const smtpFrom = process.env["SMTP_FROM"];
+  const smtpFrom = process.env["EMAIL_FROM"] ?? process.env["SMTP_FROM"];
   const sender = parseSender(smtpFrom ?? smtpUser);
 
-  console.log(`[email/brevo-api] BREVO_API_KEY prefix=${apiKey.substring(0, 12)}... sender=${JSON.stringify(sender)} to=${to}`);
+  console.log(`[email/brevo-api] sender=${JSON.stringify(sender)} to=${to}`);
 
   const body = JSON.stringify({
     sender,
@@ -130,12 +133,12 @@ async function sendViaSmtp(options: SendResetEmailOptions): Promise<void> {
 }
 
 export async function sendPasswordResetEmail(options: SendResetEmailOptions): Promise<void> {
-  const hasBrevoApi = !!process.env["BREVO_API_KEY"];
+  const hasBrevoApi = !!(process.env["SMTP_API_BREVO"] ?? process.env["BREVO_API_KEY"]);
   const hasSmtp = !!(process.env["SMTP_HOST"] && process.env["SMTP_USER"] && process.env["SMTP_PASS"]);
 
   if (!hasBrevoApi && !hasSmtp) {
     throw new Error(
-      "Email delivery is not configured. Set BREVO_API_KEY (preferred) or SMTP_HOST/SMTP_USER/SMTP_PASS."
+      "Email delivery is not configured. Set SMTP_API_BREVO (preferred) or SMTP_HOST/SMTP_USER/SMTP_PASS."
     );
   }
 
@@ -144,6 +147,6 @@ export async function sendPasswordResetEmail(options: SendResetEmailOptions): Pr
     return sendViaBrevoApi(options);
   }
 
-  console.log("[email] using SMTP transport (BREVO_API_KEY not set)");
+  console.log("[email] using SMTP transport (SMTP_API_BREVO not set)");
   return sendViaSmtp(options);
 }
