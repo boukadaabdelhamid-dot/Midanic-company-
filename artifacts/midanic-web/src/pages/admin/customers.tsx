@@ -56,7 +56,17 @@ function CustomerEditor({ customer, onSaved }: { customer: AdminCustomer; onSave
         <label className="space-y-1 text-sm"><span>{tAdmin('Last name')}</span><Input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} /></label>
       </div>
       <label className="space-y-1 text-sm block"><span>{tAdmin('Email')}</span><Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
-      <label className="space-y-1 text-sm block"><span>{tAdmin('Phone')}</span><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+       <label className="space-y-1 text-sm block">
+         <span>{tAdmin('WhatsApp')}</span>
+         <Input
+           type="tel"
+           inputMode="tel"
+           autoComplete="tel"
+           value={form.phone}
+           onChange={(e) => set('phone', e.target.value)}
+           placeholder="+213 555 12 34 56"
+         />
+       </label>
       <label className="space-y-1 text-sm block"><span>{tAdmin('Company')}</span><Input value={form.companyName} onChange={(e) => set('companyName', e.target.value)} /></label>
       <label className="space-y-1 text-sm block"><span>{tAdmin('Address')}</span><Textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={3} /></label>
       <Button className="w-full" onClick={save} disabled={saving}>{saving ? tAdmin('Saving…') : tAdmin('Save changes')}</Button>
@@ -193,7 +203,7 @@ export default function AdminCustomers() {
                <div className="flex flex-wrap gap-2"><Badge variant={selected.isActive ? 'default' : 'secondary'}>{selected.isActive ? tAdmin('Active') : tAdmin('Suspended')}</Badge><span className="text-xs text-muted-foreground self-center">{tAdmin('Registered')} {dateTime(selected.createdAt)} · {tAdmin('Last login')} {dateTime(selected.lastLoginAt)}</span></div>
                 <div className="flex flex-wrap gap-2"><Button variant="outline" asChild disabled={!selected.phone}><a href={selected.phone ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : undefined} target="_blank" rel="noreferrer"><MessageCircle className="mr-2 h-4 w-4" />WhatsApp</a></Button><Button variant="outline" asChild><a href={`mailto:${selected.email}`}><Mail className="mr-2 h-4 w-4" />{tAdmin('Email')}</a></Button><Button variant="secondary" onClick={() => toggleStatus(selected)}>{selected.isActive ? tAdmin('Suspend') : tAdmin('Activate')}</Button><Button onClick={() => createErpLink(selected)} disabled={!selected.isActive}>{erpLink ? tAdmin('Replace ERP link') : tAdmin('Grant ERP access')}</Button><Button variant="destructive" onClick={() => setDeleteCustomerOpen(true)}><Trash2 className="mr-2 h-4 w-4" />{tAdmin('Delete customer')}</Button></div>
                {erpLink && <div className="rounded-md border bg-muted/40 p-3 space-y-2"><p className="text-sm font-medium">{tAdmin('Permanent ERP login link')}</p><p className="text-xs text-muted-foreground">{tAdmin('This link opens the ERP login page and stays valid until you delete it. The customer signs in with the same email and password.')}</p>{erpLink.launchUrl ? <div className="flex flex-wrap gap-2"><Input className="min-w-0 flex-1" readOnly value={erpLink.launchUrl} onFocus={(event) => event.currentTarget.select()} /><Button variant="outline" onClick={() => navigator.clipboard.writeText(erpLink.launchUrl!)}>{tAdmin('Copy')}</Button><Button asChild><a href={erpLink.launchUrl} target="_blank" rel="noreferrer">{tAdmin('Open')}</a></Button><Button variant="destructive" onClick={() => deleteErpLink(selected)}>{tAdmin('Delete link')}</Button></div> : <div className="flex flex-wrap gap-2"><p className="text-xs text-muted-foreground self-center">{tAdmin('A permanent link is active. For security, its text is shown only when it is created.')}</p><Button variant="destructive" onClick={() => deleteErpLink(selected)}>{tAdmin('Delete link')}</Button></div>}</div>}
-              <CustomerEditor customer={selected} onSaved={(updated) => { setSelected(updated); setCustomers((current) => current.map((item) => item.id === updated.id ? updated : item)); }} />
+               <CustomerEditor key={selected.id} customer={selected} onSaved={(updated) => { setSelected(updated); setCustomers((current) => current.map((item) => item.id === updated.id ? updated : item)); }} />
             </div>
           </>}
         </SheetContent>
