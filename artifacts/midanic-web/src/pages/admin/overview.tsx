@@ -23,6 +23,7 @@ import { type MyErpAccess } from '@/lib/admin-api';
 import { useGetPublicStats } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminText } from '@/lib/admin-i18n';
+import { Link } from 'wouter';
 
 // ── colours for pie chart ────────────────────────────────────────────────────
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -46,11 +47,16 @@ function daysLeft(date: string | null): number | null {
 
 // ── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
-  label, value, icon: Icon, color, sub,
+  label, value, icon: Icon, color, sub, href,
 }: {
-  label: string; value: number | string; icon: React.ElementType; color: string; sub?: string;
+  label: string;
+  value: number | string;
+  icon: React.ElementType;
+  color: string;
+  sub?: string;
+  href?: string;
 }) {
-  return (
+  const card = (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -61,6 +67,20 @@ function StatCard({
         {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
       </CardContent>
     </Card>
+  );
+
+  if (!href) return card;
+
+  return (
+    <Link
+      href={href}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      aria-label={`${label}: ${value}`}
+    >
+      <div className="h-full transition-transform hover:-translate-y-0.5 hover:shadow-md">
+        {card}
+      </div>
+    </Link>
   );
 }
 
@@ -146,10 +166,10 @@ export default function AdminOverview() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats ? (
           <>
-            <StatCard label={tAdmin('Total Users')} value={stats.totalUsers} icon={Users} color="text-blue-500" />
-            <StatCard label={tAdmin('Total Products')} value={stats.totalProducts} icon={Package} color="text-green-500" />
-            <StatCard label={tAdmin('Active Licenses')} value={stats.activeLicenses} icon={Key} color="text-purple-500" />
-            <StatCard label={tAdmin('Open Tickets')} value={stats.openTickets} icon={Ticket} color="text-orange-500" />
+            <StatCard label={tAdmin('Total Users')} value={stats.totalUsers} icon={Users} color="text-blue-500" href="/admin/users" />
+            <StatCard label={tAdmin('Total Products')} value={stats.totalProducts} icon={Package} color="text-green-500" href="/admin/products" />
+            <StatCard label={tAdmin('Active Licenses')} value={stats.activeLicenses} icon={Key} color="text-purple-500" href="/admin/licenses" />
+            <StatCard label={tAdmin('Open Tickets')} value={stats.openTickets} icon={Ticket} color="text-orange-500" href="/admin/tickets" />
           </>
         ) : (
           Array.from({ length: 4 }).map((_, i) => (
@@ -168,6 +188,7 @@ export default function AdminOverview() {
               icon={Sparkles}
               color="text-blue-400"
               sub={tAdmin('licenses issued')}
+              href="/admin/licenses"
             />
             <StatCard
               label={tAdmin('Expiring in 30 Days')}
@@ -175,6 +196,7 @@ export default function AdminOverview() {
               icon={CalendarClock}
               color="text-yellow-500"
               sub={tAdmin('active licenses')}
+              href="/admin/licenses"
             />
             <StatCard
               label={tAdmin('Expiring Today')}
@@ -182,6 +204,7 @@ export default function AdminOverview() {
               icon={AlertTriangle}
               color={stats.expiringToday > 0 ? 'text-red-500' : 'text-muted-foreground'}
               sub={tAdmin('require immediate action')}
+              href="/admin/licenses"
             />
           </>
         ) : (
@@ -393,19 +416,26 @@ export default function AdminOverview() {
           </h2>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
-               { label: tAdmin('Published Products'), value: publicStats.totalProducts },
-               { label: tAdmin('Total Clients'), value: publicStats.totalClients },
-               { label: tAdmin('Total Downloads'), value: publicStats.totalDownloads },
-               { label: tAdmin('Countries'), value: publicStats.totalCountries },
-            ].map(({ label, value }) => (
-              <Card key={label} className="bg-muted/50">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{value.toLocaleString()}</div>
-                </CardContent>
-              </Card>
+               { label: tAdmin('Published Products'), value: publicStats.totalProducts, href: '/admin/products' },
+               { label: tAdmin('Total Clients'), value: publicStats.totalClients, href: '/admin/customers' },
+               { label: tAdmin('Total Downloads'), value: publicStats.totalDownloads, href: '/admin/products' },
+               { label: tAdmin('Countries'), value: publicStats.totalCountries, href: '/admin/customers' },
+            ].map(({ label, value, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                aria-label={`${label}: ${value}`}
+              >
+                <Card className="h-full bg-muted/50 transition-transform hover:-translate-y-0.5 hover:shadow-md">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>
