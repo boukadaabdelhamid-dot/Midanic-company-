@@ -41,7 +41,7 @@ function html(resetUrl: string): string {
 export async function sendPasswordResetEmail(options: PasswordResetEmailOptions): Promise<void> {
   const sender = senderFromEnvironment();
   const resendApiKey = process.env["RESEND_API_KEY"];
-  const brevoApiKey = process.env["BREVO_API_KEY"];
+  const brevoApiKey = process.env["SMTP_API_BREVO"] ?? process.env["BREVO_API_KEY"];
 
   if (resendApiKey) {
     const response = await fetch("https://api.resend.com/emails", {
@@ -96,6 +96,6 @@ export async function sendPasswordResetEmail(options: PasswordResetEmailOptions)
       console.info(`[password-reset] Email provider is not configured. Reset link: ${options.resetUrl}`);
       return;
     }
-    throw new Error("Password reset email delivery is not configured. Set RESEND_API_KEY or BREVO_API_KEY.");
+    throw new Error("Password reset email delivery is not configured. Set SMTP_API_BREVO.");
   }
 }
