@@ -3,7 +3,8 @@ import { randomUUID } from "crypto";
 import { eq, desc, asc, sql, and, gt, ne, or, inArray, isNull, notLike, ilike } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, updatePlatformPassword, type AuthRequest } from "../lib/auth";
+import { authenticate, configuredTenantLimit, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, updatePlatformPassword, type AuthRequest } from "../lib/auth";
+import { countLimitReached } from "../lib/entitlement-limits";
 import { broadcastToAdmins, broadcastCaisseChanged } from "../lib/ws";
 import { ensureCaisse } from "./caisses";
 import {
@@ -50,6 +51,18 @@ type ContactSharedInput = {
 // Thrown by role helpers to surface a specific HTTP status from inside a transaction.
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
+}
+
+function userLimitError(maxUsers: number, currentUsers: number): Error & {
+  statusCode: number;
+  code: string;
+  maxUsers: number;
+  currentUsers: number;
+} {
+  return Object.assign(
+    new Error(`This company has reached its user limit (${maxUsers})`),
+    { statusCode: 409, code: "USER_LIMIT_REACHED", maxUsers, currentUsers },
+  );
 }
 
 async function insertContact(tx: Tx, storeId: number, s: ContactSharedInput): Promise<number> {
@@ -834,15 +847,47 @@ router.post("/erp/employees", authenticate, requireStaff, requireStore, requireP
       // 1. Create user account
       let userId: number | null = null;
       if (email) {
-        const existing = await tx.select({ id: schema.usersTable.id })
+        const existing = await tx.select({
+          id: schema.usersTable.id,
+          role: schema.usersTable.role,
+        })
           .from(schema.usersTable).where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
         if (existing.length > 0) {
+          // A customer account can be promoted into an ERP staff account
+          // through this endpoint, which consumes a staff seat even though it
+          // does not insert a new users row.
+          if (existing[0].role !== "admin" && existing[0].role !== "employee") {
+            const maxUsers = configuredTenantLimit(req, "maxUsers");
+            if (maxUsers !== null) {
+              await tx.execute(sql`SELECT pg_advisory_xact_lock(2147483647, 73901)`);
+              const usage = await tx.execute<{ count: string | number }>(sql`
+                SELECT COUNT(*)::int AS count
+                FROM users
+                WHERE role IN ('admin', 'employee')
+                  AND lower(trim(email)) <> 'admin@midanic.com'
+              `);
+              const currentUsers = Number(usage.rows[0]?.count ?? 0);
+              if (countLimitReached(currentUsers, maxUsers)) throw userLimitError(maxUsers, currentUsers);
+            }
+          }
           // Reuse existing user — just update role if needed
           userId = existing[0].id;
           await tx.update(schema.usersTable)
             .set({ role: "employee", isActive: true, name, phone: phone || null })
             .where(eq(schema.usersTable.id, userId));
         } else {
+          const maxUsers = configuredTenantLimit(req, "maxUsers");
+          if (maxUsers !== null) {
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(2147483647, 73901)`);
+            const usage = await tx.execute<{ count: string | number }>(sql`
+              SELECT COUNT(*)::int AS count
+              FROM users
+              WHERE role IN ('admin', 'employee')
+                AND lower(trim(email)) <> 'admin@midanic.com'
+            `);
+            const currentUsers = Number(usage.rows[0]?.count ?? 0);
+            if (countLimitReached(currentUsers, maxUsers)) throw userLimitError(maxUsers, currentUsers);
+          }
           const pwHash = await bcrypt.hash(password || "midanic2026", 10);
           const [u] = await tx.insert(schema.usersTable).values({
             name, email, passwordHash: pwHash,
@@ -885,6 +930,16 @@ router.post("/erp/employees", authenticate, requireStaff, requireStore, requireP
     res.status(201).json(enriched);
   } catch (err) {
     if (isEmailUniqueViolation(err)) { res.status(409).json({ error: "Email already in use" }); return; }
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode === 409) {
+      res.status(409).json({
+        error: (err as Error).message,
+        code: (err as { code?: string }).code,
+        maxUsers: (err as { maxUsers?: number }).maxUsers,
+        currentUsers: (err as { currentUsers?: number }).currentUsers,
+      });
+      return;
+    }
     req.log.error(err); res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -4961,11 +5016,27 @@ router.post("/erp/staff", authenticate, requireTenantAdmin, async (req: AuthRequ
       return;
     }
     const passwordHash = await bcrypt.hash(String(password), 10);
-    const [user] = await db.insert(schema.usersTable).values({
-      name, email, passwordHash,
-      role: wantedRole,
-      phone: phone || null,
-    }).returning();
+    const maxUsers = configuredTenantLimit(req, "maxUsers");
+    const [user] = await db.transaction(async (tx) => {
+      if (maxUsers !== null) {
+        // Serialize seat checks so concurrent staff-creation requests cannot
+        // both observe the same remaining seat and exceed the Platform limit.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(2147483647, 73901)`);
+        const usage = await tx.execute<{ count: string | number }>(sql`
+          SELECT COUNT(*)::int AS count
+          FROM users
+          WHERE role IN ('admin', 'employee')
+            AND lower(trim(email)) <> 'admin@midanic.com'
+        `);
+        const currentUsers = Number(usage.rows[0]?.count ?? 0);
+        if (countLimitReached(currentUsers, maxUsers)) throw userLimitError(maxUsers, currentUsers);
+      }
+      return tx.insert(schema.usersTable).values({
+        name, email, passwordHash,
+        role: wantedRole,
+        phone: phone || null,
+      }).returning();
+    });
 
     // Attach to stores. Admins default to ALL stores; employees fall back
     // to the first active store when none are explicitly specified. Employees
@@ -5022,6 +5093,16 @@ router.post("/erp/staff", authenticate, requireTenantAdmin, async (req: AuthRequ
     });
   } catch (err) {
     if (isEmailUniqueViolation(err)) { res.status(409).json({ error: "A user with this email already exists" }); return; }
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode === 409) {
+      res.status(409).json({
+        error: (err as Error).message,
+        code: (err as { code?: string }).code,
+        maxUsers: (err as { maxUsers?: number }).maxUsers,
+        currentUsers: (err as { currentUsers?: number }).currentUsers,
+      });
+      return;
+    }
     req.log.error(err); res.status(500).json({ error: "Internal server error" });
   }
 });

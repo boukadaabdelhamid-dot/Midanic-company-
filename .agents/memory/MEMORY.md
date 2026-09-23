@@ -24,3 +24,5 @@
 - [Public Web Store tenant routing](public-web-store-tenant-routing.md) — anonymous storefront requests must resolve the hostname through Platform before selecting the tenant database
 - [Railway custom-domain targets](railway-custom-domain-targets.md) — validate Cloudflare CNAMEs against Railway domainStatus; custom domains may use random Railway targets rather than service-domain names
 - [ERP password authority](erp-password-authority.md) — linked ERP accounts must use Platform as the sole password authority; never accept a stale local hash as fallback
+- [Password reset delivery verification](password-reset-delivery-verification.md) — forgot-password intentionally returns generic success even when Brevo fails; verify provider logs, not only HTTP 200
+- [Railway stale wildcard bindings](railway-stale-wildcard-bindings.md) — when a wildcard target changes, Railway MCP can inspect/add but not remove the stuck custom-domain binding; recreate it in Railway UI

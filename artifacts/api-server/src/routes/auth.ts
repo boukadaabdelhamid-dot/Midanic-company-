@@ -566,6 +566,8 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       databaseStatus: erpTenantsTable.databaseStatus,
       featureFlags: erpTenantsTable.featureFlags,
       maxStores: customerEntitlementsTable.maxStores,
+      maxUsers: customerEntitlementsTable.maxUsers,
+      storageGb: customerEntitlementsTable.storageGb,
     })
     .from(erpTenantsTable)
     .leftJoin(
@@ -604,6 +606,8 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       ...(tenant.featureFlags ?? {}),
     },
     maxStores: tenant.maxStores ?? null,
+    maxUsers: tenant.maxUsers ?? null,
+    storageGb: tenant.storageGb ?? null,
     canAccess,
   });
 });

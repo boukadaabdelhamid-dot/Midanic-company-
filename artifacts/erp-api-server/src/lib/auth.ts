@@ -103,6 +103,23 @@ export interface AuthRequest extends Request {
   featureDisabled?: string;
 }
 
+/**
+ * Platform-managed numeric limits are nullable: null means unlimited.
+ * A malformed value is treated as zero rather than unlimited so a bad
+ * entitlement cannot silently bypass a server-side limit.
+ */
+export function configuredTenantLimit(
+  req: AuthRequest,
+  key: "maxStores" | "maxUsers" | "storageGb",
+): number | null {
+  const value = req.tenantFeatures?.[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return value;
+}
+
 export async function enforcePlatformAccess(
   req: AuthRequest | TenantDomainRequest,
   user: JwtPayload,
@@ -125,6 +142,8 @@ export async function enforcePlatformAccess(
     featureRequest.tenantFeatures = {
       ...(domain.featureFlags ?? {}),
       maxStores: domain.maxStores ?? null,
+      maxUsers: domain.maxUsers ?? null,
+      storageGb: domain.storageGb ?? null,
     };
     const disabledFeature = featureForRequestPath(
       "originalUrl" in req ? req.originalUrl : undefined,

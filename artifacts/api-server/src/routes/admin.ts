@@ -1455,6 +1455,16 @@ router.patch("/admin/customers/:id/entitlements", async (req, res): Promise<void
     maxUsers?: number | null;
     storageGb?: number | null;
   };
+  for (const [name, value] of [
+    ["maxStores", maxStores],
+    ["maxUsers", maxUsers],
+    ["storageGb", storageGb],
+  ] as const) {
+    if (value !== undefined && value !== null && (!Number.isInteger(value) || value < 0)) {
+      res.status(400).json({ error: `${name} must be a non-negative integer or null` });
+      return;
+    }
+  }
 
   const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, userId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }

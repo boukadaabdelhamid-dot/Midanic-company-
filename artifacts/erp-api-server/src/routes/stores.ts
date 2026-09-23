@@ -2,7 +2,8 @@ import { Router } from "express";
 import { eq, sql, ilike, or, and } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
-import { authenticate, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { authenticate, configuredTenantLimit, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { countLimitReached } from "../lib/entitlement-limits";
 import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
 const router = Router();
@@ -124,8 +125,8 @@ router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthReq
       res.status(400).json({ error: "nameAr, nameEn, slug required" });
       return;
     }
-    const configuredMaxStores = req.tenantFeatures?.maxStores;
-    if (typeof configuredMaxStores === "number" && Number.isInteger(configuredMaxStores)) {
+    const configuredMaxStores = configuredTenantLimit(req, "maxStores");
+    if (configuredMaxStores !== null && Number.isInteger(configuredMaxStores)) {
       const [{ count: currentStoreCount }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.storesTable)
@@ -133,7 +134,7 @@ router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthReq
         // database is the tenant boundary and also handles legacy stores
         // whose platform_tenant_id was not backfilled.
         .where(eq(schema.storesTable.isActive, true));
-      if (Number(currentStoreCount) >= configuredMaxStores) {
+      if (countLimitReached(Number(currentStoreCount), configuredMaxStores)) {
         res.status(409).json({
           error: `This company has reached its store limit (${configuredMaxStores})`,
           code: "STORE_LIMIT_REACHED",

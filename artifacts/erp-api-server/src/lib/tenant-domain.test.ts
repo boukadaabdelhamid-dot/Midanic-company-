@@ -139,6 +139,9 @@ test("company Web Store hostnames fall back to the matching ERP tenant hostname"
         status: "active",
         domainStatus: "active",
         databaseStatus: "ready",
+        maxStores: 2,
+        maxUsers: 8,
+        storageGb: 4,
         canAccess: true,
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
@@ -148,6 +151,9 @@ test("company Web Store hostnames fall back to the matching ERP tenant hostname"
   try {
     const value = await resolvePlatformTenantDomain("demo.store.midanic.com");
     assert.equal(value?.tenantId, 7);
+    assert.equal(value?.maxStores, 2);
+    assert.equal(value?.maxUsers, 8);
+    assert.equal(value?.storageGb, 4);
     assert.deepEqual(requestedHosts, ["demo.store.midanic.com", "demo.midanic.com"]);
   } finally {
     globalThis.fetch = originalFetch;

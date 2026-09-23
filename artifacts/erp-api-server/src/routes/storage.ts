@@ -1,9 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import multer from "multer";
+import { sql } from "drizzle-orm";
 import { db, schema } from "../lib/db";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { authenticate, type AuthRequest } from "../lib/auth";
+import { authenticate, configuredTenantLimit, type AuthRequest } from "../lib/auth";
+import { storageLimitReached } from "../lib/entitlement-limits";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -59,25 +61,65 @@ router.post(
       res.status(400).json({ error: "No file provided. Send a multipart/form-data request with a 'file' field." });
       return;
     }
+    const file = req.file;
     try {
-      const { objectPath, publicUrl } = await objectStorageService.uploadBuffer(
-        req.file.buffer,
-        req.file.mimetype
-      );
+      const storageGb = configuredTenantLimit(req, "storageGb");
+      const result = await db.transaction(async (tx) => {
+        if (storageGb !== null) {
+          // Serialize the usage check with the metadata insert so concurrent
+          // uploads cannot each consume the same remaining capacity.
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(2147483647, 73902)`);
+          const usage = await tx.execute<{ total: string | number }>(sql`
+            SELECT COALESCE(SUM(size), 0)::bigint AS total
+            FROM uploaded_images
+          `);
+          const currentBytes = BigInt(String(usage.rows[0]?.total ?? "0"));
+          const requestedBytes = BigInt(file.size);
+          if (storageLimitReached(currentBytes, requestedBytes, storageGb)) {
+            throw Object.assign(
+              new Error(`This company has reached its storage limit (${storageGb} GB)`),
+              {
+                statusCode: 409,
+                code: "STORAGE_LIMIT_REACHED",
+                storageGb,
+                usedBytes: currentBytes.toString(),
+                requestedBytes: file.size,
+              },
+            );
+          }
+        }
 
-      const [record] = await db
-        .insert(schema.uploadedImagesTable)
-        .values({
-          objectPath,
-          publicUrl,
-          contentType: req.file.mimetype,
-          size: req.file.size,
-          uploadedBy: req.user?.id ?? null,
-        })
-        .returning();
+        const { objectPath, publicUrl } = await objectStorageService.uploadBuffer(
+          file.buffer,
+          file.mimetype
+        );
 
-      res.status(201).json({ id: record.id, url: publicUrl, objectPath, contentType: record.contentType, size: record.size });
+        const [record] = await tx
+          .insert(schema.uploadedImagesTable)
+          .values({
+            objectPath,
+            publicUrl,
+            contentType: file.mimetype,
+            size: file.size,
+            uploadedBy: req.user?.id ?? null,
+          })
+          .returning();
+        return { id: record.id, url: publicUrl, objectPath, contentType: record.contentType, size: record.size };
+      });
+
+      res.status(201).json(result);
     } catch (err) {
+      const statusCode = (err as { statusCode?: number }).statusCode;
+      if (statusCode === 409) {
+        res.status(409).json({
+          error: (err as Error).message,
+          code: (err as { code?: string }).code,
+          storageGb: (err as { storageGb?: number }).storageGb,
+          usedBytes: (err as { usedBytes?: string }).usedBytes,
+          requestedBytes: (err as { requestedBytes?: number }).requestedBytes,
+        });
+        return;
+      }
       req.log.error({ err }, "Upload failed");
       res.status(500).json({ error: "Upload failed" });
     }
