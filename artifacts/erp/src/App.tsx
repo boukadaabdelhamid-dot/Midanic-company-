@@ -14,6 +14,7 @@ import { getApiBase } from "@/lib/api-base";
 import { Layout } from "@/components/layout/Layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
 import SelectStore from "@/pages/SelectStore";
 import Stores from "@/pages/Stores";
 import Home from "@/pages/Home";
@@ -178,6 +179,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/sso" component={SsoExchange} />
       <Route path="/select-store" component={SelectStore} />
       <Route path="/">

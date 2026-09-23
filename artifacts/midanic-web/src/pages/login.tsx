@@ -97,6 +97,11 @@ export default function Login() {
               >
                 {loginMutation.isPending ? t('auth.logging_in') : t('auth.login_button')}
               </Button>
+              <div className="text-center">
+                <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline" data-testid="link-forgot-password">
+                  {t('auth.forgot_password')}
+                </Link>
+              </div>
             </form>
           </Form>
           <div className="mt-6 text-center text-sm">

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -186,6 +186,11 @@ export default function Login() {
             >
               {loginMutation.isPending ? t("Connexion...", "جارٍ الدخول...") : t("Se connecter", "تسجيل الدخول")}
             </Button>
+            <div className="text-center">
+              <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline" data-testid="link-forgot-password">
+                {t("Mot de passe oublié ?", "هل نسيت كلمة المرور؟")}
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

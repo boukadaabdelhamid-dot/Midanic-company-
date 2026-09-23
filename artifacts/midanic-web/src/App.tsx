@@ -27,6 +27,8 @@ import Privacy from '@/pages/privacy';
 import Terms from '@/pages/terms';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
+import ForgotPassword from '@/pages/forgot-password';
+import ResetPassword from '@/pages/reset-password';
 import Dashboard from '@/pages/dashboard';
 import { AdminLayout } from '@/pages/admin/layout';
 import { AdminSettingsProvider } from '@/contexts/admin-settings-context';
@@ -109,6 +111,10 @@ function Router() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password/:token">
+          {(params) => <ResetPassword token={params.token ?? ''} />}
+        </Route>
         <Route component={NotFound} />
       </Switch>
       <Footer />
