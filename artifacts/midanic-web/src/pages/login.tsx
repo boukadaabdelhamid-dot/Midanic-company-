@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useLogin } from '@workspace/api-client-react';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -104,6 +105,9 @@ export default function Login() {
               </div>
             </form>
           </Form>
+          <div className="mt-5">
+            <GoogleAuthButton mode="login" />
+          </div>
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">{t('auth.no_account')} </span>
             <Link href="/register" className="text-primary hover:underline" data-testid="link-register">

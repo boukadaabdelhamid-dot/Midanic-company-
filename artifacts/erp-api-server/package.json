@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:tenant-domain": "tsx --test src/lib/tenant-domain.test.ts src/lib/tenant-authority.test.ts src/lib/tenant-database.test.ts src/lib/tenant-registry.test.ts",
     "test:entitlements": "tsx --test src/lib/entitlement-limits.test.ts src/lib/tenant-domain.test.ts",
-    "test:erp-customers": "tsx --test src/lib/erp-customer-isolation.test.ts"
+    "test:erp-customers": "tsx --test src/lib/erp-customer-isolation.test.ts",
+    "test:customer-limits": "tsx --test src/lib/customer-limits.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

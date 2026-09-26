@@ -1,8 +1,8 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { Readable } from "stream";
 import multer from "multer";
 import { sql } from "drizzle-orm";
-import { db, schema } from "../lib/db";
+import { db, runWithTenantDatabase, schema } from "../lib/db";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { authenticate, configuredTenantLimit, type AuthRequest } from "../lib/auth";
 import { storageLimitReached } from "../lib/entitlement-limits";
@@ -17,6 +17,23 @@ const upload = multer({
     else cb(new Error("Only image files are accepted"));
   },
 });
+
+/**
+ * Multer completes multipart parsing from stream callbacks that can outlive
+ * the async context created by authenticate. Re-enter the authenticated
+ * tenant database before handing control to the upload handler.
+ */
+function tenantAwareUpload(req: AuthRequest, res: Response, next: NextFunction): void {
+  upload.single("file")(req, res, (error: unknown) => {
+    const continueRequest = () => next(error);
+    const context = req.tenantDatabaseContext;
+    if (context) {
+      void runWithTenantDatabase(context, continueRequest);
+      return;
+    }
+    next(error);
+  });
+}
 
 /**
  * GET /uploads/:id
@@ -55,7 +72,7 @@ router.get("/uploads/:id", async (req: Request, res: Response) => {
 router.post(
   "/uploads",
   authenticate,
-  upload.single("file"),
+  tenantAwareUpload,
   async (req: AuthRequest, res: Response) => {
     if (!req.file) {
       res.status(400).json({ error: "No file provided. Send a multipart/form-data request with a 'file' field." });
@@ -91,7 +108,7 @@ router.post(
 
         const { objectPath, publicUrl } = await objectStorageService.uploadBuffer(
           file.buffer,
-          file.mimetype
+          file.mimetype,
         );
 
         const [record] = await tx
@@ -123,7 +140,7 @@ router.post(
       req.log.error({ err }, "Upload failed");
       res.status(500).json({ error: "Upload failed" });
     }
-  }
+  },
 );
 
 /**

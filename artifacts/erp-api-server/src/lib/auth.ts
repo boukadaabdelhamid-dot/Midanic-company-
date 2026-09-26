@@ -8,7 +8,7 @@ import {
   verifyTenantDomainRequest,
   type TenantDomainRequest,
 } from "./tenant-domain";
-import { runWithTenantDatabase } from "./db";
+import { runWithTenantDatabase, type TenantDatabaseContext } from "./db";
 
 function resolveJwtSecret(): string {
   const envSecret = process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
@@ -101,6 +101,7 @@ export interface AuthRequest extends Request {
   isPlatformService?: boolean;
   tenantFeatures?: Record<string, unknown>;
   featureDisabled?: string;
+  tenantDatabaseContext?: TenantDatabaseContext;
 }
 
 /**
@@ -241,8 +242,12 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
         return;
       }
       if (tenantDatabase?.databaseStatus === "ready" && tenantDatabase.databaseName) {
+        req.tenantDatabaseContext = {
+          tenantId,
+          databaseName: tenantDatabase.databaseName,
+        };
         await runWithTenantDatabase(
-          { tenantId, databaseName: tenantDatabase.databaseName },
+          req.tenantDatabaseContext,
           () => next(),
         );
         return;

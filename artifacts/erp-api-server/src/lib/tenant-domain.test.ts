@@ -27,6 +27,8 @@ test("tenant domains and stores fail closed on cross-company mismatches", async 
     platformApiUrl: process.env["PLATFORM_API_URL"],
     platformSecret: process.env["PLATFORM_SERVICE_SECRET"],
     trustProxy: process.env["TRUST_PROXY"],
+    webStoreRoot: process.env["WEB_STORE_ROOT_DOMAIN"],
+    erpRoot: process.env["ERP_TENANT_ROOT_DOMAIN"],
   };
   const originalFetch = globalThis.fetch;
 
@@ -103,12 +105,15 @@ test("tenant domains and stores fail closed on cross-company mismatches", async 
       PLATFORM_API_URL: previous.platformApiUrl,
       PLATFORM_SERVICE_SECRET: previous.platformSecret,
       TRUST_PROXY: previous.trustProxy,
+      WEB_STORE_ROOT_DOMAIN: previous.webStoreRoot,
+      ERP_TENANT_ROOT_DOMAIN: previous.erpRoot,
     })) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
   }
 });
+
 
 test("company Web Store hostnames fall back to the matching ERP tenant hostname", async () => {
   const previous = {

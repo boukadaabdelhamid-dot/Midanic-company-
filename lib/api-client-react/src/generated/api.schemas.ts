@@ -42,8 +42,25 @@ export interface LoginInput {
   password: string;
 }
 
-export interface RefreshInput {
-  refreshToken: string;
+export interface GoogleAuthConfig {
+  /** @nullable */
+  clientId: string | null;
+  enabled: boolean;
+}
+
+export type GoogleAuthInputLanguage = typeof GoogleAuthInputLanguage[keyof typeof GoogleAuthInputLanguage];
+
+
+export const GoogleAuthInputLanguage = {
+  en: 'en',
+  fr: 'fr',
+  ar: 'ar',
+} as const;
+
+export interface GoogleAuthInput {
+  /** @minLength 1 */
+  credential: string;
+  language?: GoogleAuthInputLanguage;
 }
 
 export type UserProfileRole = typeof UserProfileRole[keyof typeof UserProfileRole];
@@ -81,6 +98,17 @@ export interface UserProfile {
   avatarUrl?: string | null;
   twoFactorEnabled?: boolean;
   createdAt: string;
+}
+
+export interface GoogleAuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  isNewUser: boolean;
+  user: UserProfile;
+}
+
+export interface RefreshInput {
+  refreshToken: string;
 }
 
 export interface AuthResponse {

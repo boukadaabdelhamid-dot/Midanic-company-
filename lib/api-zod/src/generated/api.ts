@@ -80,6 +80,46 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary Get public Google sign-in configuration
+ */
+export const GetGoogleAuthConfigResponse = zod.object({
+  "clientId": zod.string().nullable(),
+  "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Register or log in a customer using a verified Google credential
+ */
+
+
+
+export const AuthenticateWithGoogleBody = zod.object({
+  "credential": zod.string().min(1),
+  "language": zod.enum(['en', 'fr', 'ar']).optional()
+})
+
+export const AuthenticateWithGoogleResponse = zod.object({
+  "accessToken": zod.string(),
+  "refreshToken": zod.string(),
+  "isNewUser": zod.boolean(),
+  "user": zod.object({
+  "id": zod.int(),
+  "email": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "role": zod.enum(['super_admin', 'admin', 'support', 'billing', 'customer']),
+  "language": zod.enum(['en', 'fr', 'ar']),
+  "companyName": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "twoFactorEnabled": zod.boolean().optional(),
+  "createdAt": zod.coerce.date()
+})
+})
+
+
+/**
  * @summary Refresh access token
  */
 export const RefreshTokenBody = zod.object({

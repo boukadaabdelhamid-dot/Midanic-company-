@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useRegister } from '@workspace/api-client-react';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -182,6 +183,9 @@ export default function Register() {
               </Button>
             </form>
           </Form>
+          <div className="mt-5">
+            <GoogleAuthButton mode="register" />
+          </div>
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">{t('auth.have_account')} </span>
             <Link href="/login" className="text-primary hover:underline" data-testid="link-login">

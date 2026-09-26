@@ -81,6 +81,7 @@ channel = "stable-25_05"
 CLOUDFLARE_R2_ACCOUNT_ID = "9cf99b811d145f7cd0da4a888a23886a"
 CLOUDFLARE_R2_BUCKET_NAME = "midanic-uploads"
 EMAIL_FROM = "contact@midanic.com"
+GOOGLE_CLIENT_ID = "947595034469-rkfsk64set3jrektlno2763p2q1klo1m.apps.googleusercontent.com"
 
 [userenv.development]
 ERP_API_URL = "http://127.0.0.1:8082"

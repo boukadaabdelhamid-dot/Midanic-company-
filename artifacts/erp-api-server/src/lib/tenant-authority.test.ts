@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  enforcePlatformAccess,
   requireAdmin,
   requireStaff,
   requireTenantAdmin,
@@ -78,5 +79,63 @@ test("non-tenant admins and the Platform service retain global access", () => {
     let nextCalled = false;
     requireAdmin(req, res, () => { nextCalled = true; });
     assert.equal(nextCalled, true);
+  }
+});
+
+test("authenticated tenant context carries all Platform customer limits", async () => {
+  const previous = {
+    nodeEnv: process.env["NODE_ENV"],
+    platformApiUrl: process.env["PLATFORM_API_URL"],
+    platformSecret: process.env["PLATFORM_SERVICE_SECRET"],
+  };
+  const originalFetch = globalThis.fetch;
+  const hostname = "limits-context-test.midanic.com";
+
+  process.env["NODE_ENV"] = "test";
+  process.env["PLATFORM_API_URL"] = "https://platform.example";
+  process.env["PLATFORM_SERVICE_SECRET"] = "test-service-secret";
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    hostname,
+    tenantId: 41,
+    ownerUserId: 7,
+    status: "active",
+    domainStatus: "active",
+    databaseStatus: "ready",
+    featureFlags: { products: true },
+    maxStores: 3,
+    maxUsers: 12,
+    storageGb: 25,
+    canAccess: true,
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+  try {
+    const req = request({
+      ...baseUser,
+      role: "tenant_admin",
+      platformUserId: 7,
+      platformTenantId: 41,
+      tenantHostname: hostname,
+    });
+    req.headers = { "x-tenant-hostname": hostname };
+    req.header = ((name: string) =>
+      req.headers[name.toLowerCase()] as string | undefined) as AuthRequest["header"];
+
+    assert.equal(await enforcePlatformAccess(req, req.user!), true);
+    assert.deepEqual(req.tenantFeatures, {
+      products: true,
+      maxStores: 3,
+      maxUsers: 12,
+      storageGb: 25,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries({
+      NODE_ENV: previous.nodeEnv,
+      PLATFORM_API_URL: previous.platformApiUrl,
+      PLATFORM_SERVICE_SECRET: previous.platformSecret,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });

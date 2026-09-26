@@ -9,11 +9,13 @@ import {
   defaultErpFeatureFlags,
   customerEntitlementsTable,
 } from "@workspace/db";
-import { and, eq, isNotNull, lt, desc, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, desc, or } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
+import { OAuth2Client } from "google-auth-library";
 import {
   RegisterBody,
   LoginBody,
+  AuthenticateWithGoogleBody,
   RefreshTokenBody,
   LogoutBody,
 } from "@workspace/api-zod";
@@ -41,6 +43,8 @@ const authLimiter = rateLimit({
   max: 20,
   message: { error: "Too many requests, please try again later" },
 });
+
+const googleOAuthClient = new OAuth2Client();
 
 const resetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -144,6 +148,168 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
       name: [user.firstName, user.lastName].filter(Boolean).join(" "),
       preferredLang: user.language,
     },
+  });
+});
+
+router.get("/auth/google/config", (_req, res): void => {
+  const clientId = process.env["GOOGLE_CLIENT_ID"]?.trim() || null;
+  res.json({ clientId, enabled: Boolean(clientId) });
+});
+
+router.post("/auth/google", authLimiter, async (req, res): Promise<void> => {
+  const parsed = AuthenticateWithGoogleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const clientId = process.env["GOOGLE_CLIENT_ID"]?.trim();
+  if (!clientId) {
+    res.status(503).json({ error: "Google sign-in is not configured" });
+    return;
+  }
+
+  let googleProfile;
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: parsed.data.credential,
+      audience: clientId,
+    });
+    googleProfile = ticket.getPayload();
+  } catch (error) {
+    req.log.warn({ err: error }, "Google credential verification failed");
+    res.status(400).json({ error: "Invalid Google credential" });
+    return;
+  }
+
+  if (
+    !googleProfile?.sub ||
+    !googleProfile.email ||
+    googleProfile.email_verified !== true
+  ) {
+    res.status(400).json({ error: "A verified Google email is required" });
+    return;
+  }
+
+  const email = googleProfile.email.trim().toLowerCase();
+  let user: typeof usersTable.$inferSelect | undefined;
+  let isNewUser = false;
+  const [linkedUser] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.googleSub, googleProfile.sub))
+    .limit(1);
+
+  if (linkedUser) {
+    user = linkedUser;
+  } else {
+    const [existingUser] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (existingUser) {
+      if (existingUser.role !== "customer" || !existingUser.isActive) {
+        res.status(403).json({ error: "This account cannot use Google sign-in" });
+        return;
+      }
+      if (existingUser.googleSub && existingUser.googleSub !== googleProfile.sub) {
+        res.status(409).json({ error: "This account is linked to another Google account" });
+        return;
+      }
+
+      if (existingUser.googleSub === googleProfile.sub) {
+        user = existingUser;
+      } else {
+        try {
+          const [attachedUser] = await db
+            .update(usersTable)
+            .set({ googleSub: googleProfile.sub, lastLoginAt: new Date() })
+            .where(and(eq(usersTable.id, existingUser.id), isNull(usersTable.googleSub)))
+            .returning();
+          user = attachedUser;
+        } catch (error) {
+          const code = typeof error === "object" && error !== null && "code" in error
+            ? (error as { code?: unknown }).code
+            : undefined;
+          if (code !== "23505") throw error;
+        }
+
+        if (!user) {
+          const [concurrentlyLinkedUser] = await db
+            .select()
+            .from(usersTable)
+            .where(eq(usersTable.googleSub, googleProfile.sub))
+            .limit(1);
+          if (concurrentlyLinkedUser?.id !== existingUser.id) {
+            res.status(409).json({ error: "This account is linked to another Google account" });
+            return;
+          }
+          user = concurrentlyLinkedUser;
+        }
+      }
+    } else {
+      const nameParts = googleProfile.name?.trim().split(/\s+/).filter(Boolean) ?? [];
+      const firstName =
+        googleProfile.given_name?.trim() ||
+        nameParts[0] ||
+        email.split("@")[0] ||
+        "Google";
+      const lastName =
+        googleProfile.family_name?.trim() ||
+        nameParts.slice(1).join(" ");
+      const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
+      try {
+        const [createdUser] = await db
+          .insert(usersTable)
+          .values({
+            email,
+            googleSub: googleProfile.sub,
+            passwordHash,
+            firstName,
+            lastName,
+            language: parsed.data.language ?? "en",
+            role: "customer",
+            lastLoginAt: new Date(),
+          })
+          .returning();
+        user = createdUser;
+        isNewUser = true;
+      } catch (error) {
+        const code = typeof error === "object" && error !== null && "code" in error
+          ? (error as { code?: unknown }).code
+          : undefined;
+        if (code !== "23505") throw error;
+        res.status(409).json({ error: "A customer account already exists for this Google email" });
+        return;
+      }
+    }
+  }
+
+  if (!user || user.role !== "customer" || !user.isActive) {
+    res.status(403).json({ error: "This account cannot use Google sign-in" });
+    return;
+  }
+
+  if (!isNewUser) {
+    const [updatedUser] = await db
+      .update(usersTable)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+    user = updatedUser ?? user;
+  }
+
+  const payload = { userId: user.id, email: user.email, role: user.role };
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = generateRefreshToken(payload);
+  await storeRefreshToken(user.id, refreshToken);
+  res.status(isNewUser ? 201 : 200).json({
+    accessToken,
+    refreshToken,
+    user: formatUserProfile(user),
+    isNewUser,
   });
 });
 

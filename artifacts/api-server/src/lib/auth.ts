@@ -101,7 +101,7 @@ export async function getUserById(userId: number) {
 }
 
 export function formatUserProfile(user: typeof usersTable.$inferSelect) {
-  const { passwordHash, twoFactorSecret, ...rest } = user;
+  const { passwordHash, twoFactorSecret, googleSub, ...rest } = user;
   return rest;
 }
 

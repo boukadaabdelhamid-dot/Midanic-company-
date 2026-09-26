@@ -100,6 +100,68 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/google/config:
+    get:
+      operationId: getGoogleAuthConfig
+      tags: [auth]
+      summary: Get public Google sign-in configuration
+      responses:
+        "200":
+          description: Google sign-in configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAuthConfig"
+
+  /auth/google:
+    post:
+      operationId: authenticateWithGoogle
+      tags: [auth]
+      summary: Register or log in a customer using a verified Google credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleAuthInput"
+      responses:
+        "200":
+          description: Logged in or linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAuthResponse"
+        "201":
+          description: Customer account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleAuthResponse"
+        "400":
+          description: Invalid Google credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Account is not allowed to sign in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Google identity conflicts with an existing account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Google sign-in is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -728,6 +790,39 @@ components:
           format: email
         password:
           type: string
+
+    GoogleAuthConfig:
+      type: object
+      required: [clientId, enabled]
+      properties:
+        clientId:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+
+    GoogleAuthInput:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: string
+          minLength: 1
+        language:
+          type: string
+          enum: [en, fr, ar]
+
+    GoogleAuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user, isNewUser]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        isNewUser:
+          type: boolean
+        user:
+          $ref: "#/components/schemas/UserProfile"
 
     RefreshInput:
       type: object
