@@ -193,6 +193,7 @@
     "message": "Informations Supplémentaires",
     "submit": "Demander un Essai",
     "submitting": "Envoi...",
+    "required_product_fields": "Veuillez compléter les informations obligatoires du produit.",
     "success": "Demande d'essai soumise ! Nous vous contacterons bientôt.",
     "error": "Échec de la soumission de la demande. Veuillez réessayer."
   },
@@ -208,6 +209,7 @@
     "message": "Informations Supplémentaires",
     "submit": "Demander une Démo",
     "submitting": "Envoi...",
+    "required_product_fields": "Veuillez compléter les informations obligatoires du produit.",
     "success": "Demande de démo soumise ! Nous vous contacterons pour planifier.",
     "error": "Échec de la soumission de la demande. Veuillez réessayer."
   },

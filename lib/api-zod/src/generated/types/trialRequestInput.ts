@@ -5,6 +5,7 @@
  * Midanic SaaS Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { TrialRequestInputCustomAnswers } from './trialRequestInputCustomAnswers';
 
 export interface TrialRequestInput {
   name: string;
@@ -13,4 +14,5 @@ export interface TrialRequestInput {
   phone?: string;
   productId: number;
   message?: string;
+  customAnswers?: TrialRequestInputCustomAnswers;
 }

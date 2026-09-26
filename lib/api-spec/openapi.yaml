@@ -923,7 +923,7 @@ components:
     # ── PRODUCT SCHEMAS ──────────────────────────────────────────────────────
     Product:
       type: object
-      required: [id, name, slug, description, category, published, createdAt]
+      required: [id, name, slug, description, category, productType, requestFormFields, published, createdAt]
       properties:
         id:
           type: integer
@@ -937,6 +937,13 @@ components:
           type: ["string", "null"]
         category:
           type: string
+        productType:
+          type: string
+          enum: [desktop, erp]
+        requestFormFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductRequestField"
         imageUrl:
           type: ["string", "null"]
         videoUrl:
@@ -951,9 +958,47 @@ components:
           type: string
           format: date-time
 
+    LocalizedRequestText:
+      type: object
+      required: [en, fr, ar]
+      properties:
+        en:
+          type: string
+        fr:
+          type: string
+        ar:
+          type: string
+
+    ProductRequestOption:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+        label:
+          $ref: "#/components/schemas/LocalizedRequestText"
+
+    ProductRequestField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key:
+          type: string
+        label:
+          $ref: "#/components/schemas/LocalizedRequestText"
+        type:
+          type: string
+          enum: [text, number, textarea, select, multiselect]
+        required:
+          type: boolean
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductRequestOption"
+
     ProductDetail:
       type: object
-      required: [id, name, slug, description, category, published, createdAt, versions, downloads]
+      required: [id, name, slug, description, category, productType, requestFormFields, published, createdAt, versions, downloads]
       properties:
         id:
           type: integer
@@ -967,6 +1012,13 @@ components:
           type: ["string", "null"]
         category:
           type: string
+        productType:
+          type: string
+          enum: [desktop, erp]
+        requestFormFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductRequestField"
         imageUrl:
           type: ["string", "null"]
         videoUrl:
@@ -1150,6 +1202,14 @@ components:
           type: integer
         message:
           type: string
+        customAnswers:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
 
     DemoRequestInput:
       type: object
@@ -1170,6 +1230,14 @@ components:
           type: string
         message:
           type: string
+        customAnswers:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
 
     NewsletterInput:
       type: object

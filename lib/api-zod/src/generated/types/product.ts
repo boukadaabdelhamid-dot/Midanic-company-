@@ -5,6 +5,8 @@
  * Midanic SaaS Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { ProductProductType } from './productProductType';
+import type { ProductRequestField } from './productRequestField';
 
 export interface Product {
   id: number;
@@ -14,6 +16,8 @@ export interface Product {
   /** @nullable */
   shortDescription?: string | null;
   category: string;
+  productType: ProductProductType;
+  requestFormFields: ProductRequestField[];
   /** @nullable */
   imageUrl?: string | null;
   /** @nullable */

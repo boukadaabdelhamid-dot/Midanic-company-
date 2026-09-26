@@ -3,6 +3,8 @@ import {
   adminApi,
   type AdminProduct,
   type ProductInput,
+  type ProductRequestField,
+  type ProductRequestOption,
   type AdminProductVersion,
   type VersionInput,
   type AdminDownloadFile,
@@ -73,8 +75,34 @@ const PLATFORMS = [
 const EMPTY_PRODUCT: ProductInput = {
   name: '', slug: '', description: '', shortDescription: '',
   category: '', imageUrl: '', videoUrl: '', defaultLicenseType: '',
+  productType: 'desktop', requestFormFields: [],
   featured: false, published: false, trialDays: undefined, basePrice: undefined, sortOrder: 0,
 };
+
+const DEFAULT_ERP_FIELDS: ProductRequestField[] = [
+  {
+    key: 'store_count',
+    label: { en: 'How many stores do you have?', fr: 'Combien de magasins avez-vous ?', ar: 'كم عدد المتاجر لديكم؟' },
+    type: 'number',
+    required: true,
+  },
+  {
+    key: 'erp_functions',
+    label: { en: 'Which functions do you need?', fr: 'Quelles fonctionnalités vous intéressent ?', ar: 'ما الوظائف التي تحتاجونها؟' },
+    type: 'multiselect',
+    required: true,
+    options: [
+      { value: 'sales', label: { en: 'Sales', fr: 'Ventes', ar: 'المبيعات' } },
+      { value: 'inventory', label: { en: 'Inventory', fr: 'Stock', ar: 'المخزون' } },
+      { value: 'purchases', label: { en: 'Purchases', fr: 'Achats', ar: 'المشتريات' } },
+      { value: 'accounting', label: { en: 'Accounting', fr: 'Comptabilité', ar: 'المحاسبة' } },
+      { value: 'hr', label: { en: 'Human resources', fr: 'Ressources humaines', ar: 'الموارد البشرية' } },
+      { value: 'point_of_sale', label: { en: 'Point of sale', fr: 'Point de vente', ar: 'نقطة البيع' } },
+      { value: 'reports', label: { en: 'Reports', fr: 'Rapports', ar: 'التقارير' } },
+      { value: 'web_store', label: { en: 'Online store', fr: 'Boutique en ligne', ar: 'المتجر الإلكتروني' } },
+    ],
+  },
+];
 
 const EMPTY_VERSION: VersionInput = {
   version: '', releaseNotes: '', isLatest: false,
@@ -124,6 +152,29 @@ export default function AdminProducts() {
 
   const { toast } = useToast();
   const { tAdmin } = useAdminText();
+  const updateRequestField = (index: number, patch: Partial<ProductRequestField>) => {
+    setForm((current) => ({
+      ...current,
+      requestFormFields: current.requestFormFields.map((field, fieldIndex) =>
+        fieldIndex === index ? { ...field, ...patch } : field,
+      ),
+    }));
+  };
+  const updateRequestOption = (fieldIndex: number, optionIndex: number, patch: Partial<ProductRequestOption>) => {
+    setForm((current) => ({
+      ...current,
+      requestFormFields: current.requestFormFields.map((field, currentIndex) =>
+        currentIndex === fieldIndex
+          ? {
+              ...field,
+              options: (field.options ?? []).map((option, currentOptionIndex) =>
+                currentOptionIndex === optionIndex ? { ...option, ...patch } : option,
+              ),
+            }
+          : field,
+      ),
+    }));
+  };
 
   // ── Products ──────────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async () => {
@@ -153,6 +204,8 @@ export default function AdminProducts() {
       name: p.name, slug: p.slug, description: p.description,
       shortDescription: p.shortDescription ?? '',
       category: p.category,
+      productType: p.productType,
+      requestFormFields: p.requestFormFields ?? [],
       imageUrl: p.imageUrl ?? '',
       videoUrl: p.videoUrl ?? '',
       defaultLicenseType: p.defaultLicenseType ?? '',
@@ -649,6 +702,144 @@ export default function AdminProducts() {
                   <Label htmlFor="published">{tAdmin('Published')}</Label>
                   <Switch id="featured" checked={form.featured} onCheckedChange={(v) => setForm((p) => ({ ...p, featured: v }))} className="ml-4" />
                   <Label htmlFor="featured">{tAdmin('Featured')}</Label>
+                </div>
+                <div className="col-span-2 space-y-4 rounded-lg border p-4">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label>{tAdmin('Product type')}</Label>
+                      <Select
+                        value={form.productType}
+                        onValueChange={(value: 'desktop' | 'erp') => setForm((current) => ({
+                          ...current,
+                          productType: value,
+                          requestFormFields: value === 'erp' && current.requestFormFields.length === 0
+                            ? DEFAULT_ERP_FIELDS
+                            : current.requestFormFields,
+                        }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="desktop">{tAdmin('Desktop')}</SelectItem>
+                          <SelectItem value="erp">{tAdmin('ERP')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="self-end text-xs text-muted-foreground">
+                      {form.productType === 'erp'
+                        ? tAdmin('ERP customers see the custom fields below in trial and demo requests.')
+                        : tAdmin('Desktop products use the standard request form.')}
+                    </p>
+                  </div>
+                  {form.productType === 'erp' && (
+                    <div className="space-y-4 border-t pt-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold">{tAdmin('ERP request form')}</h3>
+                          <p className="text-xs text-muted-foreground">{tAdmin('Customize fields shown to customers for this product.')}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setForm((current) => ({
+                            ...current,
+                            requestFormFields: [...current.requestFormFields, {
+                              key: `field_${current.requestFormFields.length + 1}`,
+                              label: { en: '', fr: '', ar: '' },
+                              type: 'text',
+                              required: false,
+                            }],
+                          }))}
+                        >
+                          <Plus className="mr-1 h-4 w-4" />{tAdmin('Add field')}
+                        </Button>
+                      </div>
+                      {form.requestFormFields.map((field, index) => (
+                        <div key={`${field.key}-${index}`} className="space-y-3 rounded-md border bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label>{tAdmin('Field key')}</Label>
+                                <Input value={field.key} onChange={(event) => updateRequestField(index, { key: event.target.value })} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>{tAdmin('Field type')}</Label>
+                                <Select
+                                  value={field.type}
+                                  onValueChange={(type: ProductRequestField['type']) => updateRequestField(index, {
+                                    type,
+                                    options: type === 'select' || type === 'multiselect'
+                                      ? (field.options?.length ? field.options : [{ value: 'option_1', label: { en: '', fr: '', ar: '' } }])
+                                      : undefined,
+                                  })}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {(['text', 'number', 'textarea', 'select', 'multiselect'] as const).map((type) => (
+                                      <SelectItem key={type} value={type}>{tAdmin(type)}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {(['en', 'fr', 'ar'] as const).map((locale) => (
+                                <div key={locale} className="space-y-1">
+                                  <Label>{tAdmin('Label')} ({locale.toUpperCase()})</Label>
+                                  <Input
+                                    dir={locale === 'ar' ? 'rtl' : 'auto'}
+                                    value={field.label[locale]}
+                                    onChange={(event) => updateRequestField(index, { label: { ...field.label, [locale]: event.target.value } })}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <Button type="button" variant="ghost" size="icon" aria-label={tAdmin('Remove field')} onClick={() => setForm((current) => ({
+                              ...current,
+                              requestFormFields: current.requestFormFields.filter((_, fieldIndex) => fieldIndex !== index),
+                            }))}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch checked={field.required} onCheckedChange={(required) => updateRequestField(index, { required })} />
+                            <Label>{tAdmin('Required field')}</Label>
+                          </div>
+                          {(field.type === 'select' || field.type === 'multiselect') && (
+                            <div className="space-y-2 border-t pt-3">
+                              <div className="flex items-center justify-between">
+                                <Label>{tAdmin('Choices')}</Label>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => updateRequestField(index, {
+                                  options: [...(field.options ?? []), {
+                                    value: `option_${(field.options?.length ?? 0) + 1}`,
+                                    label: { en: '', fr: '', ar: '' },
+                                  }],
+                                })}>{tAdmin('Add choice')}</Button>
+                              </div>
+                              {(field.options ?? []).map((option, optionIndex) => (
+                                <div key={`${option.value}-${optionIndex}`} className="grid gap-2 rounded border p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                                  {(['en', 'fr', 'ar'] as const).map((locale) => (
+                                    <Input
+                                      key={locale}
+                                      dir={locale === 'ar' ? 'rtl' : 'auto'}
+                                      aria-label={`${tAdmin('Choice')} ${locale.toUpperCase()}`}
+                                      placeholder={`${tAdmin('Choice')} (${locale.toUpperCase()})`}
+                                      value={option.label[locale]}
+                                      onChange={(event) => updateRequestOption(index, optionIndex, {
+                                        value: option.value || `option_${optionIndex + 1}`,
+                                        label: { ...option.label, [locale]: event.target.value },
+                                      })}
+                                    />
+                                  ))}
+                                  <Button type="button" size="icon" variant="ghost" aria-label={tAdmin('Remove choice')} onClick={() => updateRequestField(index, {
+                                    options: (field.options ?? []).filter((_, choiceIndex) => choiceIndex !== optionIndex),
+                                  })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <SheetFooter>

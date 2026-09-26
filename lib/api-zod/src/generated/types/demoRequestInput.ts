@@ -5,6 +5,7 @@
  * Midanic SaaS Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { DemoRequestInputCustomAnswers } from './demoRequestInputCustomAnswers';
 
 export interface DemoRequestInput {
   name: string;
@@ -14,4 +15,5 @@ export interface DemoRequestInput {
   productId: number;
   preferredDate?: string;
   message?: string;
+  customAnswers?: DemoRequestInputCustomAnswers;
 }

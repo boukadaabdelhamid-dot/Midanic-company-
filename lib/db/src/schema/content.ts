@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -57,6 +57,11 @@ export const trialRequestsTable = pgTable("trial_requests", {
   companyName: text("company_name").notNull(),
   phone: text("phone"),
   productId: text("product_id"),
+  customAnswers: jsonb("custom_answers").$type<Record<string, {
+    label: { en: string; fr: string; ar: string };
+    value: string | string[];
+    options?: Array<{ value: string; label: { en: string; fr: string; ar: string } }>;
+  }>>().notNull().default({}),
   message: text("message"),
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -69,6 +74,11 @@ export const demoRequestsTable = pgTable("demo_requests", {
   companyName: text("company_name").notNull(),
   phone: text("phone"),
   productId: text("product_id"),
+  customAnswers: jsonb("custom_answers").$type<Record<string, {
+    label: { en: string; fr: string; ar: string };
+    value: string | string[];
+    options?: Array<{ value: string; label: { en: string; fr: string; ar: string } }>;
+  }>>().notNull().default({}),
   preferredDate: text("preferred_date"),
   message: text("message"),
   status: text("status").notNull().default("pending"),

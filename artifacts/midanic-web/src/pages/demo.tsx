@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRequestDemo, useListProducts } from '@workspace/api-client-react';
 import { toast } from 'sonner';
+import { hasCompleteRequestAnswers, ProductRequestFields, type RequestAnswers } from '@/components/product-request-fields';
 
 const demoSchema = z.object({
   name: z.string().min(1),
@@ -24,9 +26,10 @@ const demoSchema = z.object({
 type DemoForm = z.infer<typeof demoSchema>;
 
 export default function Demo() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const requestDemoMutation = useRequestDemo();
   const { data: products } = useListProducts();
+  const [customAnswers, setCustomAnswers] = useState<RequestAnswers>({});
 
   const form = useForm<DemoForm>({
     resolver: zodResolver(demoSchema),
@@ -42,12 +45,19 @@ export default function Demo() {
   });
 
   const onSubmit = (data: DemoForm) => {
+    const selectedProduct = products?.find((product) => product.id === data.productId);
+    const fields = selectedProduct?.productType === 'erp' ? selectedProduct.requestFormFields : [];
+    if (!hasCompleteRequestAnswers(fields, customAnswers)) {
+      toast.error(t('demo.required_product_fields'));
+      return;
+    }
     requestDemoMutation.mutate(
-      { data },
+      { data: { ...data, customAnswers } },
       {
         onSuccess: () => {
           toast.success(t('demo.success'));
           form.reset();
+          setCustomAnswers({});
         },
         onError: () => {
           toast.error(t('demo.error'));
@@ -135,7 +145,7 @@ export default function Demo() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{t('demo.product')}</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value?.toString()}>
+                          <Select onValueChange={(value) => { field.onChange(value); setCustomAnswers({}); }} value={field.value ? field.value.toString() : undefined}>
                           <FormControl>
                             <SelectTrigger data-testid="select-product">
                               <SelectValue />
@@ -153,6 +163,17 @@ export default function Demo() {
                       </FormItem>
                     )}
                   />
+                  {(() => {
+                    const selectedProduct = products?.find((product) => product.id === Number(form.watch('productId')));
+                    return selectedProduct?.productType === 'erp' ? (
+                      <ProductRequestFields
+                        fields={selectedProduct.requestFormFields}
+                        answers={customAnswers}
+                        language={i18n.language}
+                        onChange={(key, value) => setCustomAnswers((current) => ({ ...current, [key]: value }))}
+                      />
+                    ) : null;
+                  })()}
                   <FormField
                     control={form.control}
                     name="preferredDate"

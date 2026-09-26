@@ -153,6 +153,41 @@ async function ensureAdminSettingsSchema(): Promise<void> {
   `);
 }
 
+async function ensureProductRequestFormsSchema(): Promise<void> {
+  const { rows } = await pool.query<{ has_product_type: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'products'
+        AND column_name = 'product_type'
+    ) AS has_product_type
+  `);
+  await pool.query(`
+    ALTER TABLE "products"
+      ADD COLUMN IF NOT EXISTS "product_type" text DEFAULT 'desktop' NOT NULL,
+      ADD COLUMN IF NOT EXISTS "request_form_fields" jsonb DEFAULT '[]'::jsonb NOT NULL
+  `);
+  await pool.query(`
+    ALTER TABLE "trial_requests"
+      ADD COLUMN IF NOT EXISTS "custom_answers" jsonb DEFAULT '{}'::jsonb NOT NULL
+  `);
+  await pool.query(`
+    ALTER TABLE "demo_requests"
+      ADD COLUMN IF NOT EXISTS "custom_answers" jsonb DEFAULT '{}'::jsonb NOT NULL
+  `);
+
+  // Existing ERP catalog rows predate configurable request forms. Initialize
+  // them once, while leaving any later administrator edits untouched.
+  if (!rows[0]?.has_product_type) {
+    await pool.query(
+      `UPDATE "products"
+       SET "product_type" = 'erp', "request_form_fields" = $1::jsonb
+       WHERE "slug" = 'midanic-erp'`,
+      [JSON.stringify(schema.defaultErpRequestFormFields)],
+    );
+  }
+}
+
 async function ensureErpManagementSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "erp_tenants" (
@@ -608,6 +643,7 @@ export async function runMigrations(): Promise<void> {
   await ensureErpManagementSchema();
   await ensureErpCompatibilitySchema();
   await ensureErpDemoData();
+  await ensureProductRequestFormsSchema();
 }
 
 export * from "./schema";

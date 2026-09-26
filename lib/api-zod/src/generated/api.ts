@@ -156,6 +156,25 @@ export const ListProductsResponseItem = zod.object({
   "description": zod.string(),
   "shortDescription": zod.string().nullish(),
   "category": zod.string(),
+  "productType": zod.enum(['desktop', 'erp']),
+  "requestFormFields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+}),
+  "type": zod.enum(['text', 'number', 'textarea', 'select', 'multiselect']),
+  "required": zod.boolean(),
+  "options": zod.array(zod.object({
+  "value": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+})
+})).optional()
+})),
   "imageUrl": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "featured": zod.boolean().optional(),
@@ -180,6 +199,25 @@ export const GetProductResponse = zod.object({
   "description": zod.string(),
   "shortDescription": zod.string().nullish(),
   "category": zod.string(),
+  "productType": zod.enum(['desktop', 'erp']),
+  "requestFormFields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+}),
+  "type": zod.enum(['text', 'number', 'textarea', 'select', 'multiselect']),
+  "required": zod.boolean(),
+  "options": zod.array(zod.object({
+  "value": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+})
+})).optional()
+})),
   "imageUrl": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "featured": zod.boolean().optional(),
@@ -386,7 +424,8 @@ export const RequestTrialBody = zod.object({
   "companyName": zod.string(),
   "phone": zod.string().optional(),
   "productId": zod.int(),
-  "message": zod.string().optional()
+  "message": zod.string().optional(),
+  "customAnswers": zod.record(zod.string(), zod.union([zod.string(),zod.array(zod.string())])).optional()
 })
 
 export const RequestTrialResponse = zod.object({
@@ -404,7 +443,8 @@ export const RequestDemoBody = zod.object({
   "phone": zod.string().optional(),
   "productId": zod.int(),
   "preferredDate": zod.string().optional(),
-  "message": zod.string().optional()
+  "message": zod.string().optional(),
+  "customAnswers": zod.record(zod.string(), zod.union([zod.string(),zod.array(zod.string())])).optional()
 })
 
 export const RequestDemoResponse = zod.object({
@@ -542,6 +582,25 @@ export const GetFeaturedProductsResponseItem = zod.object({
   "description": zod.string(),
   "shortDescription": zod.string().nullish(),
   "category": zod.string(),
+  "productType": zod.enum(['desktop', 'erp']),
+  "requestFormFields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+}),
+  "type": zod.enum(['text', 'number', 'textarea', 'select', 'multiselect']),
+  "required": zod.boolean(),
+  "options": zod.array(zod.object({
+  "value": zod.string(),
+  "label": zod.object({
+  "en": zod.string(),
+  "fr": zod.string(),
+  "ar": zod.string()
+})
+})).optional()
+})),
   "imageUrl": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "featured": zod.boolean().optional(),

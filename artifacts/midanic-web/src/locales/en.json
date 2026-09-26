@@ -193,6 +193,7 @@
     "message": "Additional Information",
     "submit": "Request Trial",
     "submitting": "Submitting...",
+    "required_product_fields": "Please complete the required product details.",
     "success": "Trial request submitted! We'll contact you shortly.",
     "error": "Failed to submit request. Please try again."
   },
@@ -208,6 +209,7 @@
     "message": "Additional Information",
     "submit": "Request Demo",
     "submitting": "Submitting...",
+    "required_product_fields": "Please complete the required product details.",
     "success": "Demo request submitted! We'll contact you to schedule.",
     "error": "Failed to submit request. Please try again."
   },

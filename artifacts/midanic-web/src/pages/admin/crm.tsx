@@ -67,7 +67,28 @@ export default function AdminCRM() {
 
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { tAdmin } = useAdminText();
+  const { tAdmin, language } = useAdminText();
+
+  const renderCustomAnswers = (answers: TrialRequest['customAnswers']) => {
+    const entries = Object.values(answers ?? {});
+    if (entries.length === 0) return <span className="text-muted-foreground">—</span>;
+    return (
+      <div className="space-y-1 text-xs">
+        {entries.map((answer, index) => {
+          const selectedValues = Array.isArray(answer.value) ? answer.value : [answer.value];
+          const displayValues = selectedValues.map((value) =>
+            answer.options?.find((option) => option.value === value)?.label[language] ?? value,
+          );
+          return (
+            <div key={`${answer.label.en}-${index}`}>
+              <span className="font-medium">{answer.label[language] || answer.label.en}: </span>
+              <span>{displayValues.join(', ')}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -180,21 +201,23 @@ export default function AdminCRM() {
                    <TableHead>{tAdmin('Email')}</TableHead>
                    <TableHead>{tAdmin('Company')}</TableHead>
                    <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('ERP details')}</TableHead>
                    <TableHead>{tAdmin('Status')}</TableHead>
                    <TableHead>{tAdmin('Date')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
-                  ? <TableRow><TableCell colSpan={6}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
+                  ? <TableRow><TableCell colSpan={7}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
                   : trials.length === 0
-                   ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">{tAdmin('No trial requests')}</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">{tAdmin('No trial requests')}</TableCell></TableRow>
                   : trials.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium text-sm">{t.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{t.email}</TableCell>
                       <TableCell className="text-sm">{t.companyName}</TableCell>
                       <TableCell className="text-sm">{t.productName ?? t.productId}</TableCell>
+                      <TableCell className="max-w-xs">{renderCustomAnswers(t.customAnswers)}</TableCell>
                       <TableCell>
                         <Select value={t.status} onValueChange={(v) => updateTrialStatus(t.id, v)}>
                           <SelectTrigger className="h-7 w-28 text-xs">
@@ -230,21 +253,23 @@ export default function AdminCRM() {
                    <TableHead>{tAdmin('Email')}</TableHead>
                    <TableHead>{tAdmin('Company')}</TableHead>
                    <TableHead>{tAdmin('Product')}</TableHead>
+                   <TableHead>{tAdmin('ERP details')}</TableHead>
                    <TableHead>{tAdmin('Preferred Date')}</TableHead>
                    <TableHead>{tAdmin('Status')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
-                  ? <TableRow><TableCell colSpan={6}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
+                  ? <TableRow><TableCell colSpan={7}><div className="h-4 w-32 mx-auto animate-pulse rounded bg-muted my-4" /></TableCell></TableRow>
                   : demos.length === 0
-                   ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">{tAdmin('No demo requests')}</TableCell></TableRow>
+                   ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">{tAdmin('No demo requests')}</TableCell></TableRow>
                   : demos.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium text-sm">{d.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{d.email}</TableCell>
                       <TableCell className="text-sm">{d.companyName}</TableCell>
                       <TableCell className="text-sm">{d.productName ?? d.productId}</TableCell>
+                      <TableCell className="max-w-xs">{renderCustomAnswers(d.customAnswers)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{d.preferredDate ?? '—'}</TableCell>
                       <TableCell>
                         <Select value={d.status} onValueChange={(v) => updateDemoStatus(d.id, v)}>

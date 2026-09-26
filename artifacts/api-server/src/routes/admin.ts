@@ -25,6 +25,9 @@ import {
   erpCustomerLinksTable,
   erpFeatureKeys,
   defaultErpFeatureFlags,
+  defaultErpRequestFormFields,
+  productRequestFieldSchema,
+  type ProductRequestField,
   type ErpFeatureFlags,
 } from "@workspace/db";
 import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt } from "drizzle-orm";
@@ -1507,6 +1510,23 @@ router.patch("/admin/customers/:id/entitlements", async (req, res): Promise<void
 });
 
 // ── PRODUCTS ───────────────────────────────────────────────────────────────
+function parseRequestFormFields(value: unknown): ProductRequestField[] | null {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const fields: ProductRequestField[] = [];
+  const keys = new Set<string>();
+  for (const item of value) {
+    const parsed = productRequestFieldSchema.safeParse(item);
+    if (!parsed.success || keys.has(parsed.data.key)) return null;
+    if (
+      (parsed.data.type === "select" || parsed.data.type === "multiselect") &&
+      (!parsed.data.options || parsed.data.options.length === 0)
+    ) return null;
+    fields.push(parsed.data);
+    keys.add(parsed.data.key);
+  }
+  return fields;
+}
+
 router.get("/admin/products", async (_req, res): Promise<void> => {
   const products = await db
     .select()
@@ -1530,10 +1550,23 @@ router.post("/admin/products", async (req, res): Promise<void> => {
     trialDays,
     basePrice,
     sortOrder,
+    productType,
+    requestFormFields,
   } = req.body as Record<string, unknown>;
 
   if (!name || !slug || !description || !category) {
     res.status(400).json({ error: "name, slug, description and category are required" });
+    return;
+  }
+  if (productType !== undefined && productType !== "desktop" && productType !== "erp") {
+    res.status(400).json({ error: "productType must be desktop or erp" });
+    return;
+  }
+  const fields = requestFormFields === undefined
+    ? (productType === "erp" ? defaultErpRequestFormFields : [])
+    : parseRequestFormFields(requestFormFields);
+  if (!fields) {
+    res.status(400).json({ error: "requestFormFields are invalid" });
     return;
   }
   const [product] = await db
@@ -1544,6 +1577,8 @@ router.post("/admin/products", async (req, res): Promise<void> => {
       description: String(description),
       shortDescription: shortDescription ? String(shortDescription) : null,
       category: String(category),
+      productType: productType === "erp" ? "erp" : "desktop",
+      requestFormFields: fields,
       imageUrl: imageUrl ? String(imageUrl) : null,
       videoUrl: videoUrl ? String(videoUrl) : null,
       defaultLicenseType: defaultLicenseType ? String(defaultLicenseType) : null,
@@ -1571,6 +1606,21 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];
+  }
+  if ("productType" in req.body) {
+    if (req.body.productType !== "desktop" && req.body.productType !== "erp") {
+      res.status(400).json({ error: "productType must be desktop or erp" });
+      return;
+    }
+    updates.productType = req.body.productType;
+  }
+  if ("requestFormFields" in req.body) {
+    const fields = parseRequestFormFields(req.body.requestFormFields);
+    if (!fields) {
+      res.status(400).json({ error: "requestFormFields are invalid" });
+      return;
+    }
+    updates.requestFormFields = fields;
   }
 
   const [product] = await db
@@ -2185,6 +2235,7 @@ router.get("/admin/trial-requests", async (req, res): Promise<void> => {
         companyName: trialRequestsTable.companyName,
         phone: trialRequestsTable.phone,
         productId: trialRequestsTable.productId,
+        customAnswers: trialRequestsTable.customAnswers,
         message: trialRequestsTable.message,
         status: trialRequestsTable.status,
         createdAt: trialRequestsTable.createdAt,
@@ -2230,6 +2281,7 @@ router.get("/admin/demo-requests", async (req, res): Promise<void> => {
         companyName: demoRequestsTable.companyName,
         phone: demoRequestsTable.phone,
         productId: demoRequestsTable.productId,
+        customAnswers: demoRequestsTable.customAnswers,
         preferredDate: demoRequestsTable.preferredDate,
         message: demoRequestsTable.message,
         status: demoRequestsTable.status,

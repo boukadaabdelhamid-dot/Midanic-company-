@@ -1,4 +1,4 @@
-import { db, usersTable, productsTable, productVersionsTable, downloadFilesTable, blogPostsTable, newsItemsTable } from "@workspace/db";
+import { db, usersTable, productsTable, productVersionsTable, downloadFilesTable, blogPostsTable, newsItemsTable, defaultErpRequestFormFields } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -87,6 +87,8 @@ export async function ensureCoreCatalog(): Promise<void> {
         "A comprehensive enterprise resource planning system built for modern businesses. Manage your entire operation — inventory, accounting, HR, sales, and more — from a single powerful platform.",
       shortDescription: "Complete ERP solution for growing businesses",
       category: "erp",
+      productType: "erp",
+      requestFormFields: defaultErpRequestFormFields,
       featured: true,
       published: true,
       trialDays: 7,
@@ -95,7 +97,6 @@ export async function ensureCoreCatalog(): Promise<void> {
     }).returning();
     logger.info("Added missing Midanic ERP product to the catalog");
   }
-
   const [erpVersion] = await db
     .select()
     .from(productVersionsTable)
@@ -175,6 +176,8 @@ export async function seedDatabase(): Promise<void> {
         description: "A comprehensive enterprise resource planning system built for modern businesses. Manage your entire operation — inventory, accounting, HR, sales, and more — from a single powerful platform.",
         shortDescription: "Complete ERP solution for growing businesses",
         category: "erp",
+        productType: "erp",
+        requestFormFields: defaultErpRequestFormFields,
         featured: true,
         published: true,
         trialDays: 30,

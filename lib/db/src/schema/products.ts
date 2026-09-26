@@ -1,6 +1,60 @@
-import { pgTable, serial, text, boolean, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export const localizedRequestTextSchema = z.object({
+  en: z.string().min(1).max(120),
+  fr: z.string().min(1).max(120),
+  ar: z.string().min(1).max(120),
+});
+export type LocalizedRequestText = z.infer<typeof localizedRequestTextSchema>;
+
+export const productRequestOptionSchema = z.object({
+  value: z.string().min(1).max(80),
+  label: localizedRequestTextSchema,
+});
+
+export const productRequestFieldSchema = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9_]*$/).max(40),
+  label: localizedRequestTextSchema,
+  type: z.enum(["text", "number", "textarea", "select", "multiselect"]),
+  required: z.boolean(),
+  options: z.array(productRequestOptionSchema).max(30).optional(),
+});
+export type ProductRequestField = z.infer<typeof productRequestFieldSchema>;
+
+export const defaultErpRequestFormFields: ProductRequestField[] = [
+  {
+    key: "store_count",
+    label: {
+      en: "How many stores do you have?",
+      fr: "Combien de magasins avez-vous ?",
+      ar: "كم عدد المتاجر لديكم؟",
+    },
+    type: "number",
+    required: true,
+  },
+  {
+    key: "erp_functions",
+    label: {
+      en: "Which functions do you need?",
+      fr: "Quelles fonctionnalités vous intéressent ?",
+      ar: "ما الوظائف التي تحتاجونها؟",
+    },
+    type: "multiselect",
+    required: true,
+    options: [
+      { value: "sales", label: { en: "Sales", fr: "Ventes", ar: "المبيعات" } },
+      { value: "inventory", label: { en: "Inventory", fr: "Stock", ar: "المخزون" } },
+      { value: "purchases", label: { en: "Purchases", fr: "Achats", ar: "المشتريات" } },
+      { value: "accounting", label: { en: "Accounting", fr: "Comptabilité", ar: "المحاسبة" } },
+      { value: "hr", label: { en: "Human resources", fr: "Ressources humaines", ar: "الموارد البشرية" } },
+      { value: "point_of_sale", label: { en: "Point of sale", fr: "Point de vente", ar: "نقطة البيع" } },
+      { value: "reports", label: { en: "Reports", fr: "Rapports", ar: "التقارير" } },
+      { value: "web_store", label: { en: "Online store", fr: "Boutique en ligne", ar: "المتجر الإلكتروني" } },
+    ],
+  },
+];
 
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
@@ -9,6 +63,8 @@ export const productsTable = pgTable("products", {
   description: text("description").notNull(),
   shortDescription: text("short_description"),
   category: text("category").notNull().default("software"),
+  productType: text("product_type").$type<"desktop" | "erp">().notNull().default("desktop"),
+  requestFormFields: jsonb("request_form_fields").$type<ProductRequestField[]>().notNull().default([]),
   imageUrl: text("image_url"),
   videoUrl: text("video_url"),
   defaultLicenseType: text("default_license_type"),

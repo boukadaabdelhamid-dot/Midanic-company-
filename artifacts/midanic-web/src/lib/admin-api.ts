@@ -409,6 +409,8 @@ export interface AdminProduct {
   description: string;
   shortDescription: string | null;
   category: string;
+  productType: "desktop" | "erp";
+  requestFormFields: ProductRequestField[];
   imageUrl: string | null;
   videoUrl: string | null;
   defaultLicenseType: string | null;
@@ -426,6 +428,8 @@ export interface ProductInput {
   description: string;
   shortDescription?: string;
   category: string;
+  productType: "desktop" | "erp";
+  requestFormFields: ProductRequestField[];
   imageUrl?: string;
   videoUrl?: string;
   defaultLicenseType?: string;
@@ -434,6 +438,25 @@ export interface ProductInput {
   trialDays?: number;
   basePrice?: number;
   sortOrder?: number;
+}
+
+export interface LocalizedRequestText {
+  en: string;
+  fr: string;
+  ar: string;
+}
+
+export interface ProductRequestOption {
+  value: string;
+  label: LocalizedRequestText;
+}
+
+export interface ProductRequestField {
+  key: string;
+  label: LocalizedRequestText;
+  type: "text" | "number" | "textarea" | "select" | "multiselect";
+  required: boolean;
+  options?: ProductRequestOption[];
 }
 
 export interface AdminProductVersion {
@@ -619,6 +642,7 @@ export interface TrialRequest {
   status: string;
   createdAt: string;
   productName: string | null;
+  customAnswers: Record<string, { label: LocalizedRequestText; value: string | string[]; options?: ProductRequestOption[] }>;
 }
 
 export interface TrialListResponse {
@@ -640,6 +664,7 @@ export interface DemoRequest {
   status: string;
   createdAt: string;
   productName: string | null;
+  customAnswers: Record<string, { label: LocalizedRequestText; value: string | string[]; options?: ProductRequestOption[] }>;
 }
 
 export interface DemoListResponse {

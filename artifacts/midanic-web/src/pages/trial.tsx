@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRequestTrial, useListProducts } from '@workspace/api-client-react';
 import { toast } from 'sonner';
+import { hasCompleteRequestAnswers, ProductRequestFields, type RequestAnswers } from '@/components/product-request-fields';
 
 const trialSchema = z.object({
   name: z.string().min(1),
@@ -23,9 +25,10 @@ const trialSchema = z.object({
 type TrialForm = z.infer<typeof trialSchema>;
 
 export default function Trial() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const requestTrialMutation = useRequestTrial();
   const { data: products } = useListProducts();
+  const [customAnswers, setCustomAnswers] = useState<RequestAnswers>({});
 
   const form = useForm<TrialForm>({
     resolver: zodResolver(trialSchema),
@@ -40,12 +43,19 @@ export default function Trial() {
   });
 
   const onSubmit = (data: TrialForm) => {
+    const selectedProduct = products?.find((product) => product.id === data.productId);
+    const fields = selectedProduct?.productType === 'erp' ? selectedProduct.requestFormFields : [];
+    if (!hasCompleteRequestAnswers(fields, customAnswers)) {
+      toast.error(t('trial.required_product_fields'));
+      return;
+    }
     requestTrialMutation.mutate(
-      { data },
+      { data: { ...data, customAnswers } },
       {
         onSuccess: () => {
           toast.success(t('trial.success'));
           form.reset();
+          setCustomAnswers({});
         },
         onError: () => {
           toast.error(t('trial.error'));
@@ -133,7 +143,7 @@ export default function Trial() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{t('trial.product')}</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value?.toString()}>
+                          <Select onValueChange={(value) => { field.onChange(value); setCustomAnswers({}); }} value={field.value ? field.value.toString() : undefined}>
                           <FormControl>
                             <SelectTrigger data-testid="select-product">
                               <SelectValue />
@@ -151,6 +161,17 @@ export default function Trial() {
                       </FormItem>
                     )}
                   />
+                  {(() => {
+                    const selectedProduct = products?.find((product) => product.id === Number(form.watch('productId')));
+                    return selectedProduct?.productType === 'erp' ? (
+                      <ProductRequestFields
+                        fields={selectedProduct.requestFormFields}
+                        answers={customAnswers}
+                        language={i18n.language}
+                        onChange={(key, value) => setCustomAnswers((current) => ({ ...current, [key]: value }))}
+                      />
+                    ) : null;
+                  })()}
                   <FormField
                     control={form.control}
                     name="message"

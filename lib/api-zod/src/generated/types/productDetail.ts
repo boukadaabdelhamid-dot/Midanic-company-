@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DownloadFile } from './downloadFile';
+import type { ProductDetailProductType } from './productDetailProductType';
+import type { ProductRequestField } from './productRequestField';
 import type { ProductVersion } from './productVersion';
 
 export interface ProductDetail {
@@ -16,6 +18,8 @@ export interface ProductDetail {
   /** @nullable */
   shortDescription?: string | null;
   category: string;
+  productType: ProductDetailProductType;
+  requestFormFields: ProductRequestField[];
   /** @nullable */
   imageUrl?: string | null;
   /** @nullable */

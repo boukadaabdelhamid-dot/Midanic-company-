@@ -152,6 +152,44 @@ export interface LanguageUpdate {
   language: LanguageUpdateLanguage;
 }
 
+export type ProductProductType = typeof ProductProductType[keyof typeof ProductProductType];
+
+
+export const ProductProductType = {
+  desktop: 'desktop',
+  erp: 'erp',
+} as const;
+
+export interface LocalizedRequestText {
+  en: string;
+  fr: string;
+  ar: string;
+}
+
+export type ProductRequestFieldType = typeof ProductRequestFieldType[keyof typeof ProductRequestFieldType];
+
+
+export const ProductRequestFieldType = {
+  text: 'text',
+  number: 'number',
+  textarea: 'textarea',
+  select: 'select',
+  multiselect: 'multiselect',
+} as const;
+
+export interface ProductRequestOption {
+  value: string;
+  label: LocalizedRequestText;
+}
+
+export interface ProductRequestField {
+  key: string;
+  label: LocalizedRequestText;
+  type: ProductRequestFieldType;
+  required: boolean;
+  options?: ProductRequestOption[];
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -160,6 +198,8 @@ export interface Product {
   /** @nullable */
   shortDescription?: string | null;
   category: string;
+  productType: ProductProductType;
+  requestFormFields: ProductRequestField[];
   /** @nullable */
   imageUrl?: string | null;
   /** @nullable */
@@ -170,6 +210,14 @@ export interface Product {
   trialDays?: number | null;
   createdAt: string;
 }
+
+export type ProductDetailProductType = typeof ProductDetailProductType[keyof typeof ProductDetailProductType];
+
+
+export const ProductDetailProductType = {
+  desktop: 'desktop',
+  erp: 'erp',
+} as const;
 
 export interface ProductVersion {
   id: number;
@@ -216,6 +264,8 @@ export interface ProductDetail {
   /** @nullable */
   shortDescription?: string | null;
   category: string;
+  productType: ProductDetailProductType;
+  requestFormFields: ProductRequestField[];
   /** @nullable */
   imageUrl?: string | null;
   /** @nullable */
@@ -283,6 +333,8 @@ export interface ContactInput {
   message: string;
 }
 
+export type TrialRequestInputCustomAnswers = {[key: string]: string | string[]};
+
 export interface TrialRequestInput {
   name: string;
   email: string;
@@ -290,7 +342,10 @@ export interface TrialRequestInput {
   phone?: string;
   productId: number;
   message?: string;
+  customAnswers?: TrialRequestInputCustomAnswers;
 }
+
+export type DemoRequestInputCustomAnswers = {[key: string]: string | string[]};
 
 export interface DemoRequestInput {
   name: string;
@@ -300,6 +355,7 @@ export interface DemoRequestInput {
   productId: number;
   preferredDate?: string;
   message?: string;
+  customAnswers?: DemoRequestInputCustomAnswers;
 }
 
 export interface NewsletterInput {
