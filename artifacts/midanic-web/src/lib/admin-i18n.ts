@@ -5,6 +5,9 @@ type SupportedLanguage = 'en' | 'fr' | 'ar';
 const translations: Record<SupportedLanguage, Record<string, string>> = {
   en: {},
   fr: {
+    'Trial Days': 'Jours d’essai',
+    'New ERP accounts use this duration when activated. Blank defaults to 14 days.': 'Les nouveaux comptes ERP utilisent cette durée lors de leur activation. Si le champ est vide, la durée par défaut est de 14 jours.',
+    'Shown on public product pages; does not change license expiry.': 'Affiché sur les pages produit publiques ; ne modifie pas l’expiration des licences.',
     'Product type': 'Type de produit',
     Desktop: 'Bureau',
     ERP: 'ERP',
@@ -252,6 +255,9 @@ const translations: Record<SupportedLanguage, Record<string, string>> = {
      'Store count refresh failed': 'Échec de l’actualisation du nombre de boutiques',
   },
   ar: {
+    'Trial Days': 'أيام التجربة',
+    'New ERP accounts use this duration when activated. Blank defaults to 14 days.': 'تستخدم حسابات ERP الجديدة هذه المدة عند تفعيلها. عند ترك الحقل فارغًا تكون المدة الافتراضية 14 يومًا.',
+    'Shown on public product pages; does not change license expiry.': 'تُعرض على صفحات المنتج العامة ولا تغيّر انتهاء صلاحية الترخيص.',
     'Product type': 'نوع المنتج',
     Desktop: 'سطح المكتب',
     ERP: 'تخطيط موارد المؤسسة',

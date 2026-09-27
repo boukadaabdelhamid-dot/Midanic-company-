@@ -597,6 +597,8 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       ownerUserId: erpTenantsTable.ownerUserId,
       subdomain: erpTenantsTable.subdomain,
       status: erpTenantsTable.status,
+      trialStartedAt: erpTenantsTable.trialStartedAt,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
       databaseStatus: erpTenantsTable.databaseStatus,
       webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
       featureFlags: erpTenantsTable.featureFlags,
@@ -695,6 +697,33 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       return;
     }
     updates.trialEndsAt = trialEndsAt;
+  }
+  if (
+    status === "active" &&
+    !["active", "converted", "expired"].includes(currentTenant.status) &&
+    currentTenant.trialStartedAt === null &&
+    currentTenant.trialEndsAt === null &&
+    !Object.prototype.hasOwnProperty.call(body, "trialEndsAt")
+  ) {
+    const [erpProduct] = await db
+      .select({ trialDays: productsTable.trialDays })
+      .from(productsTable)
+      .where(eq(productsTable.productType, "erp"))
+      .orderBy(productsTable.sortOrder, productsTable.id)
+      .limit(1);
+    const configuredDays = erpProduct?.trialDays;
+    const trialDays =
+      configuredDays != null &&
+      Number.isInteger(configuredDays) &&
+      configuredDays >= 1 &&
+      configuredDays <= 365
+        ? configuredDays
+        : 14;
+    const trialStartedAt = new Date();
+    updates.trialStartedAt = trialStartedAt;
+    updates.trialEndsAt = new Date(
+      trialStartedAt.getTime() + trialDays * 24 * 60 * 60 * 1000,
+    );
   }
 
   if (webStoreStatus) {
@@ -1527,6 +1556,28 @@ function parseRequestFormFields(value: unknown): ProductRequestField[] | null {
   return fields;
 }
 
+function parseTrialDays(
+  value: unknown,
+): { valid: true; value: number | null } | { valid: false } {
+  if (
+    value === undefined ||
+    value === null ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    return { valid: true, value: null };
+  }
+  const days =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return { valid: false };
+  }
+  return { valid: true, value: days };
+}
+
 router.get("/admin/products", async (_req, res): Promise<void> => {
   const products = await db
     .select()
@@ -1562,6 +1613,11 @@ router.post("/admin/products", async (req, res): Promise<void> => {
     res.status(400).json({ error: "productType must be desktop or erp" });
     return;
   }
+  const parsedTrialDays = parseTrialDays(trialDays);
+  if (!parsedTrialDays.valid) {
+    res.status(400).json({ error: "trialDays must be an integer from 1 to 365" });
+    return;
+  }
   const fields = requestFormFields === undefined
     ? (productType === "erp" ? defaultErpRequestFormFields : [])
     : parseRequestFormFields(requestFormFields);
@@ -1584,7 +1640,7 @@ router.post("/admin/products", async (req, res): Promise<void> => {
       defaultLicenseType: defaultLicenseType ? String(defaultLicenseType) : null,
       featured: Boolean(featured ?? false),
       published: Boolean(published ?? false),
-      trialDays: trialDays ? Number(trialDays) : null,
+      trialDays: parsedTrialDays.value ?? (productType === "erp" ? 14 : null),
       basePrice: basePrice ? Number(basePrice) : null,
       sortOrder: sortOrder ? Number(sortOrder) : 0,
     })
@@ -1601,11 +1657,19 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
   const allowed = [
     "name", "slug", "description", "shortDescription", "category",
     "imageUrl", "videoUrl", "defaultLicenseType",
-    "featured", "published", "trialDays", "basePrice", "sortOrder",
+    "featured", "published", "basePrice", "sortOrder",
   ];
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];
+  }
+  if ("trialDays" in req.body) {
+    const parsedTrialDays = parseTrialDays(req.body.trialDays);
+    if (!parsedTrialDays.valid) {
+      res.status(400).json({ error: "trialDays must be an integer from 1 to 365" });
+      return;
+    }
+    updates.trialDays = parsedTrialDays.value;
   }
   if ("productType" in req.body) {
     if (req.body.productType !== "desktop" && req.body.productType !== "erp") {

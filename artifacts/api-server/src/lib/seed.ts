@@ -91,7 +91,7 @@ export async function ensureCoreCatalog(): Promise<void> {
       requestFormFields: defaultErpRequestFormFields,
       featured: true,
       published: true,
-      trialDays: 7,
+      trialDays: 14,
       basePrice: 299,
       sortOrder: 1,
     }).returning();
@@ -180,7 +180,7 @@ export async function seedDatabase(): Promise<void> {
         requestFormFields: defaultErpRequestFormFields,
         featured: true,
         published: true,
-        trialDays: 30,
+        trialDays: 14,
         basePrice: 299,
         sortOrder: 1,
       }).returning();

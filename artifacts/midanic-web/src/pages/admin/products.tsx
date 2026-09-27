@@ -590,8 +590,25 @@ export default function AdminProducts() {
                   <Input type="number" value={form.basePrice ?? ''} onChange={(e) => setForm((p) => ({ ...p, basePrice: e.target.value ? Number(e.target.value) : undefined }))} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Trial Days</Label>
-                  <Input type="number" value={form.trialDays ?? ''} onChange={(e) => setForm((p) => ({ ...p, trialDays: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Label>{tAdmin('Trial Days')}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    step={1}
+                    value={form.trialDays ?? (form.productType === 'erp' ? 14 : '')}
+                    onChange={(e) => setForm((p) => ({
+                      ...p,
+                      trialDays: e.target.value
+                        ? Number(e.target.value)
+                        : p.productType === 'erp' ? 14 : undefined,
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {form.productType === 'erp'
+                      ? tAdmin('New ERP accounts use this duration when activated. Blank defaults to 14 days.')
+                      : tAdmin('Shown on public product pages; does not change license expiry.')}
+                  </p>
                 </div>
                 <div className="col-span-2 space-y-3 rounded-xl border border-dashed bg-muted/20 p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
@@ -712,6 +729,9 @@ export default function AdminProducts() {
                         onValueChange={(value: 'desktop' | 'erp') => setForm((current) => ({
                           ...current,
                           productType: value,
+                          trialDays: value === 'erp' && current.trialDays == null
+                            ? 14
+                            : current.trialDays,
                           requestFormFields: value === 'erp' && current.requestFormFields.length === 0
                             ? DEFAULT_ERP_FIELDS
                             : current.requestFormFields,
