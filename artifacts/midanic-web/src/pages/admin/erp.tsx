@@ -43,6 +43,24 @@ import { useAdminText } from "@/lib/admin-i18n";
 import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2 } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
+const ACCOUNT_GROUP_OPTIONS = [
+  { value: "all", label: "All ERP accounts" },
+  { value: "trial", label: "Trial accounts" },
+  { value: "contracted", label: "Contracted accounts" },
+  { value: "other", label: "Other accounts" },
+] as const;
+type AccountGroup = "trial" | "contracted" | "other";
+type AccountGroupFilter = "all" | AccountGroup;
+const ACCOUNT_GROUP_LABELS: Record<AccountGroup, string> = {
+  trial: "Trial account",
+  contracted: "Contracted account",
+  other: "Other account",
+};
+const ACCOUNT_GROUP_STYLES: Record<AccountGroup, string> = {
+  trial: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  contracted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  other: "bg-muted text-muted-foreground",
+};
 const FEATURE_OPTIONS = [
   { key: "dashboard", label: "Dashboard", description: "Company overview and KPIs" },
   { key: "orders", label: "Sales and orders", description: "POS, sales orders, returns, and online orders" },
@@ -70,6 +88,14 @@ const STATUS_STYLES: Record<string, string> = {
   converted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
 };
 
+function getAccountGroup(
+  tenant: Pick<ErpTenant, "status" | "trialStartedAt" | "trialEndsAt">,
+): AccountGroup {
+  if (tenant.status === "converted") return "contracted";
+  if (tenant.trialStartedAt || tenant.trialEndsAt) return "trial";
+  return "other";
+}
+
 function formatDate(value: string | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
@@ -88,6 +114,7 @@ function formatStoreUsage(
 
 export default function AdminErp() {
   const [tenants, setTenants] = useState<ErpTenant[]>([]);
+  const [accountGroupFilter, setAccountGroupFilter] = useState<AccountGroupFilter>("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState("");
@@ -121,14 +148,14 @@ export default function AdminErp() {
   const loadTenants = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await adminApi.listErpTenants(statusFilter === "all" ? undefined : statusFilter);
+      const result = await adminApi.listErpTenants();
       setTenants(result.tenants);
     } catch (error) {
       toast({ title: tAdmin("Unable to load ERP accounts"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, toast]);
+  }, [toast]);
 
   useEffect(() => {
     void loadTenants();
@@ -152,12 +179,23 @@ export default function AdminErp() {
     return () => { cancelled = true; };
   }, [toast]);
 
-  const counts = useMemo(
-    () => STATUS_OPTIONS.reduce<Record<string, number>>((result, status) => {
-      result[status] = tenants.filter((tenant) => tenant.status === status).length;
-      return result;
-    }, {}),
-    [tenants],
+  const accountGroupCounts = useMemo(() => {
+    const result: Record<AccountGroupFilter, number> = {
+      all: tenants.length,
+      trial: 0,
+      contracted: 0,
+      other: 0,
+    };
+    for (const tenant of tenants) result[getAccountGroup(tenant)] += 1;
+    return result;
+  }, [tenants]);
+
+  const visibleTenants = useMemo(
+    () => tenants.filter((tenant) =>
+      (accountGroupFilter === "all" || getAccountGroup(tenant) === accountGroupFilter) &&
+      (statusFilter === "all" || tenant.status === statusFilter)
+    ),
+    [accountGroupFilter, statusFilter, tenants],
   );
 
   async function updateStatus(tenant: ErpTenant, status: string) {
@@ -428,11 +466,22 @@ export default function AdminErp() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {STATUS_OPTIONS.map((status) => (
-          <button key={status} className="rounded-xl border bg-card p-4 text-left transition hover:border-primary/50" onClick={() => setStatusFilter(status)}>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{tAdmin(status)}</p>
-            <p className="mt-2 text-2xl font-semibold">{counts[status] ?? 0}</p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {ACCOUNT_GROUP_OPTIONS.map((group) => (
+          <button
+            key={group.value}
+            type="button"
+            aria-pressed={accountGroupFilter === group.value}
+            className={`rounded-xl border bg-card p-4 text-left transition hover:border-primary/50 ${
+              accountGroupFilter === group.value ? "border-primary ring-1 ring-primary/20" : ""
+            }`}
+            onClick={() => {
+              setAccountGroupFilter(group.value);
+              setStatusFilter("all");
+            }}
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{tAdmin(group.label)}</p>
+            <p className="mt-2 text-2xl font-semibold">{accountGroupCounts[group.value]}</p>
           </button>
         ))}
       </div>
@@ -465,9 +514,9 @@ export default function AdminErp() {
           <TableBody>
              {loading ? (
                <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">{tAdmin("Loading ERP accounts...")}</TableCell></TableRow>
-            ) : tenants.length === 0 ? (
-               <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts found.")}</TableCell></TableRow>
-            ) : tenants.map((tenant) => (
+             ) : visibleTenants.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts match the selected filters.")}</TableCell></TableRow>
+             ) : visibleTenants.map((tenant) => (
               <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="font-medium">{tenant.companyName}</div>
@@ -477,7 +526,14 @@ export default function AdminErp() {
                    <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
                    <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `${tAdmin("User")} #${tenant.ownerUserId}`}</div>
                 </TableCell>
-                <TableCell><Badge className={STATUS_STYLES[tenant.status] ?? ""}>{tenant.status}</Badge></TableCell>
+                 <TableCell>
+                   <div className="flex flex-col items-start gap-1">
+                     <Badge className={ACCOUNT_GROUP_STYLES[getAccountGroup(tenant)]}>
+                       {tAdmin(ACCOUNT_GROUP_LABELS[getAccountGroup(tenant)])}
+                     </Badge>
+                     <Badge className={STATUS_STYLES[tenant.status] ?? ""}>{tAdmin(tenant.status)}</Badge>
+                   </div>
+                 </TableCell>
                 <TableCell>
                   <Button
                     variant="ghost"
