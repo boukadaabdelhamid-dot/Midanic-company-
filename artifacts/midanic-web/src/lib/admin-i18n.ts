@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type SupportedLanguage = 'en' | 'fr' | 'ar';
@@ -684,8 +685,10 @@ export function useAdminText() {
       ? 'fr'
       : 'en') as SupportedLanguage;
 
-  return {
-    tAdmin: (text: string) => translations[language][text] ?? text,
-    language,
-  };
+  const tAdmin = useCallback(
+    (text: string) => translations[language][text] ?? text,
+    [language],
+  );
+
+  return { tAdmin, language };
 }
