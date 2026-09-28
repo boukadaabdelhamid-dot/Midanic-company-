@@ -43,6 +43,11 @@ import {
   parseWebStoreSubdomain,
 } from "../lib/web-store-domain";
 import { isDatabaseUniqueViolation } from "../lib/db-errors";
+import {
+  addErpContractPeriod,
+  getEffectiveErpTenantStatus,
+  isValidErpDate,
+} from "../lib/erp-contracts";
 import { getTenantDatabaseName } from "../lib/erp-tenant-database";
 import {
   checkErpTenantDatabaseHealth,
@@ -285,9 +290,6 @@ router.patch("/admin/settings", async (req, res): Promise<void> => {
 // ── ERP TENANT CONTROL ──────────────────────────────────────────────────────
 router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const conditions = status
-    ? eq(erpTenantsTable.status, status)
-    : undefined;
 
   const tenantRows = await db
     .select({
@@ -301,6 +303,9 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
       domainActivatedAt: erpTenantsTable.domainActivatedAt,
       trialStartedAt: erpTenantsTable.trialStartedAt,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
       approvedAt: erpTenantsTable.approvedAt,
       suspendedAt: erpTenantsTable.suspendedAt,
       notes: erpTenantsTable.notes,
@@ -323,11 +328,17 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
     .from(erpTenantsTable)
     .leftJoin(usersTable, eq(erpTenantsTable.ownerUserId, usersTable.id))
     .leftJoin(customerEntitlementsTable, eq(erpTenantsTable.ownerUserId, customerEntitlementsTable.userId))
-    .where(conditions)
     .orderBy(desc(erpTenantsTable.createdAt));
 
+  const effectiveRows = tenantRows.map((tenant) => ({
+    ...tenant,
+    status: getEffectiveErpTenantStatus(tenant),
+  }));
+  const filteredRows = status
+    ? effectiveRows.filter((tenant) => tenant.status === status)
+    : effectiveRows;
   const tenants = await Promise.all(
-    tenantRows.map(async (tenant) => ({
+    filteredRows.map(async (tenant) => ({
       ...tenant,
       ...(await fetchTenantStoreSummary(tenant.id)),
     })),
@@ -551,6 +562,10 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   const webStoreDomainStatus = typeof body.webStoreDomainStatus === "string"
     ? body.webStoreDomainStatus
     : undefined;
+  const hasContractPeriod = Object.prototype.hasOwnProperty.call(body, "contractPeriod");
+  const hasContractStartsAt = Object.prototype.hasOwnProperty.call(body, "contractStartsAt");
+  const contractPeriod = body.contractPeriod;
+  const contractStartsAt = body.contractStartsAt;
   const allowedStatuses = ["pending", "active", "suspended", "expired", "converted"];
   const allowedDomainStatuses = ["inactive", "active"];
   const allowedWebStoreStatuses = ["inactive", "active"];
@@ -591,6 +606,21 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid Web Store domain status" });
     return;
   }
+  if (
+    hasContractPeriod &&
+    contractPeriod !== "monthly" &&
+    contractPeriod !== "yearly"
+  ) {
+    res.status(400).json({ error: "contractPeriod must be monthly or yearly" });
+    return;
+  }
+  if (
+    hasContractStartsAt &&
+    !isValidErpDate(contractStartsAt)
+  ) {
+    res.status(400).json({ error: "contractStartsAt must be a valid YYYY-MM-DD date" });
+    return;
+  }
   const [currentTenant] = await db
     .select({
       id: erpTenantsTable.id,
@@ -599,6 +629,9 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       status: erpTenantsTable.status,
       trialStartedAt: erpTenantsTable.trialStartedAt,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
       databaseStatus: erpTenantsTable.databaseStatus,
       webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
       featureFlags: erpTenantsTable.featureFlags,
@@ -617,6 +650,24 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       databaseStatus: currentTenant.databaseStatus,
     });
     return;
+  }
+  if (status === "converted" || hasContractPeriod || hasContractStartsAt) {
+    const nextPeriod = hasContractPeriod
+      ? contractPeriod as "monthly" | "yearly"
+      : currentTenant.contractPeriod;
+    const nextStart = hasContractStartsAt
+      ? contractStartsAt as string
+      : currentTenant.contractStartsAt;
+    if ((status ?? currentTenant.status) !== "converted") {
+      res.status(400).json({ error: "Contract terms can only be set for a contracted ERP account" });
+      return;
+    }
+    if (!nextPeriod || !nextStart || !isValidErpDate(nextStart)) {
+      res.status(400).json({
+        error: "Choose a monthly or yearly contract and a valid start date before contracting this account",
+      });
+      return;
+    }
   }
   if (domainStatus === "active" && currentTenant.databaseStatus !== "ready") {
     res.status(409).json({
@@ -645,6 +696,19 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       updates.suspendedAt = null;
     } else if (status === "suspended") {
       updates.suspendedAt = new Date();
+    }
+  }
+  if (status === "converted" || hasContractPeriod || hasContractStartsAt) {
+    const nextPeriod = hasContractPeriod
+      ? contractPeriod as "monthly" | "yearly"
+      : currentTenant.contractPeriod as "monthly" | "yearly" | null;
+    const nextStart = hasContractStartsAt
+      ? contractStartsAt as string
+      : currentTenant.contractStartsAt;
+    if (nextPeriod && nextStart) {
+      updates.contractPeriod = nextPeriod;
+      updates.contractStartsAt = nextStart;
+      updates.contractEndsAt = addErpContractPeriod(nextStart, nextPeriod);
     }
   }
   if (typeof body.companyName === "string" && body.companyName.trim()) {

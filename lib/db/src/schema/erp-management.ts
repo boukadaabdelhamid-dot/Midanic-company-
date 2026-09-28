@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, date, uniqueIndex, index, jsonb } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const erpTenantStatusValues = [
@@ -10,6 +10,9 @@ export const erpTenantStatusValues = [
 ] as const;
 
 export type ErpTenantStatus = (typeof erpTenantStatusValues)[number];
+
+export const erpContractPeriodValues = ["monthly", "yearly"] as const;
+export type ErpContractPeriod = (typeof erpContractPeriodValues)[number];
 
 export const erpTenantDatabaseStatusValues = [
   "unprovisioned",
@@ -77,6 +80,10 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   domainActivatedAt: timestamp("domain_activated_at", { withTimezone: true }),
   trialStartedAt: timestamp("trial_started_at", { withTimezone: true }),
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  contractPeriod: text("contract_period").$type<ErpContractPeriod | null>(),
+  contractStartsAt: date("contract_starts_at", { mode: "string" }),
+  contractEndsAt: date("contract_ends_at", { mode: "string" }),
+  contractReminderSentOn: date("contract_reminder_sent_on", { mode: "string" }),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   notes: text("notes"),
@@ -97,6 +104,7 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   uniqueIndex("erp_tenants_hostname_uq").on(table.hostname),
   uniqueIndex("erp_tenants_web_store_subdomain_uq").on(table.webStoreSubdomain),
   uniqueIndex("erp_tenants_web_store_hostname_uq").on(table.webStoreHostname),
+  index("erp_tenants_contract_ends_at_idx").on(table.contractEndsAt),
 ]);
 
 export type ErpTenant = typeof erpTenantsTable.$inferSelect;

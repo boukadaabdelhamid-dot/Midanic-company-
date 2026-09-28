@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminText } from "@/lib/admin-i18n";
-import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2 } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2 } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 const ACCOUNT_GROUP_OPTIONS = [
@@ -89,16 +89,39 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 function getAccountGroup(
-  tenant: Pick<ErpTenant, "status" | "trialStartedAt" | "trialEndsAt">,
+  tenant: Pick<ErpTenant, "status" | "trialStartedAt" | "trialEndsAt" | "contractPeriod">,
 ): AccountGroup {
-  if (tenant.status === "converted") return "contracted";
+  if (tenant.status === "converted" || tenant.contractPeriod) return "contracted";
   if (tenant.trialStartedAt || tenant.trialEndsAt) return "trial";
   return "other";
 }
 
 function formatDate(value: string | null) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T12:00:00`)
+    : new Date(value);
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+}
+
+function localDateInputValue(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function previewContractEndDate(
+  startsAt: string,
+  period: "monthly" | "yearly",
+): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startsAt);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const monthIndex = year * 12 + month - 1 + (period === "monthly" ? 1 : 12);
+  const targetYear = Math.floor(monthIndex / 12);
+  const targetMonth = (monthIndex % 12) + 1;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+  return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
 }
 
 function formatStoreUsage(
@@ -139,6 +162,10 @@ export default function AdminErp() {
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
   const [maxStoresInput, setMaxStoresInput] = useState("");
   const [savingFeatures, setSavingFeatures] = useState(false);
+  const [contractTenant, setContractTenant] = useState<ErpTenant | null>(null);
+  const [contractPeriod, setContractPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [contractStartsAt, setContractStartsAt] = useState("");
+  const [savingContract, setSavingContract] = useState(false);
   const [refreshingStoreCountId, setRefreshingStoreCountId] = useState<number | null>(null);
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
@@ -199,12 +226,53 @@ export default function AdminErp() {
   );
 
   async function updateStatus(tenant: ErpTenant, status: string) {
+    if (status === "converted") {
+      openContractEditor(tenant);
+      return;
+    }
     try {
       const updated = await adminApi.updateErpTenant(tenant.id, { status });
       setTenants((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
       toast({ title: tAdmin("ERP account updated") });
     } catch (error) {
       toast({ title: tAdmin("Update failed"), description: (error as Error).message, variant: "destructive" });
+    }
+  }
+
+  function openContractEditor(tenant: ErpTenant) {
+    setContractTenant(tenant);
+    setContractPeriod(tenant.contractPeriod ?? "monthly");
+    setContractStartsAt(tenant.contractStartsAt ?? localDateInputValue());
+  }
+
+  function renewFromCurrentExpiry() {
+    const today = localDateInputValue();
+    const currentEnd = contractTenant?.contractEndsAt;
+    setContractStartsAt(currentEnd && currentEnd > today ? currentEnd : today);
+  }
+
+  async function saveContract() {
+    if (!contractTenant || !contractStartsAt) return;
+    setSavingContract(true);
+    try {
+      const updated = await adminApi.updateErpTenant(contractTenant.id, {
+        status: "converted",
+        contractPeriod,
+        contractStartsAt,
+      });
+      setTenants((current) =>
+        current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+      );
+      setContractTenant(null);
+      toast({ title: tAdmin("Contract settings saved") });
+    } catch (error) {
+      toast({
+        title: tAdmin("Update failed"),
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingContract(false);
     }
   }
 
@@ -505,6 +573,7 @@ export default function AdminErp() {
               <TableHead>{tAdmin("Status")}</TableHead>
               <TableHead>{tAdmin("Company domain")}</TableHead>
               <TableHead>{tAdmin("Web Store")}</TableHead>
+              <TableHead>{tAdmin("Contract")}</TableHead>
               <TableHead>{tAdmin("Features")}</TableHead>
              <TableHead>{tAdmin("Trial ends")}</TableHead>
               <TableHead>{tAdmin("Created")}</TableHead>
@@ -513,15 +582,36 @@ export default function AdminErp() {
           </TableHeader>
           <TableBody>
              {loading ? (
-               <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">{tAdmin("Loading ERP accounts...")}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="py-10 text-center text-muted-foreground">{tAdmin("Loading ERP accounts...")}</TableCell></TableRow>
              ) : visibleTenants.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts match the selected filters.")}</TableCell></TableRow>
+                 <TableRow><TableCell colSpan={10} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts match the selected filters.")}</TableCell></TableRow>
              ) : visibleTenants.map((tenant) => (
               <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="font-medium">{tenant.companyName}</div>
                    <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
                 </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      className="h-auto justify-start px-2 py-1 text-left"
+                      onClick={() => openContractEditor(tenant)}
+                    >
+                      <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
+                      <span>
+                        <span className="block text-sm">
+                          {tenant.contractPeriod
+                            ? tAdmin("Manage contract")
+                            : tAdmin("Set contract")}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {tenant.contractPeriod
+                            ? `${tAdmin(tenant.contractPeriod)}${tenant.contractEndsAt ? ` · ${tAdmin("Expires")} ${formatDate(tenant.contractEndsAt)}` : ""}`
+                            : tAdmin("No contract set")}
+                        </span>
+                      </span>
+                    </Button>
+                  </TableCell>
                 <TableCell>
                    <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
                    <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `${tAdmin("User")} #${tenant.ownerUserId}`}</div>
@@ -609,6 +699,93 @@ export default function AdminErp() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={Boolean(contractTenant)}
+        onOpenChange={(open) => !open && setContractTenant(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{tAdmin("Manage ERP contract")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <p className="font-medium">{contractTenant?.companyName}</p>
+              <p className="text-xs text-muted-foreground">
+                {contractTenant?.ownerEmail ?? ""}
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="erp-contract-period">
+                  {tAdmin("Contract term")}
+                </label>
+                <Select
+                  value={contractPeriod}
+                  onValueChange={(value) => setContractPeriod(value as "monthly" | "yearly")}
+                >
+                  <SelectTrigger id="erp-contract-period">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">{tAdmin("Monthly")}</SelectItem>
+                    <SelectItem value="yearly">{tAdmin("Yearly")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-sm font-medium" htmlFor="erp-contract-start">
+                    {tAdmin("Contract start date")}
+                  </label>
+                  {contractTenant?.contractEndsAt && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={renewFromCurrentExpiry}
+                    >
+                      {tAdmin("Renew from current expiry")}
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id="erp-contract-start"
+                  type="date"
+                  value={contractStartsAt}
+                  onChange={(event) => setContractStartsAt(event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-sm font-medium">
+                {tAdmin("Contract expiry")}:{" "}
+                {formatDate(previewContractEndDate(contractStartsAt, contractPeriod))}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tAdmin("Access ends at the start of the expiry date.")}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setContractTenant(null)}
+              disabled={savingContract}
+            >
+              {tAdmin("Cancel")}
+            </Button>
+            <Button
+              onClick={() => void saveContract()}
+              disabled={savingContract || !contractStartsAt}
+            >
+              {savingContract ? tAdmin("Saving...") : tAdmin("Save contract")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(domainTenant)} onOpenChange={(open) => !open && setDomainTenant(null)}>
         <DialogContent>

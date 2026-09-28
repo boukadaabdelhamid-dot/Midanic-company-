@@ -29,6 +29,13 @@
       "when": 1790243636593,
       "tag": "0003_add_google_customer_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790582401893,
+      "tag": "0004_add_erp_contract_coverage",
+      "breakpoints": true
     }
   ]
 }

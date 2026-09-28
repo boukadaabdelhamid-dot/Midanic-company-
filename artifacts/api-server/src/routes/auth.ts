@@ -35,6 +35,10 @@ import {
 import { requireAuth } from "../middlewares/auth";
 import { sendPasswordResetEmail } from "../lib/password-reset-email";
 import { isPasswordResetTokenUsable } from "../lib/password-reset-token";
+import {
+  canAccessErpTenant,
+  getEffectiveErpTenantStatus,
+} from "../lib/erp-contracts";
 
 const router: IRouter = Router();
 
@@ -454,6 +458,9 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
       id: erpTenantsTable.id,
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
       hostname: erpTenantsTable.hostname,
       webStoreHostname: erpTenantsTable.webStoreHostname,
       domainStatus: erpTenantsTable.domainStatus,
@@ -463,12 +470,9 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
     .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
     .limit(1);
 
-  const trialExpired = !!tenant?.trialEndsAt &&
-    tenant.trialEndsAt.getTime() <= Date.now() &&
-    tenant.status === "active";
-  const status = trialExpired ? "expired" : tenant?.status;
-  if (!tenant || !["active", "converted"].includes(status ?? "")) {
-    res.status(403).json({ error: "ERP access is not active", status: status ?? "none" });
+  const status = tenant ? getEffectiveErpTenantStatus(tenant) : "none";
+  if (!tenant || !canAccessErpTenant(tenant)) {
+    res.status(403).json({ error: "ERP access is not active", status });
     return;
   }
   if (!tenant.hostname || tenant.domainStatus !== "active") {
@@ -517,6 +521,9 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
       id: erpTenantsTable.id,
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
       hostname: erpTenantsTable.hostname,
       domainStatus: erpTenantsTable.domainStatus,
       databaseStatus: erpTenantsTable.databaseStatus,
@@ -525,10 +532,7 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
     .where(eq(erpTenantsTable.ownerUserId, userId))
     .orderBy(erpTenantsTable.createdAt)
     .limit(1);
-  const trialExpired = !!tenant?.trialEndsAt &&
-    tenant.trialEndsAt.getTime() <= Date.now() &&
-    tenant.status === "active";
-  const status = trialExpired ? "expired" : tenant?.status ?? "none";
+  const status = tenant ? getEffectiveErpTenantStatus(tenant) : "none";
   res.json({
     userId,
     tenantId: tenant?.id ?? null,
@@ -537,7 +541,7 @@ router.get("/internal/erp/access/:userId", async (req, res): Promise<void> => {
     domainStatus: tenant?.domainStatus ?? "inactive",
     databaseStatus: tenant?.databaseStatus ?? "unprovisioned",
     canAccess:
-      (status === "active" || status === "converted") &&
+      Boolean(tenant && canAccessErpTenant(tenant)) &&
       tenant?.domainStatus === "active" &&
       tenant?.databaseStatus === "ready" &&
       Boolean(tenant.hostname),
@@ -624,14 +628,14 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
     id: erpTenantsTable.id,
     status: erpTenantsTable.status,
     trialEndsAt: erpTenantsTable.trialEndsAt,
+    contractPeriod: erpTenantsTable.contractPeriod,
+    contractStartsAt: erpTenantsTable.contractStartsAt,
+    contractEndsAt: erpTenantsTable.contractEndsAt,
     hostname: erpTenantsTable.hostname,
     domainStatus: erpTenantsTable.domainStatus,
     databaseStatus: erpTenantsTable.databaseStatus,
   }).from(erpTenantsTable).where(eq(erpTenantsTable.id, tenantId)).limit(1);
-  const trialExpired = !!tenant?.trialEndsAt &&
-    tenant.trialEndsAt.getTime() <= Date.now() &&
-    tenant.status === "active";
-  const status = trialExpired ? "expired" : tenant?.status ?? "none";
+  const status = tenant ? getEffectiveErpTenantStatus(tenant) : "none";
   res.json({
     tenantId,
     status,
@@ -639,7 +643,7 @@ router.get("/internal/erp/access/tenant/:tenantId", async (req, res): Promise<vo
     domainStatus: tenant?.domainStatus ?? "inactive",
     databaseStatus: tenant?.databaseStatus ?? "unprovisioned",
     canAccess:
-      (status === "active" || status === "converted") &&
+      Boolean(tenant && canAccessErpTenant(tenant)) &&
       tenant?.domainStatus === "active" &&
       tenant?.databaseStatus === "ready" &&
       Boolean(tenant.hostname),
@@ -726,6 +730,9 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       ownerUserId: erpTenantsTable.ownerUserId,
       status: erpTenantsTable.status,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
       hostname: erpTenantsTable.hostname,
       webStoreHostname: erpTenantsTable.webStoreHostname,
       domainStatus: erpTenantsTable.domainStatus,
@@ -745,14 +752,9 @@ router.get("/internal/erp/domain/:hostname", async (req, res): Promise<void> => 
       eq(erpTenantsTable.webStoreHostname, hostname),
     ))
     .limit(1);
-  const trialExpired =
-    tenant?.status === "active" &&
-    Boolean(tenant.trialEndsAt) &&
-    tenant.trialEndsAt!.getTime() <= Date.now();
-  const status = trialExpired ? "expired" : tenant?.status ?? "unknown";
+  const status = tenant ? getEffectiveErpTenantStatus(tenant) : "unknown";
   const canAccess =
-    Boolean(tenant) &&
-    (status === "active" || status === "converted") &&
+    Boolean(tenant && canAccessErpTenant(tenant)) &&
     tenant?.domainStatus === "active" &&
     tenant?.databaseStatus === "ready";
   if (!tenant) {

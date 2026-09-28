@@ -171,6 +171,8 @@ export const adminApi = {
       webStoreStatus?: "inactive" | "active";
       webStoreSubdomain?: string | null;
       webStoreDomainStatus?: "inactive" | "active";
+      contractPeriod?: "monthly" | "yearly";
+      contractStartsAt?: string;
     },
   ) =>
     request<ErpTenant>(`/admin/erp/tenants/${id}`, {
@@ -734,6 +736,9 @@ export interface ErpTenant {
   domainActivatedAt: string | null;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
+  contractPeriod: "monthly" | "yearly" | null;
+  contractStartsAt: string | null;
+  contractEndsAt: string | null;
   approvedAt: string | null;
   suspendedAt: string | null;
   notes: string | null;

@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { configureR2CorsFromEnvironment } from "./lib/objectStorage";
 import { ensureCoreCatalog, ensureProductionAdmin, seedDatabase } from "./lib/seed";
 import { reconcileUnprovisionedErpTenants } from "./lib/erp-tenant-reconciliation";
+import { startErpContractLifecycleScheduler } from "./lib/erp-contract-lifecycle";
 import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -39,6 +40,7 @@ runMigrations()
     }
     app.listen(port, () => {
       logger.info({ port }, "Server listening");
+      startErpContractLifecycleScheduler();
       reconcileUnprovisionedErpTenants().catch((err) => {
         logger.error({ err }, "ERP tenant database reconciliation crashed");
       });

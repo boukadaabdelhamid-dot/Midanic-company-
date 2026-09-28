@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { pool } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { getErpBusinessDate } from "../lib/erp-contracts";
 
 const router = Router();
 
@@ -15,8 +16,16 @@ async function canUseErp(req: Request): Promise<boolean> {
      WHERE owner_user_id = $1
        AND status IN ('active', 'converted')
        AND (trial_ends_at IS NULL OR trial_ends_at > now())
+        AND (
+          contract_period IS NULL OR (
+            contract_starts_at IS NOT NULL
+            AND contract_ends_at IS NOT NULL
+            AND contract_starts_at <= $2::date
+            AND contract_ends_at > $2::date
+          )
+        )
      LIMIT 1`,
-    [userId(req)],
+    [userId(req), getErpBusinessDate()],
   );
   return (result.rowCount ?? 0) > 0;
 }

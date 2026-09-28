@@ -5,6 +5,11 @@ import { requireAuth, requireRole } from "../middlewares/auth";
 import { hashPassword, comparePassword, formatUserProfile, generateErpSsoToken } from "../lib/auth";
 import { buildErpTenantLaunchUrl } from "../lib/erp-domain";
 import {
+  canAccessErpTenant,
+  getErpBusinessDate,
+  getEffectiveErpTenantStatus,
+} from "../lib/erp-contracts";
+import {
   UpdateProfileBody,
   ChangePasswordBody,
   ChangeEmailBody,
@@ -33,6 +38,9 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
       domainStatus: erpTenantsTable.domainStatus,
       trialStartedAt: erpTenantsTable.trialStartedAt,
       trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
@@ -40,15 +48,8 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
 
   const tenant =
     tenants.find((candidate) => {
-      const trialExpired =
-        candidate.status === "active" &&
-        candidate.trialEndsAt !== null &&
-        candidate.trialEndsAt.getTime() <= Date.now();
-      const statusAllowsAccess =
-        candidate.status === "active" || candidate.status === "converted";
       return (
-        !trialExpired &&
-        statusAllowsAccess &&
+        canAccessErpTenant(candidate) &&
         candidate.domainStatus === "active" &&
         Boolean(candidate.hostname)
       );
@@ -65,14 +66,10 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const isTrialExpired =
-    tenant.status === "active" &&
-    tenant.trialEndsAt !== null &&
-    tenant.trialEndsAt.getTime() <= Date.now();
-  const effectiveStatus = isTrialExpired ? "expired" : tenant.status;
+  const effectiveStatus = getEffectiveErpTenantStatus(tenant);
   const tenantIsActive = effectiveStatus === "active" || effectiveStatus === "converted";
   const domainIsActive = tenant.domainStatus === "active" && Boolean(tenant.hostname);
-  const canAccess = tenantIsActive && domainIsActive;
+  const canAccess = tenantIsActive && canAccessErpTenant(tenant) && domainIsActive;
   const ssoToken = canAccess
     ? generateErpSsoToken({
         userId: req.user!.userId,
@@ -96,13 +93,22 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
       : "/erp/",
     trialStartedAt: tenant.trialStartedAt,
     trialEndsAt: tenant.trialEndsAt,
+    contractPeriod: tenant.contractPeriod,
+    contractStartsAt: tenant.contractStartsAt,
+    contractEndsAt: tenant.contractEndsAt,
     message:
       effectiveStatus === "pending"
         ? "Your ERP request is under review."
         : effectiveStatus === "expired"
-          ? "Your ERP trial has ended. Please contact the administration."
+          ? tenant.contractPeriod
+            ? "Your ERP contract has expired. Please contact the administration."
+            : "Your ERP trial has ended. Please contact the administration."
           : effectiveStatus === "suspended"
             ? "Your ERP access is currently suspended. Please contact the administration."
+            : tenant.contractPeriod &&
+                tenant.contractStartsAt &&
+                tenant.contractStartsAt > getErpBusinessDate()
+              ? "Your ERP contract has not started yet."
             : tenantIsActive && !domainIsActive
               ? "Your ERP company domain is not active yet. Please contact the administration."
             : null,

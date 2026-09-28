@@ -214,6 +214,10 @@ async function ensureErpManagementSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "hostname" text,
       ADD COLUMN IF NOT EXISTS "domain_status" text DEFAULT 'inactive' NOT NULL,
       ADD COLUMN IF NOT EXISTS "domain_activated_at" timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS "contract_period" text,
+      ADD COLUMN IF NOT EXISTS "contract_starts_at" date,
+      ADD COLUMN IF NOT EXISTS "contract_ends_at" date,
+      ADD COLUMN IF NOT EXISTS "contract_reminder_sent_on" date,
       ADD COLUMN IF NOT EXISTS "database_name" text,
       ADD COLUMN IF NOT EXISTS "database_status" text DEFAULT 'unprovisioned' NOT NULL,
       ADD COLUMN IF NOT EXISTS "database_provisioned_at" timestamp with time zone,
@@ -237,6 +241,10 @@ async function ensureErpManagementSchema(): Promise<void> {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS "erp_tenants_status_idx"
     ON "erp_tenants" ("status")
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "erp_tenants_contract_ends_at_idx"
+    ON "erp_tenants" ("contract_ends_at")
   `);
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS "erp_tenants_subdomain_uq"
