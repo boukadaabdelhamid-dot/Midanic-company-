@@ -1,8 +1,9 @@
-import { pgTable, serial, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { productsTable } from "./products";
+import { erpTenantsTable } from "./erp-management";
 
 export const licenseTypeEnum = pgEnum("license_type", [
   "trial",
@@ -24,6 +25,7 @@ export const licensesTable = pgTable("licenses", {
   id: serial("id").primaryKey(),
   key: text("key").notNull().unique(),
   userId: integer("user_id").references(() => usersTable.id),
+  erpTenantId: integer("erp_tenant_id").references(() => erpTenantsTable.id, { onDelete: "set null" }),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   type: licenseTypeEnum("type").notNull().default("trial"),
   status: licenseStatusEnum("status").notNull().default("active"),
@@ -33,7 +35,9 @@ export const licensesTable = pgTable("licenses", {
   autoRenew: boolean("auto_renew").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("licenses_erp_tenant_id_idx").on(table.erpTenantId),
+]);
 
 export const devicesTable = pgTable("devices", {
   id: serial("id").primaryKey(),

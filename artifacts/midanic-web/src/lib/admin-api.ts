@@ -127,7 +127,7 @@ export const adminApi = {
     request<LicenseListResponse>(`/admin/licenses?${new URLSearchParams(cleanParams(params)).toString()}`),
   createLicense: (body: CreateLicenseInput) =>
     request<AdminLicense>("/admin/licenses", { method: "POST", body: JSON.stringify(body) }),
-  updateLicense: (id: number, body: { status?: string; maxDevices?: number }) =>
+  updateLicense: (id: number, body: { status?: string; maxDevices?: number; erpTenantId?: number | null }) =>
     request<AdminLicense>(`/admin/licenses/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteLicense: (id: number) => request<void>(`/admin/licenses/${id}`, { method: "DELETE" }),
   getMyLicenses: () => request<{ licenses: MyLicense[] }>("/my/licenses"),
@@ -506,6 +506,7 @@ export interface AdminLicense {
   id: number;
   licenseKey: string;
   userId: number | null;
+  erpTenantId: number | null;
   productId: number;
   type: string;
   status: string;
@@ -517,10 +518,12 @@ export interface AdminLicense {
   userFirstName: string | null;
   userLastName: string | null;
   productName: string | null;
+  companyName: string | null;
 }
 
 export interface CreateLicenseInput {
   userId?: number;
+  erpTenantId?: number;
   productId: number;
   type: string;
   maxDevices?: number;
@@ -561,6 +564,7 @@ export interface AdminSubscription {
   userFirstName: string | null;
   userLastName: string | null;
   productName: string | null;
+  companyName: string | null;
 }
 
 export interface MyDownload {

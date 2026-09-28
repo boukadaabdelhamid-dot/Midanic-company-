@@ -2001,8 +2001,9 @@ function generateLicenseKey(): string {
 }
 
 router.post("/admin/licenses", async (req, res): Promise<void> => {
-  const { userId, productId, type, maxDevices, notes } = req.body as {
+  const { userId, erpTenantId, productId, type, maxDevices, notes } = req.body as {
     userId?: number;
+    erpTenantId?: number | null;
     productId: number;
     type: string;
     maxDevices?: number;
@@ -2027,8 +2028,33 @@ router.post("/admin/licenses", async (req, res): Promise<void> => {
     return;
   }
 
-  // Verify user exists (if provided)
-  if (userId) {
+  let assignedUserId = userId ?? null;
+
+  // Company-linked product licenses are assigned to that company's owner so
+  // the existing customer license and download views continue to work.
+  if (erpTenantId !== undefined && erpTenantId !== null) {
+    if (!Number.isInteger(erpTenantId) || erpTenantId <= 0) {
+      res.status(400).json({ error: "erpTenantId must be a positive integer" });
+      return;
+    }
+    const [tenant] = await db
+      .select({ id: erpTenantsTable.id, ownerUserId: erpTenantsTable.ownerUserId })
+      .from(erpTenantsTable)
+      .where(eq(erpTenantsTable.id, erpTenantId));
+    if (!tenant) {
+      res.status(404).json({ error: "ERP company not found" });
+      return;
+    }
+    if (userId !== undefined && userId !== tenant.ownerUserId) {
+      res.status(400).json({ error: "A company license must be assigned to its ERP company owner" });
+      return;
+    }
+    assignedUserId = tenant.ownerUserId;
+  } else if (userId !== undefined && userId !== null) {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      res.status(400).json({ error: "userId must be a positive integer" });
+      return;
+    }
     const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, userId));
     if (!user) {
       res.status(404).json({ error: "User not found" });
@@ -2043,7 +2069,8 @@ router.post("/admin/licenses", async (req, res): Promise<void> => {
     .insert(licensesTable)
     .values({
       key,
-      userId: userId ?? null,
+      userId: assignedUserId,
+      erpTenantId: erpTenantId ?? null,
       productId,
       type: type as "trial" | "monthly" | "quarterly" | "semi_annual" | "yearly" | "lifetime",
       status: "active",
@@ -2059,6 +2086,7 @@ router.post("/admin/licenses", async (req, res): Promise<void> => {
       id: licensesTable.id,
       licenseKey: licensesTable.key,
       userId: licensesTable.userId,
+      erpTenantId: licensesTable.erpTenantId,
       productId: licensesTable.productId,
       type: licensesTable.type,
       status: licensesTable.status,
@@ -2070,10 +2098,12 @@ router.post("/admin/licenses", async (req, res): Promise<void> => {
       userFirstName: usersTable.firstName,
       userLastName: usersTable.lastName,
       productName: productsTable.name,
+      companyName: erpTenantsTable.companyName,
     })
     .from(licensesTable)
     .leftJoin(usersTable, eq(licensesTable.userId, usersTable.id))
     .leftJoin(productsTable, eq(licensesTable.productId, productsTable.id))
+    .leftJoin(erpTenantsTable, eq(licensesTable.erpTenantId, erpTenantsTable.id))
     .where(eq(licensesTable.id, license.id));
 
   res.status(201).json(full);
@@ -2083,7 +2113,12 @@ router.patch("/admin/licenses/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const { status, maxDevices } = req.body as { status?: string; maxDevices?: number };
+  const { status, maxDevices, erpTenantId } = req.body as {
+    status?: string;
+    maxDevices?: number;
+    erpTenantId?: number | null;
+  };
+  const hasErpTenantId = Object.prototype.hasOwnProperty.call(req.body, "erpTenantId");
 
   const validStatuses = ["active", "suspended", "revoked", "expired"];
   if (status && !validStatuses.includes(status)) {
@@ -2094,6 +2129,26 @@ router.patch("/admin/licenses/:id", async (req, res): Promise<void> => {
   const updates: Record<string, unknown> = {};
   if (status) updates.status = status;
   if (maxDevices !== undefined) updates.maxDevices = maxDevices;
+  if (hasErpTenantId) {
+    if (erpTenantId === null) {
+      updates.erpTenantId = null;
+    } else {
+      if (!Number.isInteger(erpTenantId) || (erpTenantId as number) <= 0) {
+        res.status(400).json({ error: "erpTenantId must be null or a positive integer" });
+        return;
+      }
+      const [tenant] = await db
+        .select({ id: erpTenantsTable.id, ownerUserId: erpTenantsTable.ownerUserId })
+        .from(erpTenantsTable)
+        .where(eq(erpTenantsTable.id, erpTenantId as number));
+      if (!tenant) {
+        res.status(404).json({ error: "ERP company not found" });
+        return;
+      }
+      updates.erpTenantId = tenant.id;
+      updates.userId = tenant.ownerUserId;
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
@@ -2115,6 +2170,7 @@ router.patch("/admin/licenses/:id", async (req, res): Promise<void> => {
       id: licensesTable.id,
       licenseKey: licensesTable.key,
       userId: licensesTable.userId,
+      erpTenantId: licensesTable.erpTenantId,
       productId: licensesTable.productId,
       type: licensesTable.type,
       status: licensesTable.status,
@@ -2126,10 +2182,12 @@ router.patch("/admin/licenses/:id", async (req, res): Promise<void> => {
       userFirstName: usersTable.firstName,
       userLastName: usersTable.lastName,
       productName: productsTable.name,
+      companyName: erpTenantsTable.companyName,
     })
     .from(licensesTable)
     .leftJoin(usersTable, eq(licensesTable.userId, usersTable.id))
     .leftJoin(productsTable, eq(licensesTable.productId, productsTable.id))
+    .leftJoin(erpTenantsTable, eq(licensesTable.erpTenantId, erpTenantsTable.id))
     .where(eq(licensesTable.id, id));
 
   res.json(full);
@@ -2154,20 +2212,24 @@ router.get("/admin/licenses", async (req, res): Promise<void> => {
         id: licensesTable.id,
         licenseKey: licensesTable.key,
         userId: licensesTable.userId,
+        erpTenantId: licensesTable.erpTenantId,
         productId: licensesTable.productId,
         type: licensesTable.type,
         status: licensesTable.status,
         maxDevices: licensesTable.maxDevices,
+        activatedDevices: licensesTable.activatedDevices,
         expiresAt: licensesTable.expiresAt,
         createdAt: licensesTable.createdAt,
         userEmail: usersTable.email,
         userFirstName: usersTable.firstName,
         userLastName: usersTable.lastName,
         productName: productsTable.name,
+        companyName: erpTenantsTable.companyName,
       })
       .from(licensesTable)
       .leftJoin(usersTable, eq(licensesTable.userId, usersTable.id))
       .leftJoin(productsTable, eq(licensesTable.productId, productsTable.id))
+      .leftJoin(erpTenantsTable, eq(licensesTable.erpTenantId, erpTenantsTable.id))
       .orderBy(desc(licensesTable.createdAt))
       .limit(limit)
       .offset(offset),
@@ -2196,10 +2258,13 @@ router.get("/admin/subscriptions", async (req, res): Promise<void> => {
         userFirstName: usersTable.firstName,
         userLastName: usersTable.lastName,
         productName: productsTable.name,
+        companyName: erpTenantsTable.companyName,
       })
       .from(subscriptionsTable)
       .leftJoin(usersTable, eq(subscriptionsTable.userId, usersTable.id))
       .leftJoin(productsTable, eq(subscriptionsTable.productId, productsTable.id))
+      .leftJoin(licensesTable, eq(subscriptionsTable.licenseId, licensesTable.id))
+      .leftJoin(erpTenantsTable, eq(licensesTable.erpTenantId, erpTenantsTable.id))
       .orderBy(desc(subscriptionsTable.createdAt))
       .limit(limit)
       .offset(offset),

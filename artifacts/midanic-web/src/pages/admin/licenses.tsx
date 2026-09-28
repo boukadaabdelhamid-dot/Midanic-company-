@@ -4,6 +4,7 @@ import {
   type AdminLicense,
   type AdminSubscription,
   type CreateLicenseInput,
+  type ErpTenant,
 } from '@/lib/admin-api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,7 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   ChevronLeft, ChevronRight, Plus, Copy, Check, MoreHorizontal,
-  ShieldCheck, ShieldOff, Ban, Trash2,
+  ShieldCheck, ShieldOff, Ban, Trash2, Building2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminText } from '@/lib/admin-i18n';
@@ -57,6 +58,20 @@ const STATUS_COLORS: Record<string, string> = {
   suspended: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   revoked: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
+
+const ERP_STATUS_COLORS: Record<string, string> = {
+  active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  converted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  suspended: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  expired: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+};
+
+function formatCalendarDate(value: string | null) {
+  if (!value) return '—';
+  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
 
 const TYPE_LABELS: Record<string, string> = {
   trial: 'Trial',
@@ -94,22 +109,36 @@ interface CreateSheetProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCreated: (l: AdminLicense) => void;
+  companies: ErpTenant[];
+  companiesLoading: boolean;
 }
 
-function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps) {
+function CreateLicenseSheet({
+  open,
+  onOpenChange,
+  onCreated,
+  companies,
+  companiesLoading,
+}: CreateSheetProps) {
   const { toast } = useToast();
   const { tAdmin } = useAdminText();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<{
     userId: string;
+    erpTenantId: string;
     productId: string;
     type: string;
     maxDevices: string;
-  }>({ userId: '', productId: '', type: 'trial', maxDevices: '1' });
+  }>({ userId: '', erpTenantId: '', productId: '', type: 'trial', maxDevices: '1' });
   const [products, setProducts] = useState<{ id: number; name: string }[]>([]);
+  const selectedCompany = companies.find(company => String(company.id) === form.erpTenantId);
+  const selectedCompanyOwner = selectedCompany?.ownerEmail
+    || [selectedCompany?.ownerFirstName, selectedCompany?.ownerLastName].filter(Boolean).join(' ')
+    || (selectedCompany ? `#${selectedCompany.ownerUserId}` : '');
 
   useEffect(() => {
     if (open) {
+      setForm({ userId: '', erpTenantId: '', productId: '', type: 'trial', maxDevices: '1' });
       adminApi.listProducts().then(p => setProducts(p)).catch(() => {});
     }
   }, [open]);
@@ -126,12 +155,13 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
         type: form.type,
         maxDevices: Number(form.maxDevices) || 1,
       };
-      if (form.userId) body.userId = Number(form.userId);
+      if (form.erpTenantId) body.erpTenantId = Number(form.erpTenantId);
+      else if (form.userId) body.userId = Number(form.userId);
       const license = await adminApi.createLicense(body);
       toast({ title: tAdmin('License created'), description: `${tAdmin('Key')}: ${license.licenseKey}` });
       onCreated(license);
       onOpenChange(false);
-      setForm({ userId: '', productId: '', type: 'trial', maxDevices: '1' });
+      setForm({ userId: '', erpTenantId: '', productId: '', type: 'trial', maxDevices: '1' });
     } catch (e: unknown) {
       toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     } finally {
@@ -164,7 +194,39 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
           </div>
 
           <div className="space-y-1.5">
-             <Label>{tAdmin('License Type *')}</Label>
+            <Label>
+              {tAdmin('ERP company')} <span className="text-muted-foreground">({tAdmin('optional')})</span>
+            </Label>
+            <Select
+              value={form.erpTenantId || 'unlinked'}
+              onValueChange={value => setForm(f => ({
+                ...f,
+                erpTenantId: value === 'unlinked' ? '' : value,
+                userId: '',
+              }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={tAdmin('Select an ERP company')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unlinked">{tAdmin('Not linked')}</SelectItem>
+                {companiesLoading && (
+                  <SelectItem value="loading-companies" disabled>{tAdmin('Loading companies…')}</SelectItem>
+                )}
+                {!companiesLoading && companies.length === 0 && (
+                  <SelectItem value="no-companies" disabled>{tAdmin('No ERP companies found')}</SelectItem>
+                )}
+                {companies.map(company => (
+                  <SelectItem key={company.id} value={String(company.id)}>
+                    {company.companyName} · {company.ownerEmail ?? `#${company.ownerUserId}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{tAdmin('License Type *')}</Label>
             <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -176,17 +238,26 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
           </div>
 
           <div className="space-y-1.5">
-            <Label>User ID <span className="text-muted-foreground">(optional)</span></Label>
-            <Input
-              placeholder="e.g. 42"
-              value={form.userId}
-              onChange={e => setForm(f => ({ ...f, userId: e.target.value }))}
-            />
-            <p className="text-xs text-muted-foreground">Leave empty to create an unassigned license.</p>
+            <Label>{tAdmin('User ID')} <span className="text-muted-foreground">({tAdmin('optional')})</span></Label>
+            {selectedCompany ? (
+              <div className="rounded-md border px-3 py-2 text-sm">
+                <div>{selectedCompanyOwner}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{tAdmin('Assigned to company owner')}</p>
+              </div>
+            ) : (
+              <>
+                <Input
+                  placeholder={tAdmin('e.g. 42')}
+                  value={form.userId}
+                  onChange={e => setForm(f => ({ ...f, userId: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">{tAdmin('Leave empty to create an unassigned license.')}</p>
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Max Devices</Label>
+            <Label>{tAdmin('Max Devices')}</Label>
             <Input
               type="number"
               min={1}
@@ -207,6 +278,92 @@ function CreateLicenseSheet({ open, onOpenChange, onCreated }: CreateSheetProps)
   );
 }
 
+interface AssignCompanySheetProps {
+  open: boolean;
+  license: AdminLicense | null;
+  companies: ErpTenant[];
+  onOpenChange: (open: boolean) => void;
+  onUpdated: (license: AdminLicense) => void;
+}
+
+function AssignCompanySheet({
+  open,
+  license,
+  companies,
+  onOpenChange,
+  onUpdated,
+}: AssignCompanySheetProps) {
+  const { toast } = useToast();
+  const { tAdmin } = useAdminText();
+  const [companyValue, setCompanyValue] = useState('unlinked');
+  const [saving, setSaving] = useState(false);
+  const selectedCompany = companies.find(company => String(company.id) === companyValue);
+  const selectedCompanyOwner = selectedCompany?.ownerEmail
+    || [selectedCompany?.ownerFirstName, selectedCompany?.ownerLastName].filter(Boolean).join(' ')
+    || (selectedCompany ? `#${selectedCompany.ownerUserId}` : '');
+
+  useEffect(() => {
+    if (open) setCompanyValue(license?.erpTenantId ? String(license.erpTenantId) : 'unlinked');
+  }, [open, license]);
+
+  const save = async () => {
+    if (!license) return;
+    setSaving(true);
+    try {
+      const updated = await adminApi.updateLicense(license.id, {
+        erpTenantId: companyValue === 'unlinked' ? null : Number(companyValue),
+      });
+      onUpdated(updated);
+      toast({ title: tAdmin('License company updated') });
+      onOpenChange(false);
+    } catch (e: unknown) {
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{tAdmin('Assign ERP company')}</SheetTitle>
+        </SheetHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-1.5">
+            <Label>{tAdmin('ERP company')}</Label>
+            <Select value={companyValue} onValueChange={setCompanyValue}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unlinked">{tAdmin('Not linked')}</SelectItem>
+                {companies.length === 0 && (
+                  <SelectItem value="no-companies" disabled>{tAdmin('No ERP companies found')}</SelectItem>
+                )}
+                {companies.map(company => (
+                  <SelectItem key={company.id} value={String(company.id)}>
+                    {company.companyName} · {company.ownerEmail ?? `#${company.ownerUserId}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedCompany && (
+              <p className="text-xs text-muted-foreground">
+                {tAdmin('Assigned to company owner')}: {selectedCompanyOwner}
+              </p>
+            )}
+          </div>
+        </div>
+        <SheetFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{tAdmin('Cancel')}</Button>
+          <Button onClick={save} disabled={saving || !license}>
+            {saving ? tAdmin('Saving…') : tAdmin('Save')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function AdminLicenses() {
   const [licenses, setLicenses] = useState<AdminLicense[]>([]);
@@ -215,8 +372,11 @@ export default function AdminLicenses() {
   const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
   const [sTotal, setSTotal] = useState(0);
   const [sPage, setSPage] = useState(1);
+  const [companies, setCompanies] = useState<ErpTenant[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<AdminLicense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminLicense | null>(null);
   const { toast } = useToast();
   const { tAdmin } = useAdminText();
@@ -232,7 +392,7 @@ export default function AdminLicenses() {
     } finally {
       setLoading(false);
     }
-  }, [lPage, toast]);
+  }, [lPage, tAdmin, toast]);
 
   const fetchSubscriptions = useCallback(async () => {
     try {
@@ -242,10 +402,23 @@ export default function AdminLicenses() {
     } catch (e: unknown) {
        toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
     }
-  }, [sPage, toast]);
+  }, [sPage, tAdmin, toast]);
+
+  const fetchCompanies = useCallback(async () => {
+    setCompaniesLoading(true);
+    try {
+      const res = await adminApi.listErpTenants();
+      setCompanies(res.tenants);
+    } catch (e: unknown) {
+      toast({ title: tAdmin('Error'), description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setCompaniesLoading(false);
+    }
+  }, [tAdmin, toast]);
 
   useEffect(() => { fetchLicenses(); }, [fetchLicenses]);
   useEffect(() => { fetchSubscriptions(); }, [fetchSubscriptions]);
+  useEffect(() => { fetchCompanies(); }, [fetchCompanies]);
 
   const changeStatus = async (license: AdminLicense, status: string) => {
     try {
@@ -276,6 +449,10 @@ export default function AdminLicenses() {
     setLTotal(t => t + 1);
   };
 
+  const onCompanyUpdated = (license: AdminLicense) => {
+    setLicenses(current => current.map(item => item.id === license.id ? license : item));
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -283,16 +460,20 @@ export default function AdminLicenses() {
            <h1 className="text-2xl font-bold">{tAdmin('Licenses & Subscriptions')}</h1>
            <p className="text-muted-foreground text-sm mt-1">{tAdmin('Manage customer licenses and subscriptions')}</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+         <Button onClick={() => { setCreateOpen(true); void fetchCompanies(); }}>
           <Plus className="h-4 w-4 mr-2" />
            {tAdmin('New License')}
         </Button>
       </div>
 
-      <Tabs defaultValue="licenses">
+      <Tabs
+        defaultValue="licenses"
+        onValueChange={value => { if (value === 'companies') void fetchCompanies(); }}
+      >
         <TabsList>
            <TabsTrigger value="licenses">{tAdmin('Licenses')} ({lTotal})</TabsTrigger>
            <TabsTrigger value="subscriptions">{tAdmin('Subscriptions')} ({sTotal})</TabsTrigger>
+           <TabsTrigger value="companies">{tAdmin('ERP Companies')} ({companies.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="licenses" className="mt-4 space-y-3">
@@ -302,6 +483,7 @@ export default function AdminLicenses() {
                 <TableRow>
                    <TableHead>{tAdmin('License Key')}</TableHead>
                    <TableHead>{tAdmin('User')}</TableHead>
+                   <TableHead>{tAdmin('Company')}</TableHead>
                    <TableHead>{tAdmin('Product')}</TableHead>
                    <TableHead>{tAdmin('Type')}</TableHead>
                    <TableHead>{tAdmin('Devices')}</TableHead>
@@ -313,14 +495,14 @@ export default function AdminLicenses() {
               <TableBody>
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
-                      <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => (
+                      <TableRow key={i}>{Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}><div className="h-4 w-20 animate-pulse rounded bg-muted" /></TableCell>
                       ))}</TableRow>
                     ))
                   : licenses.length === 0
                   ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                         <div className="space-y-2">
                            <p className="font-medium">{tAdmin('No licenses yet')}</p>
                            <p className="text-xs">{tAdmin('Click "New License" to create the first one.')}</p>
@@ -337,6 +519,9 @@ export default function AdminLicenses() {
                         {l.userEmail
                           ? <span>{l.userEmail}</span>
                            : <span className="text-muted-foreground italic">{tAdmin('Unassigned')}</span>}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {l.companyName ?? <span className="text-muted-foreground italic">{tAdmin('Not linked')}</span>}
                       </TableCell>
                       <TableCell className="text-sm">{l.productName ?? `#${l.productId}`}</TableCell>
                       <TableCell>
@@ -375,6 +560,10 @@ export default function AdminLicenses() {
                                  {tAdmin('Suspend')}
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => setAssignTarget(l)}>
+                              <Building2 className="h-4 w-4 mr-2" />
+                              {tAdmin(l.erpTenantId ? 'Change ERP company' : 'Assign ERP company')}
+                            </DropdownMenuItem>
                             {l.status !== 'revoked' && (
                               <DropdownMenuItem onClick={() => changeStatus(l, 'revoked')}>
                                 <Ban className="h-4 w-4 mr-2 text-gray-500" />
@@ -406,6 +595,7 @@ export default function AdminLicenses() {
               <TableHeader>
                 <TableRow>
                    <TableHead>{tAdmin('User')}</TableHead>
+                   <TableHead>{tAdmin('Company')}</TableHead>
                    <TableHead>{tAdmin('Product')}</TableHead>
                    <TableHead>{tAdmin('Status')}</TableHead>
                    <TableHead>{tAdmin('Period Start')}</TableHead>
@@ -416,7 +606,7 @@ export default function AdminLicenses() {
                 {subscriptions.length === 0
                   ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                          {tAdmin('No subscriptions')}
                       </TableCell>
                     </TableRow>
@@ -424,6 +614,9 @@ export default function AdminLicenses() {
                   : subscriptions.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell className="text-sm">{s.userEmail ?? s.userId}</TableCell>
+                      <TableCell className="text-sm">
+                        {s.companyName ?? <span className="text-muted-foreground italic">{tAdmin('Not linked')}</span>}
+                      </TableCell>
                       <TableCell className="text-sm">{s.productName ?? s.productId}</TableCell>
                       <TableCell>
                         <Badge className={`text-xs ${STATUS_COLORS[s.status] ?? ''}`}>{s.status}</Badge>
@@ -441,12 +634,80 @@ export default function AdminLicenses() {
           </div>
           <Pagination total={sTotal} page={sPage} onPage={setSPage} />
         </TabsContent>
+
+        <TabsContent value="companies" className="mt-4 space-y-3">
+          <div className="rounded-md border bg-background">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{tAdmin('Company')}</TableHead>
+                  <TableHead>{tAdmin('Owner')}</TableHead>
+                  <TableHead>{tAdmin('ERP status')}</TableHead>
+                  <TableHead>{tAdmin('Contract term')}</TableHead>
+                  <TableHead>{tAdmin('Contract start date')}</TableHead>
+                  <TableHead>{tAdmin('Contract expiry')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {companiesLoading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <TableRow key={i}>
+                        {Array.from({ length: 6 }).map((__, j) => (
+                          <TableCell key={j}><div className="h-4 w-24 animate-pulse rounded bg-muted" /></TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  : companies.length === 0
+                  ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        {tAdmin('No ERP companies yet')}
+                      </TableCell>
+                    </TableRow>
+                  )
+                  : companies.map(company => {
+                    const ownerName = [company.ownerFirstName, company.ownerLastName].filter(Boolean).join(' ');
+                    return (
+                      <TableRow key={company.id}>
+                        <TableCell className="font-medium">{company.companyName}</TableCell>
+                        <TableCell className="text-sm">{company.ownerEmail || ownerName || `#${company.ownerUserId}`}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${ERP_STATUS_COLORS[company.status] ?? ''}`}>
+                            {tAdmin(company.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {company.contractPeriod ? tAdmin(company.contractPeriod) : tAdmin('No contract set')}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatCalendarDate(company.contractStartsAt)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatCalendarDate(company.contractEndsAt)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
       </Tabs>
 
       <CreateLicenseSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={onCreated}
+        companies={companies}
+        companiesLoading={companiesLoading}
+      />
+
+      <AssignCompanySheet
+        open={!!assignTarget}
+        license={assignTarget}
+        companies={companies}
+        onOpenChange={open => { if (!open) setAssignTarget(null); }}
+        onUpdated={onCompanyUpdated}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
