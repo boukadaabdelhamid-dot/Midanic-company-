@@ -28,6 +28,8 @@ tags:
     description: Public statistics
   - name: storage
     description: Object storage upload and serving endpoints.
+  - name: desktop-licenses
+    description: Legacy desktop application license tracking and key issuance.
 
 paths:
   /healthz:
@@ -728,6 +730,101 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/desktop-licenses:
+    get:
+      tags: [desktop-licenses]
+      operationId: listDesktopLicenses
+      summary: List legacy desktop application licenses
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 180
+      responses:
+        "200":
+          description: Paginated desktop license records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesktopLicenseListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [desktop-licenses]
+      operationId: createDesktopLicense
+      summary: Generate and record a legacy desktop activation key
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesktopLicenseInput"
+      responses:
+        "201":
+          description: Desktop license key generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesktopLicense"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A key is already recorded for this device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Legacy key generation is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1288,4 +1385,46 @@ components:
         totalCountries:
           type: integer
         yearsInBusiness:
+          type: integer
+
+    DesktopLicense:
+      type: object
+      required: [id, hwid, licenseKey, createdAt]
+      properties:
+        id:
+          type: integer
+        customerName:
+          type: ["string", "null"]
+        hwid:
+          type: string
+        licenseKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    DesktopLicenseInput:
+      type: object
+      required: [hwid]
+      properties:
+        customerName:
+          type: string
+          maxLength: 180
+        hwid:
+          type: string
+          pattern: "^[A-Za-z0-9]{16}$"
+
+    DesktopLicenseListResponse:
+      type: object
+      required: [licenses, total, page, limit]
+      properties:
+        licenses:
+          type: array
+          items:
+            $ref: "#/components/schemas/DesktopLicense"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
           type: integer

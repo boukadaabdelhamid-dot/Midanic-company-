@@ -661,3 +661,57 @@ export const GetStorageObjectParams = zod.object({
 export const GetStorageObjectResponse = zod.unknown()
 
 
+/**
+ * @summary List legacy desktop application licenses
+ */
+export const listDesktopLicensesQueryPageDefault = 1;
+
+export const listDesktopLicensesQueryLimitDefault = 20;
+export const listDesktopLicensesQueryLimitMax = 100;
+
+export const listDesktopLicensesQuerySearchMax = 180;
+
+
+
+export const ListDesktopLicensesQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listDesktopLicensesQueryPageDefault),
+  "limit": zod.coerce.number().int().min(1).max(listDesktopLicensesQueryLimitMax).default(listDesktopLicensesQueryLimitDefault),
+  "search": zod.coerce.string().max(listDesktopLicensesQuerySearchMax).optional()
+})
+
+export const ListDesktopLicensesResponse = zod.object({
+  "licenses": zod.array(zod.object({
+  "id": zod.int(),
+  "customerName": zod.string().nullish(),
+  "hwid": zod.string(),
+  "licenseKey": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.int(),
+  "page": zod.int(),
+  "limit": zod.int()
+})
+
+
+/**
+ * @summary Generate and record a legacy desktop activation key
+ */
+export const createDesktopLicenseBodyCustomerNameMax = 180;
+
+export const createDesktopLicenseBodyHwidRegExp = new RegExp('^[A-Za-z0-9]{16}$');
+
+
+export const CreateDesktopLicenseBody = zod.object({
+  "customerName": zod.string().max(createDesktopLicenseBodyCustomerNameMax).optional(),
+  "hwid": zod.string().regex(createDesktopLicenseBodyHwidRegExp)
+})
+
+export const CreateDesktopLicenseResponse = zod.object({
+  "id": zod.int(),
+  "customerName": zod.string().nullish(),
+  "hwid": zod.string(),
+  "licenseKey": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+

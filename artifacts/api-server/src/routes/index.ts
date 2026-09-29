@@ -9,6 +9,7 @@ import statsRouter from "./stats";
 import adminRouter from "./admin";
 import storageRouter from "./storage";
 import erpCompatRouter from "./erp-compat";
+import desktopLicensesRouter from "./desktop-licenses";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use(contactRouter);
 router.use(profileRouter);
 router.use(statsRouter);
 router.use(adminRouter);
+router.use(desktopLicensesRouter);
 router.use(storageRouter);
 
 export default router;

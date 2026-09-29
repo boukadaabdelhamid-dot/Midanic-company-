@@ -386,6 +386,29 @@ export interface PublicStats {
   yearsInBusiness?: number;
 }
 
+export interface DesktopLicense {
+  id: number;
+  /** @nullable */
+  customerName?: string | null;
+  hwid: string;
+  licenseKey: string;
+  createdAt: string;
+}
+
+export interface DesktopLicenseInput {
+  /** @maxLength 180 */
+  customerName?: string;
+  /** @pattern ^[A-Za-z0-9]{16}$ */
+  hwid: string;
+}
+
+export interface DesktopLicenseListResponse {
+  licenses: DesktopLicense[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type ListProductsParams = {
 category?: string;
 featured?: boolean;
@@ -399,5 +422,21 @@ limit?: number;
 export type ListNewsParams = {
 page?: number;
 limit?: number;
+};
+
+export type ListDesktopLicensesParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @maxLength 180
+ */
+search?: string;
 };
 

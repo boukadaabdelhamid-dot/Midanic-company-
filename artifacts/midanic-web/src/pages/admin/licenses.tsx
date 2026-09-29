@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminText } from '@/lib/admin-i18n';
+import DesktopLicensesTab from './desktop-licenses-tab';
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -472,6 +473,7 @@ export default function AdminLicenses() {
       >
         <TabsList>
            <TabsTrigger value="licenses">{tAdmin('Licenses')} ({lTotal})</TabsTrigger>
+           <TabsTrigger value="desktop-licenses">{tAdmin('Desktop keys')}</TabsTrigger>
            <TabsTrigger value="subscriptions">{tAdmin('Subscriptions')} ({sTotal})</TabsTrigger>
            <TabsTrigger value="companies">{tAdmin('ERP Companies')} ({companies.length})</TabsTrigger>
         </TabsList>
@@ -587,6 +589,10 @@ export default function AdminLicenses() {
             </Table>
           </div>
           <Pagination total={lTotal} page={lPage} onPage={setLPage} />
+        </TabsContent>
+
+        <TabsContent value="desktop-licenses" className="mt-4">
+          <DesktopLicensesTab />
         </TabsContent>
 
         <TabsContent value="subscriptions" className="mt-4 space-y-3">

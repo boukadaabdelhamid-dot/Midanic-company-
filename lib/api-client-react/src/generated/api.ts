@@ -27,6 +27,9 @@ import type {
   ChangePasswordInput,
   ContactInput,
   DemoRequestInput,
+  DesktopLicense,
+  DesktopLicenseInput,
+  DesktopLicenseListResponse,
   DownloadFile,
   ErrorResponse,
   GoogleAuthConfig,
@@ -35,6 +38,7 @@ import type {
   HealthStatus,
   LanguageUpdate,
   ListBlogPostsParams,
+  ListDesktopLicensesParams,
   ListNewsParams,
   ListProductsParams,
   LoginInput,
@@ -2329,4 +2333,159 @@ export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorage
 
 
 
+
+export const getListDesktopLicensesUrl = (params?: ListDesktopLicensesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/desktop-licenses?${stringifiedParams}` : `/api/admin/desktop-licenses`
+}
+
+/**
+ * @summary List legacy desktop application licenses
+ */
+export const listDesktopLicenses = async (params?: ListDesktopLicensesParams, options?: Parameters<typeof customFetch>[1]): Promise<DesktopLicenseListResponse> => {
+
+  return customFetch<DesktopLicenseListResponse>(getListDesktopLicensesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDesktopLicensesQueryKey = (params?: ListDesktopLicensesParams,) => {
+    return [
+    `/api/admin/desktop-licenses`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDesktopLicensesQueryOptions = <TData = Awaited<ReturnType<typeof listDesktopLicenses>>, TError = ErrorType<ErrorResponse>>(params?: ListDesktopLicensesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesktopLicenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDesktopLicensesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDesktopLicenses>>> = ({ signal }) => listDesktopLicenses(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDesktopLicenses>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDesktopLicensesQueryResult = NonNullable<Awaited<ReturnType<typeof listDesktopLicenses>>>
+export type ListDesktopLicensesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List legacy desktop application licenses
+ */
+
+export function useListDesktopLicenses<TData = Awaited<ReturnType<typeof listDesktopLicenses>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListDesktopLicensesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesktopLicenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDesktopLicensesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDesktopLicenseUrl = () => {
+
+
+
+
+  return `/api/admin/desktop-licenses`
+}
+
+/**
+ * @summary Generate and record a legacy desktop activation key
+ */
+export const createDesktopLicense = async (desktopLicenseInput: DesktopLicenseInput, options?: Parameters<typeof customFetch>[1]): Promise<DesktopLicense> => {
+
+  return customFetch<DesktopLicense>(getCreateDesktopLicenseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(desktopLicenseInput)
+  }
+);}
+
+
+
+
+
+export const getCreateDesktopLicenseMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesktopLicense>>, TError,{data: BodyType<DesktopLicenseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDesktopLicense>>, TError,{data: BodyType<DesktopLicenseInput>}, TContext> => {
+
+const mutationKey = ['createDesktopLicense'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesktopLicense>>, {data: BodyType<DesktopLicenseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDesktopLicense(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDesktopLicenseMutationResult = NonNullable<Awaited<ReturnType<typeof createDesktopLicense>>>
+    export type CreateDesktopLicenseMutationBody = BodyType<DesktopLicenseInput>
+    export type CreateDesktopLicenseMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Generate and record a legacy desktop activation key
+ */
+export const useCreateDesktopLicense = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesktopLicense>>, TError,{data: BodyType<DesktopLicenseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDesktopLicense>>,
+        TError,
+        {data: BodyType<DesktopLicenseInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDesktopLicenseMutationOptions(options));
+    }
 
