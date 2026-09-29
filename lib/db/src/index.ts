@@ -16,6 +16,26 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
+async function ensureDesktopLicensesSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "desktop_licenses" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "customer_name" text,
+      "hwid" text NOT NULL,
+      "license_key" text NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "desktop_licenses_hwid_unique"
+      ON "desktop_licenses" ("hwid")
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "desktop_licenses_key_unique"
+      ON "desktop_licenses" ("license_key")
+  `);
+}
+
 async function ensureUploadedAssetsSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "uploaded_assets" (
@@ -642,6 +662,7 @@ export async function runMigrations(): Promise<void> {
   // These run after Drizzle migrations so they also cover a brand-new
   // database, where the products table did not exist during the bootstrap
   // detection above.
+  await ensureDesktopLicensesSchema();
   await ensureUploadedAssetsSchema();
   await ensureCustomerProfileSchema();
   await ensureErpCustomerLinksSchema();

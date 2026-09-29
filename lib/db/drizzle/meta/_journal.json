@@ -43,6 +43,13 @@
       "when": 1790586691881,
       "tag": "0005_even_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790687352604,
+      "tag": "0006_add_desktop_licenses",
+      "breakpoints": true
     }
   ]
 }
