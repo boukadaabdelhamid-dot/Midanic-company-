@@ -21,6 +21,16 @@ test("matches the legacy HMAC-SHA256 and Base32 key format", () => {
   );
 });
 
+test("matches the desktop application's built-in activation verifier", () => {
+  process.env.DESKTOP_LEGACY_LICENSE_SALT =
+    'b"MEDANIC-DZ-2025-\\xab\\xcd\\xef\\x01\\x23\\x45\\x67\\x89"';
+
+  assert.equal(
+    generateLegacyDesktopLicenseKey("0123456789abcdef"),
+    "YKOR6-P4WOW-IK2PS-RSVEB",
+  );
+});
+
 test("accepts salt values with quotes removed or escaped bytes decoded", () => {
   process.env.DESKTOP_LEGACY_LICENSE_SALT = `test-${String.fromCharCode(0xab)}`;
 

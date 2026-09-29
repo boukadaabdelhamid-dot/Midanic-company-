@@ -2489,3 +2489,74 @@ export const useCreateDesktopLicense = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCreateDesktopLicenseMutationOptions(options));
     }
 
+export const getReissueDesktopLicenseUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/desktop-licenses/${id}/reissue`
+}
+
+/**
+ * @summary Reissue a key for an existing desktop license
+ */
+export const reissueDesktopLicense = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<DesktopLicense> => {
+
+  return customFetch<DesktopLicense>(getReissueDesktopLicenseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReissueDesktopLicenseMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reissueDesktopLicense>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reissueDesktopLicense>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['reissueDesktopLicense'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reissueDesktopLicense>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  reissueDesktopLicense(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReissueDesktopLicenseMutationResult = NonNullable<Awaited<ReturnType<typeof reissueDesktopLicense>>>
+
+    export type ReissueDesktopLicenseMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Reissue a key for an existing desktop license
+ */
+export const useReissueDesktopLicense = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reissueDesktopLicense>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reissueDesktopLicense>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getReissueDesktopLicenseMutationOptions(options));
+    }
+

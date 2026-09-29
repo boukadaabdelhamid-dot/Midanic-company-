@@ -6,7 +6,17 @@ import {
   getListDesktopLicensesQueryKey,
   useCreateDesktopLicense,
   useListDesktopLicenses,
+  useReissueDesktopLicense,
 } from '@workspace/api-client-react';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -28,7 +38,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAdminText } from '@/lib/admin-i18n';
 import { useForm } from 'react-hook-form';
-import { ChevronLeft, ChevronRight, Copy, KeyRound, Search, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, KeyRound, RefreshCw, Search, ShieldAlert } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 
@@ -63,6 +73,8 @@ export default function DesktopLicensesTab() {
   const [searchText, setSearchText] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [lastIssuedKey, setLastIssuedKey] = useState<string | null>(null);
+  const [lastIssuedKeyWasReissued, setLastIssuedKeyWasReissued] = useState(false);
+  const [reissueLicenseId, setReissueLicenseId] = useState<number | null>(null);
 
   const formSchema = useMemo(() => z.object({
     customerName: z.string().max(180),
@@ -84,6 +96,7 @@ export default function DesktopLicensesTab() {
     mutation: {
       onSuccess: (license) => {
         setLastIssuedKey(license.licenseKey);
+        setLastIssuedKeyWasReissued(false);
         form.reset();
         setPage(1);
         setSearchText('');
@@ -104,6 +117,21 @@ export default function DesktopLicensesTab() {
             : 'Could not generate desktop key.'),
           variant: 'destructive',
         });
+      },
+    },
+  });
+
+  const reissueMutation = useReissueDesktopLicense({
+    mutation: {
+      onSuccess: (license) => {
+        setLastIssuedKey(license.licenseKey);
+        setLastIssuedKeyWasReissued(true);
+        setReissueLicenseId(null);
+        void queryClient.invalidateQueries({ queryKey: getListDesktopLicensesQueryKey() });
+        toast({ title: tAdmin('Desktop key reissued') });
+      },
+      onError: () => {
+        toast({ title: tAdmin('Could not reissue desktop key.'), variant: 'destructive' });
       },
     },
   });
@@ -203,7 +231,9 @@ export default function DesktopLicensesTab() {
       {lastIssuedKey && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium">{tAdmin('Generated key')}</p>
+            <p className="text-sm font-medium">
+              {tAdmin(lastIssuedKeyWasReissued ? 'Reissued key' : 'Generated key')}
+            </p>
             <code className="break-all font-mono text-sm" data-testid="text-generated-desktop-license-key">
               {lastIssuedKey}
             </code>
@@ -259,13 +289,14 @@ export default function DesktopLicensesTab() {
                 <TableHead>{tAdmin('Device ID')}</TableHead>
                 <TableHead>{tAdmin('License key')}</TableHead>
                 <TableHead>{tAdmin('Issued')}</TableHead>
+                <TableHead>{tAdmin('Reissue key')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {query.isLoading
                 ? Array.from({ length: 4 }).map((_, index) => (
                     <TableRow key={index}>
-                      {Array.from({ length: 4 }).map((__, cellIndex) => (
+                      {Array.from({ length: 5 }).map((__, cellIndex) => (
                         <TableCell key={cellIndex}>
                           <div className="h-4 w-24 animate-pulse rounded bg-muted" />
                         </TableCell>
@@ -275,7 +306,7 @@ export default function DesktopLicensesTab() {
                 : licenses.length === 0
                   ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                         {tAdmin('No desktop keys have been generated yet.')}
                       </TableCell>
                     </TableRow>
@@ -306,6 +337,20 @@ export default function DesktopLicensesTab() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {formatIssuedDate(license.createdAt, language)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={tAdmin('Reissue key')}
+                          title={tAdmin('Reissue key')}
+                          disabled={reissueMutation.isPending}
+                          onClick={() => setReissueLicenseId(license.id)}
+                          data-testid={`button-reissue-desktop-license-${license.id}`}
+                        >
+                          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -341,6 +386,39 @@ export default function DesktopLicensesTab() {
           </Button>
         </div>
       </section>
+
+      <AlertDialog
+        open={reissueLicenseId !== null}
+        onOpenChange={(open) => {
+          if (!open && !reissueMutation.isPending) setReissueLicenseId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tAdmin('Reissue this key?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tAdmin('Reissuing replaces the key saved for this device. Already activated copies remain active; installations that are not activated must use the new key.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reissueMutation.isPending}>
+              {tAdmin('Cancel')}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={reissueMutation.isPending || reissueLicenseId === null}
+              onClick={() => {
+                if (reissueLicenseId !== null) {
+                  reissueMutation.mutate({ id: reissueLicenseId });
+                }
+              }}
+              data-testid="button-confirm-desktop-license-reissue"
+            >
+              {reissueMutation.isPending ? tAdmin('Reissuing…') : tAdmin('Reissue')}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

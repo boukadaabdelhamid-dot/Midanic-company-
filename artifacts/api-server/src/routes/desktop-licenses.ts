@@ -1,10 +1,12 @@
 import { Router, type IRouter } from "express";
-import { count, desc, ilike, or } from "drizzle-orm";
+import { count, desc, eq, ilike, or } from "drizzle-orm";
 import {
   CreateDesktopLicenseBody,
   CreateDesktopLicenseResponse,
   ListDesktopLicensesQueryParams,
   ListDesktopLicensesResponse,
+  ReissueDesktopLicenseParams,
+  ReissueDesktopLicenseResponse,
 } from "@workspace/api-zod";
 import { db, desktopLicensesTable } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -94,5 +96,57 @@ router.post("/admin/desktop-licenses", async (req, res): Promise<void> => {
     throw error;
   }
 });
+
+router.post(
+  "/admin/desktop-licenses/:id/reissue",
+  async (req, res): Promise<void> => {
+    const parsedParams = ReissueDesktopLicenseParams.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json({ error: "Invalid desktop license ID." });
+      return;
+    }
+
+    const [existing] = await db
+      .select({
+        id: desktopLicensesTable.id,
+        hwid: desktopLicensesTable.hwid,
+      })
+      .from(desktopLicensesTable)
+      .where(eq(desktopLicensesTable.id, parsedParams.data.id))
+      .limit(1);
+    if (!existing) {
+      res.status(404).json({ error: "Desktop license record not found." });
+      return;
+    }
+
+    let licenseKey: string;
+    try {
+      licenseKey = generateLegacyDesktopLicenseKey(existing.hwid);
+    } catch (error) {
+      req.log.error({ err: error }, "Legacy desktop license key generation is unavailable");
+      res.status(503).json({ error: "Desktop license key generation is not configured" });
+      return;
+    }
+
+    try {
+      const [license] = await db
+        .update(desktopLicensesTable)
+        .set({ licenseKey })
+        .where(eq(desktopLicensesTable.id, existing.id))
+        .returning();
+      if (!license) {
+        res.status(404).json({ error: "Desktop license record not found." });
+        return;
+      }
+      res.json(ReissueDesktopLicenseResponse.parse(license));
+    } catch (error) {
+      if (isDatabaseUniqueViolation(error)) {
+        res.status(409).json({ error: "Generated key conflicts with another record." });
+        return;
+      }
+      throw error;
+    }
+  },
+);
 
 export default router;

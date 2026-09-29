@@ -715,3 +715,22 @@ export const CreateDesktopLicenseResponse = zod.object({
 })
 
 
+/**
+ * @summary Reissue a key for an existing desktop license
+ */
+
+
+
+export const ReissueDesktopLicenseParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const ReissueDesktopLicenseResponse = zod.object({
+  "id": zod.int(),
+  "customerName": zod.string().nullish(),
+  "hwid": zod.string(),
+  "licenseKey": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
