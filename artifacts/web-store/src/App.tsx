@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { LangProvider } from "@/hooks/use-lang";
 import { StoreConfigProvider } from "@/hooks/use-store-config";
 import { useEffect } from "react";
+import { StoreCartProvider } from "@/hooks/use-store-cart";
 
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -94,12 +95,14 @@ function App() {
       <AuthProvider>
         <LangProvider>
           <StoreConfigProvider>
+            <StoreCartProvider>
             <TooltipProvider>
               <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                 <Router />
               </WouterRouter>
               <Toaster />
             </TooltipProvider>
+            </StoreCartProvider>
           </StoreConfigProvider>
         </LangProvider>
       </AuthProvider>

@@ -4,7 +4,8 @@ import { ShoppingBag, User, Globe, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLang } from "@/hooks/use-lang";
 import { useStoreConfig } from "@/hooks/use-store-config";
-import { useGetCart, getGetCartQueryKey, type CartItem } from "@workspace/erp-api-client-react";
+import { type CartItem } from "@workspace/erp-api-client-react";
+import { useStoreCart } from "@/hooks/use-store-cart";
 import { Button } from "@/components/ui/button";
 import { resolveImg } from "@/lib/utils";
 
@@ -16,12 +17,7 @@ export function Navbar() {
   const { logoUrl, nameAr, nameEn } = useStoreConfig();
   const [, setLocation] = useLocation();
 
-  const { data: cart } = useGetCart({
-    query: {
-      enabled: !!user,
-      queryKey: getGetCartQueryKey(),
-    }
-  });
+  const { data: cart } = useStoreCart();
 
   const cartCount = (Array.isArray(cart) ? cart : []).reduce(
     (acc: number, item: CartItem) => acc + (item.quantity || 0),

@@ -16,6 +16,7 @@ import {
 import { useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMe } from "@/hooks/use-me";
 import { useLang } from "@/hooks/use-lang";
+import { WebCustomersPanel } from "@/components/WebCustomersPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2089,6 +2090,7 @@ export default function Customers() {
       </div>
 
       {/* Filters */}
+      <WebCustomersPanel canEdit={can("customers", "edit")} />
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

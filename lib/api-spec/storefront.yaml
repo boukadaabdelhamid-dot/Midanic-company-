@@ -1,0 +1,114 @@
+openapi: 3.1.0
+info:
+  title: Storefront
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /orders:
+    post:
+      operationId: submitStoreOrder
+      summary: Submit an order without requiring an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreOrderInput'
+      responses:
+        '201':
+          description: Order accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrderReceipt'
+        '403':
+          description: Orders disabled or customer blocked
+        '409':
+          description: Stock or duplicate request conflict
+  /erp/web-customers:
+    get:
+      operationId: listWebCustomers
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: Store-scoped Web customer registry and blocked numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebCustomerRecord'
+    put:
+      operationId: setWebCustomerBlock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebCustomerBlockInput'
+      responses:
+        '200':
+          description: Block state saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean }
+components:
+  schemas:
+    StoreOrderInput:
+      type: object
+      required: [customerName, customerPhone, customerAddress, items, requestKey]
+      properties:
+        customerName: { type: string, minLength: 2, maxLength: 150 }
+        customerPhone: { type: string, minLength: 8, maxLength: 30 }
+        customerAddress: { type: string, minLength: 5, maxLength: 500 }
+        couponCode: { type: [string, 'null'], maxLength: 50 }
+        requestKey: { type: string, format: uuid }
+        website: { type: string, maxLength: 0 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/StoreOrderLine'
+    StoreOrderLine:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: integer, minimum: 1 }
+        quantity: { type: number, exclusiveMinimum: 0, maximum: 10000 }
+    StoreOrderReceipt:
+      type: object
+      required: [id, status, totalAmount, trackingToken, createdAt]
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        totalAmount: { type: string }
+        trackingToken: { type: string }
+        createdAt: { type: string }
+    WebCustomerBlockInput:
+      type: object
+      required: [isBlocked]
+      properties:
+        customerId: { type: integer, minimum: 1 }
+        phone: { type: string, maxLength: 30 }
+        isBlocked: { type: boolean }
+        reason: { type: string, maxLength: 500 }
+    WebCustomerRecord:
+      type: object
+      required: [phone, name, customerId, isBlocked, reason, orderCount, lastOrderAt]
+      properties:
+        phone: { type: string }
+        name: { type: [string, 'null'] }
+        customerId: { type: [integer, 'null'] }
+        isBlocked: { type: boolean }
+        reason: { type: [string, 'null'] }
+        orderCount: { type: integer }
+        lastOrderAt: { type: [string, 'null'] }

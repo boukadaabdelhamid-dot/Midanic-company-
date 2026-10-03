@@ -11,7 +11,8 @@
     "test:tenant-domain": "tsx --test src/lib/tenant-domain.test.ts src/lib/tenant-authority.test.ts src/lib/tenant-database.test.ts src/lib/tenant-registry.test.ts",
     "test:entitlements": "tsx --test src/lib/entitlement-limits.test.ts src/lib/tenant-domain.test.ts",
     "test:erp-customers": "tsx --test src/lib/erp-customer-isolation.test.ts",
-    "test:customer-limits": "tsx --test src/lib/customer-limits.test.ts"
+    "test:customer-limits": "tsx --test src/lib/customer-limits.test.ts",
+    "test:web-orders": "tsx --test src/lib/web-orders.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
@@ -23,6 +24,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "express-rate-limit": "^8.7.0",
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",

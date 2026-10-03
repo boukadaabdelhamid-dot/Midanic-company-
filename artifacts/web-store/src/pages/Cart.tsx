@@ -1,3 +1,4 @@
+import { useStoreCart } from "@/hooks/use-store-cart";
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -29,30 +30,19 @@ export default function Cart() {
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState<{ type: CouponValidationResponseType; value: number; code: string } | null>(null);
 
-  const { data: cart, isLoading } = useGetCart();
-  const updateItem = useUpdateCartItem();
-  const removeItem = useRemoveFromCart();
+  const storeCart = useStoreCart();
+  const { data: cart, isLoading } = storeCart;
   const validateCoupon = useValidateCoupon();
 
   const handleUpdateQuantity = (productId: number, newQuantity: number) => {
     if (newQuantity < 1) return;
-    updateItem.mutate(
-      { productId, data: { quantity: newQuantity } },
-      {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() }),
-        onError: (err: Error) => toast({ title: lang === 'ar' ? 'خطأ' : 'Error', description: err.message, variant: "destructive" })
-      }
-    );
+    storeCart.update(productId, newQuantity).catch((err: Error) =>
+      toast({ title: lang === "ar" ? "خطأ" : "Error", description: err.message, variant: "destructive" }));
   };
 
   const handleRemove = (productId: number) => {
-    removeItem.mutate(
-      { productId },
-      {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() }),
-        onError: (err: Error) => toast({ title: lang === 'ar' ? 'خطأ' : 'Error', description: err.message, variant: "destructive" })
-      }
-    );
+    storeCart.remove(productId).catch((err: Error) =>
+      toast({ title: lang === "ar" ? "خطأ" : "Error", description: err.message, variant: "destructive" }));
   };
 
   const items = (cart ?? []) as CartItem[];
@@ -161,7 +151,7 @@ export default function Cart() {
                     <div className="text-muted-foreground font-medium mb-3">دج {item.product?.price}</div>
                     <button 
                       onClick={() => handleRemove(item.product?.id ?? item.id)}
-                      disabled={removeItem.isPending}
+                      disabled={storeCart.isPending}
                       className="text-sm text-destructive hover:text-destructive/80 font-medium self-start flex items-center gap-1 transition-colors"
                       dir={lang === 'ar' ? 'rtl' : 'ltr'}
                     >
@@ -177,7 +167,7 @@ export default function Cart() {
                     <button
                       className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-50"
                       onClick={() => handleUpdateQuantity(item.product?.id ?? item.id, item.quantity - 1)}
-                      disabled={item.quantity <= 1 || updateItem.isPending}
+                      disabled={item.quantity <= 1 || storeCart.isPending}
                     >
                       <Minus className="h-3 w-3" />
                     </button>
@@ -185,7 +175,7 @@ export default function Cart() {
                     <button
                       className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-50"
                       onClick={() => handleUpdateQuantity(item.product?.id ?? item.id, item.quantity + 1)}
-                      disabled={updateItem.isPending}
+                      disabled={storeCart.isPending}
                     >
                       <Plus className="h-3 w-3" />
                     </button>

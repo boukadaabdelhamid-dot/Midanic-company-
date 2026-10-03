@@ -14,6 +14,32 @@ const titleTransformer: InputTransformerFn = (config) => {
 };
 
 export default defineConfig({
+  storefrontClient: {
+    input: { target: "./storefront.yaml" },
+    output: {
+      target: path.resolve(root, "lib/erp-api-client-react/src/generated/storefront.ts"),
+      schemas: path.resolve(root, "lib/erp-api-client-react/src/generated/storefront-models"),
+      client: "react-query",
+      mode: "single",
+      baseUrl: "/api",
+      override: {
+        fetch: { includeHttpResponseReturnType: false },
+        mutator: {
+          path: path.resolve(root, "lib/erp-api-client-react/src/custom-fetch.ts"),
+          name: "customFetch",
+        },
+      },
+    },
+  },
+  storefrontZod: {
+    input: { target: "./storefront.yaml" },
+    output: {
+      target: path.resolve(root, "lib/erp-api-zod/src/generated/storefront.ts"),
+      client: "zod",
+      mode: "single",
+      override: { zod: { version: 3 } },
+    },
+  },
   "api-client-react": {
     input: {
       target: "./openapi.yaml",

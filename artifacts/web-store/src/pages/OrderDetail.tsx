@@ -1,4 +1,6 @@
 import React from "react";
+import { orderTokenKey } from "@/hooks/use-store-cart";
+import { useAuth } from "@/hooks/use-auth";
 import { useRoute, Link } from "wouter";
 import { useGetOrder, getGetOrderQueryKey, type OrderDetailItemsItem } from "@workspace/erp-api-client-react";
 import { resolveImg } from "@/lib/utils";
@@ -12,8 +14,11 @@ export default function OrderDetail() {
   const [, params] = useRoute("/orders/:id");
   const orderId = Number(params?.id);
   const { lang } = useLang();
+  const { user } = useAuth();
+  const accessToken = sessionStorage.getItem(orderTokenKey(orderId));
 
   const { data: order, isLoading } = useGetOrder(orderId, {
+    request: { headers: accessToken ? { "X-Order-Token": accessToken } : {} },
     query: {
       enabled: !!orderId,
       queryKey: getGetOrderQueryKey(orderId),
@@ -56,9 +61,10 @@ export default function OrderDetail() {
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
-      <Link href="/orders" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-primary mb-8 transition-colors" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      {!user && <p className="mb-4 rounded-lg bg-primary/5 p-4 text-sm">{lang === "ar" ? "تم حفظ طلبك. التسجيل اختياري ولا يلزم لإتمام الشراء." : "Your order has been saved. An account is optional and is not required to buy."} <Link href="/auth/register" className="underline">{lang === "ar" ? "إنشاء حساب" : "Create an account"}</Link></p>}
+      <Link href={user ? "/orders" : "/products"} className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-primary mb-8 transition-colors" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         {lang === 'ar' ? <ArrowRight className="ml-2 h-4 w-4" /> : <ArrowLeft className="mr-2 h-4 w-4" />}
-        {lang === 'ar' ? 'العودة إلى طلباتي' : 'Back to Orders'}
+        {user ? (lang === 'ar' ? 'العودة إلى طلباتي' : 'Back to Orders') : (lang === "ar" ? "متابعة التسوق" : "Continue shopping")}
       </Link>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8" dir={lang === 'ar' ? 'rtl' : 'ltr'}>

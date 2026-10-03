@@ -5,10 +5,8 @@ import { useLang } from "@/hooks/use-lang";
 import { useStoreConfig } from "@/hooks/use-store-config";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Star } from "lucide-react";
-import { useAddToCart, getGetCartQueryKey } from "@workspace/erp-api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useStoreCart } from "@/hooks/use-store-cart";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import { resolveImg } from "@/lib/utils";
 
 interface ProductCardProps {
@@ -17,43 +15,25 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const { lang } = useLang();
-  const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const addToCart = useAddToCart();
+  const addToCart = useStoreCart();
   const { showPrices, showStock, acceptOrders } = useStoreConfig();
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
 
-    if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please login to add items to your cart. / يرجى تسجيل الدخول لإضافة منتجات إلى سلة التسوق الخاصة بك.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    addToCart.mutate(
-      { data: { productId: product.id, quantity: 1 } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() });
+    addToCart.add(product, 1).then(() => {
           toast({
-            title: "Added to Cart / تمت الإضافة إلى السلة",
-            description: `${lang === 'ar' ? product.nameAr : product.nameEn} added to your cart.`
+            title: lang === "ar" ? "تمت الإضافة إلى السلة" : "Added to Cart",
+            description: lang === "ar" ? product.nameAr : product.nameEn,
           });
-        },
-        onError: (err: Error) => {
+        }).catch((err: Error) => {
           toast({
             title: lang === 'ar' ? 'خطأ' : 'Error',
             description: err.message || (lang === 'ar' ? 'تعذّرت الإضافة إلى السلة' : 'Could not add to cart'),
             variant: "destructive"
           });
-        }
-      }
-    );
+        });
   };
 
   const outOfStock = showStock && product.stock === 0;

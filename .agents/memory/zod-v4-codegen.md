@@ -12,3 +12,9 @@ Orval 8.23+ generates `zod.int()`, `zod.email()` etc. (Zod v4 API). The workspac
 **Why:** Using esbuild's built-in `alias: { zod: 'zod/v4' }` does prefix matching — it also remaps `zod/v4` → `zod/v4/v4`, breaking drizzle-zod and other packages that already use `zod/v4`.
 
 **How to apply:** Any time Orval is upgraded or `lib/api-zod` schema changes are regenerated. Do NOT use the esbuild `alias` option for this.
+
+For new contracts consumed by a legacy Zod 3 application, prefer explicitly pinning Orval's Zod output version to 3 instead of changing the application's runtime resolution. Modern Orval supports a numeric `override.zod.version` setting.
+
+**Why:** Auto-detection can emit Zod 4 syntax despite a Zod 3 consumer. Pinning the compatible output keeps generation deterministic without broad changes to legacy schemas and bundling.
+
+**How to apply:** Decide the output target from the consumer's actual runtime, not from another package's codegen setup. Keep the existing platform V4 shim/plugin for contracts that already need it.

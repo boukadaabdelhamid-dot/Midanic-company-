@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useStoreCart, cartScope, orderTokenKey } from "@/hooks/use-store-cart";
 import {
-  useGetCart,
-  useCreateOrder,
-  getGetCartQueryKey,
+  useSubmitStoreOrder,
   type CartItem,
 } from "@workspace/erp-api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,11 +55,11 @@ export default function Checkout() {
   const { toast } = useToast();
   const { lang } = useLang();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
 
   const { acceptOrders, minOrderAmount } = useStoreConfig();
-  const { data: cart } = useGetCart();
-  const createOrder = useCreateOrder();
+  const storeCart = useStoreCart();
+  const { data: cart, isLoading, error: cartError } = storeCart;
+  const createOrder = useSubmitStoreOrder();
   const profileLoaded = useRef(false);
 
   const [formData, setFormData] = useState({
@@ -85,10 +83,9 @@ export default function Checkout() {
 
   const cartItems = (cart ?? []) as CartItem[];
 
-  if (cartItems.length === 0) {
-    setLocation("/cart");
-    return null;
-  }
+  useEffect(() => {
+    if (!isLoading && !cartError && cartItems.length === 0 && !createOrder.isPending && !createOrder.isSuccess) setLocation("/cart");
+  }, [isLoading, cartError, cartItems.length, createOrder.isPending, createOrder.isSuccess, setLocation]);
 
   const subtotal = cartItems.reduce(
     (sum, item) =>
@@ -105,8 +102,8 @@ export default function Checkout() {
     if (missingProduct) {
       toast({
         title: lang === "ar" ? "خطأ" : "Error",
-        description:
-          "One or more cart items are missing product information. Please refresh and try again.",
+          description: lang === "ar" ? "توجد بيانات منتج ناقصة. حدّث الصفحة ثم أعد المحاولة." :
+            "One or more cart items are missing product information. Please refresh and try again.",
         variant: "destructive",
       });
       return;
@@ -116,6 +113,14 @@ export default function Checkout() {
       productId: item.product!.id as number,
       quantity: item.quantity,
     }));
+    const payload = { ...formData, couponCode: couponCode || null, items };
+    const signature = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+      new TextEncoder().encode(JSON.stringify(payload))))).map(v => v.toString(16).padStart(2, "0")).join("");
+    const pendingKey = `midanic_checkout:${cartScope()}`;
+    let saved: { signature: string; key: string } | null = null;
+    try { saved = JSON.parse(sessionStorage.getItem(pendingKey) ?? "null"); } catch { /* invalid local entry */ }
+    const requestKey = saved?.signature === signature ? saved.key : crypto.randomUUID();
+    sessionStorage.setItem(pendingKey, JSON.stringify({ signature, key: requestKey }));
 
     createOrder.mutate(
       {
@@ -125,11 +130,14 @@ export default function Checkout() {
           customerAddress: formData.customerAddress,
           couponCode: couponCode || null,
           items,
+          requestKey,
         },
       },
       {
         onSuccess: (order) => {
-          queryClient.setQueryData(getGetCartQueryKey(), []);
+          sessionStorage.setItem(orderTokenKey(order.id), order.trackingToken);
+          sessionStorage.removeItem(pendingKey);
+          storeCart.clearAfterOrder();
           if (user) {
             saveProfile({
               name: formData.customerName,
@@ -156,6 +164,12 @@ export default function Checkout() {
     );
   };
 
+  if (isLoading) return <p className="p-12 text-center">{lang === "ar" ? "جارٍ تحميل السلة…" : "Loading your basket…"}</p>;
+  if (cartError) return <div className="p-12 text-center space-y-4" role="alert">
+    <p>{lang === "ar" ? "تعذّر تحميل سلة الحساب. أعد تحميل الصفحة قبل إتمام الطلب." : "Your account basket could not be loaded. Reload before placing an order."}</p>
+    <Button onClick={() => window.location.reload()}>{lang === "ar" ? "إعادة المحاولة" : "Retry"}</Button>
+  </div>;
+  if (cartItems.length === 0) return null;
   return (
     <div className="container mx-auto px-4 py-12 md:py-20">
       <div className="max-w-5xl mx-auto">
@@ -184,6 +198,10 @@ export default function Checkout() {
                 className="text-2xl font-serif font-bold mb-8 pb-4 border-b"
                 dir={lang === "ar" ? "rtl" : "ltr"}
               >
+                {!user && <p className="rounded-lg bg-primary/5 p-3 text-sm">
+                  {lang === "ar" ? "يمكنك الطلب مباشرة دون حساب. التسجيل اختياري." : "You can order directly without an account. Registration is optional."}{" "}
+                  <Link href="/auth/register" className="underline">{lang === "ar" ? "إنشاء حساب" : "Create an account"}</Link>
+                </p>}
                 {lang === "ar" ? "معلومات التوصيل" : "Shipping Information"}
               </h2>
 
@@ -200,6 +218,9 @@ export default function Checkout() {
                   <Input
                     id="customerName"
                     required
+                    minLength={2}
+                    maxLength={150}
+                    autoComplete="name"
                     value={formData.customerName}
                     onChange={(e) =>
                       setFormData({ ...formData, customerName: e.target.value })
@@ -218,11 +239,15 @@ export default function Checkout() {
                   <Input
                     id="customerPhone"
                     required
+                    type="tel"
+                    autoComplete="tel"
+                    minLength={8}
+                    maxLength={30}
                     value={formData.customerPhone}
                     onChange={(e) =>
                       setFormData({ ...formData, customerPhone: e.target.value })
                     }
-                    placeholder="+966 5X XXX XXXX"
+                    placeholder="0555 12 34 56 / +213 555 123456"
                     className="h-12 bg-background text-left"
                     dir="ltr"
                   />

@@ -1,3 +1,4 @@
+export * from "./web-orders";
 export * from "./stores";
 export * from "./categories";
 export * from "./product-attributes";

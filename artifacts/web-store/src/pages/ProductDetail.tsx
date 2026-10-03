@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useStoreCart } from "@/hooks/use-store-cart";
 import { useRoute } from "wouter";
 import { 
   useGetProduct, 
@@ -38,38 +39,23 @@ export default function ProductDetail() {
     }
   });
 
-  const addToCart = useAddToCart();
+  const addToCart = useStoreCart();
   const createReview = useCreateReview();
 
   const handleAddToCart = () => {
-    if (!user) {
-      toast({
-        title: "Login Required",
-        description: lang === 'ar' ? "يرجى تسجيل الدخول لإضافة منتجات إلى سلة التسوق الخاصة بك." : "Please login to add items to your cart.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    addToCart.mutate(
-      { data: { productId, quantity } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() });
+    if (!product) return;
+    addToCart.add(product, quantity).then(() => {
           toast({
             title: lang === 'ar' ? 'تمت الإضافة إلى السلة' : 'Added to Cart',
             description: `${quantity}x ${lang === 'ar' ? product?.nameAr : product?.nameEn} ${lang === 'ar' ? 'تمت إضافتها إلى السلة.' : 'added to your cart.'}`
           });
-        },
-        onError: (err: Error) => {
+        }).catch((err: Error) => {
           toast({
             title: lang === 'ar' ? 'خطأ' : 'Error',
             description: err.message || (lang === 'ar' ? 'تعذّرت الإضافة إلى السلة' : 'Could not add to cart'),
             variant: "destructive"
           });
-        }
-      }
-    );
+        });
   };
 
   const handleReviewSubmit = (e: React.FormEvent) => {

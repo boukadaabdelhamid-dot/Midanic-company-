@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import app from "./app";
 import { setupWebSocket } from "./lib/ws";
 import { logger } from "./lib/logger";
+import { runWebOrdersMigration } from "./lib/web-orders-migration";
 import {
   db,
   getTenantDatabasePool,
@@ -847,6 +848,7 @@ async function runMigrations(targetPool: Pool = pool) {
   await targetPool.query(`DROP INDEX IF EXISTS "erp"."stores_platform_tenant_id_uq"`);
   await targetPool.query(`CREATE INDEX IF NOT EXISTS "stores_platform_tenant_id_idx" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
   await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
+  await runWebOrdersMigration(targetPool);
 }
 
 // Canonical-email uniqueness: login matches emails case-insensitively, so two
