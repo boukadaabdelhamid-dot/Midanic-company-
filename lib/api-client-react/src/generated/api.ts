@@ -31,6 +31,10 @@ import type {
   DesktopLicenseInput,
   DesktopLicenseListResponse,
   DownloadFile,
+  ErpTenantAdminRecord,
+  ErpTenantBackupImportResponse,
+  ErpTenantCreateInput,
+  ErpTenantListResponse,
   ErrorResponse,
   GoogleAuthConfig,
   GoogleAuthInput,
@@ -39,6 +43,7 @@ import type {
   LanguageUpdate,
   ListBlogPostsParams,
   ListDesktopLicensesParams,
+  ListErpTenantsAdminParams,
   ListNewsParams,
   ListProductsParams,
   LoginInput,
@@ -2558,5 +2563,233 @@ export const useReissueDesktopLicense = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getReissueDesktopLicenseMutationOptions(options));
+    }
+
+export const getListErpTenantsAdminUrl = (params?: ListErpTenantsAdminParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/erp/tenants?${stringifiedParams}` : `/api/admin/erp/tenants`
+}
+
+/**
+ * @summary List ERP tenants for the super administrator
+ */
+export const listErpTenantsAdmin = async (params?: ListErpTenantsAdminParams, options?: Parameters<typeof customFetch>[1]): Promise<ErpTenantListResponse> => {
+
+  return customFetch<ErpTenantListResponse>(getListErpTenantsAdminUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListErpTenantsAdminQueryKey = (params?: ListErpTenantsAdminParams,) => {
+    return [
+    `/api/admin/erp/tenants`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListErpTenantsAdminQueryOptions = <TData = Awaited<ReturnType<typeof listErpTenantsAdmin>>, TError = ErrorType<ErrorResponse>>(params?: ListErpTenantsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listErpTenantsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListErpTenantsAdminQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listErpTenantsAdmin>>> = ({ signal }) => listErpTenantsAdmin(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listErpTenantsAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListErpTenantsAdminQueryResult = NonNullable<Awaited<ReturnType<typeof listErpTenantsAdmin>>>
+export type ListErpTenantsAdminQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List ERP tenants for the super administrator
+ */
+
+export function useListErpTenantsAdmin<TData = Awaited<ReturnType<typeof listErpTenantsAdmin>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListErpTenantsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listErpTenantsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListErpTenantsAdminQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateErpTenantAdminUrl = () => {
+
+
+
+
+  return `/api/admin/erp/tenants`
+}
+
+/**
+ * @summary Create an ERP tenant, optionally waiting for a customer backup
+ */
+export const createErpTenantAdmin = async (erpTenantCreateInput: ErpTenantCreateInput, options?: Parameters<typeof customFetch>[1]): Promise<ErpTenantAdminRecord> => {
+
+  return customFetch<ErpTenantAdminRecord>(getCreateErpTenantAdminUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erpTenantCreateInput)
+  }
+);}
+
+
+
+
+
+export const getCreateErpTenantAdminMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createErpTenantAdmin>>, TError,{data: BodyType<ErpTenantCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createErpTenantAdmin>>, TError,{data: BodyType<ErpTenantCreateInput>}, TContext> => {
+
+const mutationKey = ['createErpTenantAdmin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createErpTenantAdmin>>, {data: BodyType<ErpTenantCreateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createErpTenantAdmin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateErpTenantAdminMutationResult = NonNullable<Awaited<ReturnType<typeof createErpTenantAdmin>>>
+    export type CreateErpTenantAdminMutationBody = BodyType<ErpTenantCreateInput>
+    export type CreateErpTenantAdminMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create an ERP tenant, optionally waiting for a customer backup
+ */
+export const useCreateErpTenantAdmin = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createErpTenantAdmin>>, TError,{data: BodyType<ErpTenantCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createErpTenantAdmin>>,
+        TError,
+        {data: BodyType<ErpTenantCreateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateErpTenantAdminMutationOptions(options));
+    }
+
+export const getImportErpTenantBackupAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/erp/tenants/${id}/import-backup`
+}
+
+/**
+ * Imports only the ERP tables and required types into the new tenant. The source database is not contacted or changed.
+ * @summary Stream a PostgreSQL custom archive into an unpublished ERP tenant
+ */
+export const importErpTenantBackupAdmin = async (id: number,
+    importErpTenantBackupAdminBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<ErpTenantBackupImportResponse> => {
+
+  return customFetch<ErpTenantBackupImportResponse>(getImportErpTenantBackupAdminUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', ...options?.headers },
+    body: importErpTenantBackupAdminBody
+  }
+);}
+
+
+
+
+
+export const getImportErpTenantBackupAdminMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importErpTenantBackupAdmin>>, TError,{id: number;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importErpTenantBackupAdmin>>, TError,{id: number;data: BodyType<Blob>}, TContext> => {
+
+const mutationKey = ['importErpTenantBackupAdmin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importErpTenantBackupAdmin>>, {id: number;data: BodyType<Blob>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  importErpTenantBackupAdmin(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportErpTenantBackupAdminMutationResult = NonNullable<Awaited<ReturnType<typeof importErpTenantBackupAdmin>>>
+    export type ImportErpTenantBackupAdminMutationBody = BodyType<Blob>
+    export type ImportErpTenantBackupAdminMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Stream a PostgreSQL custom archive into an unpublished ERP tenant
+ */
+export const useImportErpTenantBackupAdmin = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importErpTenantBackupAdmin>>, TError,{id: number;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importErpTenantBackupAdmin>>,
+        TError,
+        {id: number;data: BodyType<Blob>},
+        TContext
+      > => {
+      return useMutation(getImportErpTenantBackupAdminMutationOptions(options));
     }
 

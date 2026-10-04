@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminText } from "@/lib/admin-i18n";
-import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2 } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2, Upload } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 const ACCOUNT_GROUP_OPTIONS = [
@@ -143,8 +143,14 @@ export default function AdminErp() {
   const [companyName, setCompanyName] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
   const [createSubdomain, setCreateSubdomain] = useState("");
+  const [importExistingData, setImportExistingData] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [importTenant, setImportTenant] = useState<ErpTenant | null>(null);
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [confirmBackup, setConfirmBackup] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
   const [domainTenant, setDomainTenant] = useState<ErpTenant | null>(null);
   const [domainSubdomain, setDomainSubdomain] = useState("");
   const [domainStatus, setDomainStatus] = useState<"inactive" | "active">("inactive");
@@ -287,18 +293,70 @@ export default function AdminErp() {
       const tenant = await adminApi.createErpTenant({
         companyName: companyName.trim(),
         ownerUserId: parsedOwnerId,
+        importExistingData,
         ...(createSubdomain.trim() ? { subdomain: createSubdomain.trim() } : {}),
       });
       setTenants((current) => [tenant, ...current]);
       setCompanyName("");
       setOwnerUserId("");
       setCreateSubdomain("");
+      setImportExistingData(false);
       setCreateOpen(false);
-      toast({ title: tAdmin("ERP account created") });
+      if (importExistingData) {
+        setImportTenant(tenant);
+        setBackupFile(null);
+        setConfirmBackup(false);
+        setImportError("");
+      } else {
+        toast({ title: tAdmin("ERP account created") });
+      }
     } catch (error) {
       toast({ title: tAdmin("Creation failed"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openBackupImport(tenant: ErpTenant) {
+    setImportTenant(tenant);
+    setBackupFile(null);
+    setConfirmBackup(false);
+    setImportError("");
+  }
+
+  async function submitBackupImport() {
+    if (!importTenant || !backupFile || !confirmBackup) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const result = await adminApi.importErpTenantBackup(importTenant.id, backupFile);
+      setTenants((current) => current.map((tenant) =>
+        tenant.id === importTenant.id
+          ? {
+              ...tenant,
+              dataImportStatus: "completed",
+              dataImportedAt: new Date().toISOString(),
+              dataImportError: null,
+              dataImportSummary: result.summary,
+            }
+          : tenant,
+      ));
+      setImportTenant(null);
+      setBackupFile(null);
+      setConfirmBackup(false);
+      toast({ title: tAdmin("ERP and Web Store data imported") });
+      void loadTenants();
+    } catch (error) {
+      const message = (error as Error).message;
+      setImportError(message);
+      toast({
+        title: tAdmin("Backup import failed"),
+        description: message,
+        variant: "destructive",
+      });
+      void loadTenants();
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -497,6 +555,22 @@ export default function AdminErp() {
                   <label className="text-sm font-medium" htmlFor="erp-company-name">{tAdmin("Company name")}</label>
                   <Input id="erp-company-name" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder={tAdmin("Company name")} />
                 </div>
+                <div className="flex items-start gap-3 rounded-lg border p-3">
+                  <Switch
+                    id="erp-import-existing-data"
+                    checked={importExistingData}
+                    onCheckedChange={setImportExistingData}
+                    data-testid="switch-import-existing-data"
+                  />
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium" htmlFor="erp-import-existing-data">
+                      {tAdmin("Import an existing ERP and Web Store backup")}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {tAdmin("Creates a separate, unpublished tenant. The old system remains unchanged.")}
+                    </p>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="erp-owner-id">{tAdmin("Owner user ID")}</label>
                   <Select value={ownerUserId} onValueChange={setOwnerUserId} disabled={loadingCustomers}>
@@ -589,7 +663,44 @@ export default function AdminErp() {
               <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="font-medium">{tenant.companyName}</div>
-                   <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
+                  <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
+                  {tenant.dataImportStatus === "completed" && (
+                    <p className="mt-1 text-xs text-green-700 dark:text-green-400" data-testid={`status-import-completed-${tenant.id}`}>
+                      {tAdmin("Imported")}: {tenant.dataImportSummary?.tableCount ?? 0} {tAdmin("tables")}
+                    </p>
+                  )}
+                  {tenant.dataImportStatus === "running" && (
+                    <p className="mt-1 text-xs text-muted-foreground" data-testid={`status-import-running-${tenant.id}`}>
+                      {tAdmin("Backup import in progress")}
+                    </p>
+                  )}
+                  {tenant.dataImportStatus === "failed" && tenant.dataImportSummary && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`status-import-retained-${tenant.id}`}>
+                      {tAdmin("Imported data was retained; review required")}
+                    </p>
+                  )}
+                  {tenant.dataImportStatus === "failed" &&
+                    !tenant.dataImportSummary &&
+                    tenant.dataImportError?.includes("must be checked before another upload") && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`status-import-review-${tenant.id}`}>
+                      {tAdmin("Import status needs review before retry")}
+                    </p>
+                  )}
+                  {(tenant.dataImportStatus === "awaiting_backup" ||
+                    (tenant.dataImportStatus === "failed" &&
+                     !tenant.dataImportSummary &&
+                     !tenant.dataImportError?.includes("must be checked before another upload"))) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => openBackupImport(tenant)}
+                      data-testid={`button-import-backup-${tenant.id}`}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      {tAdmin(tenant.dataImportStatus === "failed" ? "Retry backup import" : "Import backup")}
+                    </Button>
+                  )}
                 </TableCell>
                   <TableCell>
                     <Button
@@ -699,6 +810,83 @@ export default function AdminErp() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={Boolean(importTenant)}
+        onOpenChange={(open) => {
+          if (!open && !importing) {
+            setImportTenant(null);
+            setBackupFile(null);
+            setConfirmBackup(false);
+            setImportError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{tAdmin("Import ERP and Web Store backup")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">
+                {importTenant?.companyName} · {tAdmin("Tenant")} #{importTenant?.id}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {tAdmin("ERP tables and their required types are copied. Unrelated schema data is excluded, and the old database is never changed.")}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {tAdmin("The archive is processed temporarily and removed afterward. Separately stored images and files are not inside a database backup.")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="erp-backup-file">
+                {tAdmin("PostgreSQL custom archive")}
+              </label>
+              <Input
+                id="erp-backup-file"
+                type="file"
+                accept=".dump,.backup,application/octet-stream"
+                onChange={(event) => {
+                  setBackupFile(event.target.files?.[0] ?? null);
+                  setImportError("");
+                }}
+                disabled={importing}
+                data-testid="input-erp-backup-file"
+              />
+              <p className="text-xs text-muted-foreground">
+                {tAdmin("Use a .dump or .backup file, up to 2 GB.")}
+                {backupFile ? ` ${backupFile.name} (${(backupFile.size / (1024 * 1024)).toFixed(1)} MB)` : ""}
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <Switch
+                id="erp-backup-confirm"
+                checked={confirmBackup}
+                onCheckedChange={setConfirmBackup}
+                disabled={importing}
+                data-testid="switch-confirm-erp-backup"
+              />
+              <label className="text-sm" htmlFor="erp-backup-confirm">
+                {tAdmin("I confirm this backup belongs to the company shown above.")}
+              </label>
+            </div>
+            {importError && (
+              <p className="text-sm text-destructive" role="alert" data-testid="status-erp-import-error">
+                {importError}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => void submitBackupImport()}
+              disabled={!backupFile || backupFile.size === 0 || !confirmBackup || importing || backupFile.size > 2 * 1024 * 1024 * 1024}
+              data-testid="button-submit-erp-backup"
+            >
+              {importing ? tAdmin("Importing backup…") : tAdmin("Import backup")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(contractTenant)}

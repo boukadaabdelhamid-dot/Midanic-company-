@@ -25,7 +25,8 @@ ENV NODE_ENV=production
 
 # Install every package that esbuild externalises so they are real npm
 # installations (not broken pnpm symlinks). Exact versions match package.json.
-RUN npm install \
+RUN apk add --no-cache postgresql16-client && \
+    npm install \
       pg@8 \
       nodemailer@9 \
       @google-cloud/storage@7 \

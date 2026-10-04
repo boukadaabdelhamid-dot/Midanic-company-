@@ -734,3 +734,212 @@ export const ReissueDesktopLicenseResponse = zod.object({
 })
 
 
+/**
+ * @summary List ERP tenants for the super administrator
+ */
+export const ListErpTenantsAdminQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+export const listErpTenantsAdminResponseTenantsItemDataImportSummaryOneTableCountMin = 0;
+
+export const listErpTenantsAdminResponseTenantsItemDataImportSummaryOneRecordCountsMinOne = 0;
+
+export const listErpTenantsAdminResponseTenantsItemDataImportSummaryOneArchiveSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const ListErpTenantsAdminResponse = zod.object({
+  "tenants": zod.array(zod.object({
+  "id": zod.int(),
+  "ownerUserId": zod.int(),
+  "companyName": zod.string(),
+  "status": zod.string(),
+  "subdomain": zod.string().nullish(),
+  "hostname": zod.string().nullish(),
+  "domainStatus": zod.enum(['inactive', 'active']),
+  "domainActivatedAt": zod.coerce.date().nullish(),
+  "trialStartedAt": zod.coerce.date().nullish(),
+  "trialEndsAt": zod.coerce.date().nullish(),
+  "contractPeriod": zod.union([zod.literal('monthly'),zod.literal('yearly'),zod.literal(null)]).nullish(),
+  "contractStartsAt": zod.coerce.date().nullish(),
+  "contractEndsAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "suspendedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "databaseName": zod.string().nullish(),
+  "databaseStatus": zod.enum(['unprovisioned', 'provisioning', 'ready', 'failed']),
+  "databaseProvisionedAt": zod.coerce.date().nullish(),
+  "databaseLastError": zod.string().nullish(),
+  "dataImportStatus": zod.enum(['not_requested', 'awaiting_backup', 'running', 'completed', 'failed']),
+  "dataImportStartedAt": zod.coerce.date().nullish(),
+  "dataImportedAt": zod.coerce.date().nullish(),
+  "dataImportError": zod.string().nullish(),
+  "dataImportSummary": zod.union([zod.object({
+  "sourceDatabaseVersion": zod.string().nullable(),
+  "tableCount": zod.int().min(listErpTenantsAdminResponseTenantsItemDataImportSummaryOneTableCountMin),
+  "recordCounts": zod.record(zod.string(), zod.int().min(listErpTenantsAdminResponseTenantsItemDataImportSummaryOneRecordCountsMinOne)),
+  "archiveSha256": zod.string().regex(listErpTenantsAdminResponseTenantsItemDataImportSummaryOneArchiveSha256RegExp)
+}),zod.null()]).optional(),
+  "webStoreStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreSubdomain": zod.string().nullish(),
+  "webStoreHostname": zod.string().nullish(),
+  "webStoreDomainStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreDomainActivatedAt": zod.coerce.date().nullish(),
+  "featureFlags": zod.record(zod.string(), zod.boolean()).optional(),
+  "maxStores": zod.int().nullish(),
+  "currentStores": zod.int().nullish(),
+  "storeCountStatus": zod.enum(['ready', 'not_ready', 'unavailable']).optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "ownerEmail": zod.string().nullish(),
+  "ownerFirstName": zod.string().nullish(),
+  "ownerLastName": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Create an ERP tenant, optionally waiting for a customer backup
+ */
+
+
+export const createErpTenantAdminBodyImportExistingDataDefault = false;
+
+export const CreateErpTenantAdminBody = zod.object({
+  "ownerUserId": zod.int().min(1),
+  "companyName": zod.string().min(1),
+  "subdomain": zod.string().optional(),
+  "importExistingData": zod.boolean().default(createErpTenantAdminBodyImportExistingDataDefault)
+})
+
+export const createErpTenantAdminResponseDataImportSummaryOneTableCountMin = 0;
+
+export const createErpTenantAdminResponseDataImportSummaryOneRecordCountsMinOne = 0;
+
+export const createErpTenantAdminResponseDataImportSummaryOneArchiveSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const CreateErpTenantAdminResponse = zod.object({
+  "id": zod.int(),
+  "ownerUserId": zod.int(),
+  "companyName": zod.string(),
+  "status": zod.string(),
+  "subdomain": zod.string().nullish(),
+  "hostname": zod.string().nullish(),
+  "domainStatus": zod.enum(['inactive', 'active']),
+  "domainActivatedAt": zod.coerce.date().nullish(),
+  "trialStartedAt": zod.coerce.date().nullish(),
+  "trialEndsAt": zod.coerce.date().nullish(),
+  "contractPeriod": zod.union([zod.literal('monthly'),zod.literal('yearly'),zod.literal(null)]).nullish(),
+  "contractStartsAt": zod.coerce.date().nullish(),
+  "contractEndsAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "suspendedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "databaseName": zod.string().nullish(),
+  "databaseStatus": zod.enum(['unprovisioned', 'provisioning', 'ready', 'failed']),
+  "databaseProvisionedAt": zod.coerce.date().nullish(),
+  "databaseLastError": zod.string().nullish(),
+  "dataImportStatus": zod.enum(['not_requested', 'awaiting_backup', 'running', 'completed', 'failed']),
+  "dataImportStartedAt": zod.coerce.date().nullish(),
+  "dataImportedAt": zod.coerce.date().nullish(),
+  "dataImportError": zod.string().nullish(),
+  "dataImportSummary": zod.union([zod.object({
+  "sourceDatabaseVersion": zod.string().nullable(),
+  "tableCount": zod.int().min(createErpTenantAdminResponseDataImportSummaryOneTableCountMin),
+  "recordCounts": zod.record(zod.string(), zod.int().min(createErpTenantAdminResponseDataImportSummaryOneRecordCountsMinOne)),
+  "archiveSha256": zod.string().regex(createErpTenantAdminResponseDataImportSummaryOneArchiveSha256RegExp)
+}),zod.null()]).optional(),
+  "webStoreStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreSubdomain": zod.string().nullish(),
+  "webStoreHostname": zod.string().nullish(),
+  "webStoreDomainStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreDomainActivatedAt": zod.coerce.date().nullish(),
+  "featureFlags": zod.record(zod.string(), zod.boolean()).optional(),
+  "maxStores": zod.int().nullish(),
+  "currentStores": zod.int().nullish(),
+  "storeCountStatus": zod.enum(['ready', 'not_ready', 'unavailable']).optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "ownerEmail": zod.string().nullish(),
+  "ownerFirstName": zod.string().nullish(),
+  "ownerLastName": zod.string().nullish()
+})
+
+
+/**
+ * Imports only the ERP tables and required types into the new tenant. The source database is not contacted or changed.
+ * @summary Stream a PostgreSQL custom archive into an unpublished ERP tenant
+ */
+
+
+
+export const ImportErpTenantBackupAdminParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const importErpTenantBackupAdminResponseTenantDataImportSummaryOneTableCountMin = 0;
+
+export const importErpTenantBackupAdminResponseTenantDataImportSummaryOneRecordCountsMinOne = 0;
+
+export const importErpTenantBackupAdminResponseTenantDataImportSummaryOneArchiveSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const importErpTenantBackupAdminResponseSummaryTableCountMin = 0;
+
+export const importErpTenantBackupAdminResponseSummaryRecordCountsMinOne = 0;
+
+export const importErpTenantBackupAdminResponseSummaryArchiveSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const ImportErpTenantBackupAdminResponse = zod.object({
+  "tenant": zod.object({
+  "id": zod.int(),
+  "ownerUserId": zod.int(),
+  "companyName": zod.string(),
+  "status": zod.string(),
+  "subdomain": zod.string().nullish(),
+  "hostname": zod.string().nullish(),
+  "domainStatus": zod.enum(['inactive', 'active']),
+  "domainActivatedAt": zod.coerce.date().nullish(),
+  "trialStartedAt": zod.coerce.date().nullish(),
+  "trialEndsAt": zod.coerce.date().nullish(),
+  "contractPeriod": zod.union([zod.literal('monthly'),zod.literal('yearly'),zod.literal(null)]).nullish(),
+  "contractStartsAt": zod.coerce.date().nullish(),
+  "contractEndsAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "suspendedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "databaseName": zod.string().nullish(),
+  "databaseStatus": zod.enum(['unprovisioned', 'provisioning', 'ready', 'failed']),
+  "databaseProvisionedAt": zod.coerce.date().nullish(),
+  "databaseLastError": zod.string().nullish(),
+  "dataImportStatus": zod.enum(['not_requested', 'awaiting_backup', 'running', 'completed', 'failed']),
+  "dataImportStartedAt": zod.coerce.date().nullish(),
+  "dataImportedAt": zod.coerce.date().nullish(),
+  "dataImportError": zod.string().nullish(),
+  "dataImportSummary": zod.union([zod.object({
+  "sourceDatabaseVersion": zod.string().nullable(),
+  "tableCount": zod.int().min(importErpTenantBackupAdminResponseTenantDataImportSummaryOneTableCountMin),
+  "recordCounts": zod.record(zod.string(), zod.int().min(importErpTenantBackupAdminResponseTenantDataImportSummaryOneRecordCountsMinOne)),
+  "archiveSha256": zod.string().regex(importErpTenantBackupAdminResponseTenantDataImportSummaryOneArchiveSha256RegExp)
+}),zod.null()]).optional(),
+  "webStoreStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreSubdomain": zod.string().nullish(),
+  "webStoreHostname": zod.string().nullish(),
+  "webStoreDomainStatus": zod.enum(['inactive', 'active']).optional(),
+  "webStoreDomainActivatedAt": zod.coerce.date().nullish(),
+  "featureFlags": zod.record(zod.string(), zod.boolean()).optional(),
+  "maxStores": zod.int().nullish(),
+  "currentStores": zod.int().nullish(),
+  "storeCountStatus": zod.enum(['ready', 'not_ready', 'unavailable']).optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "ownerEmail": zod.string().nullish(),
+  "ownerFirstName": zod.string().nullish(),
+  "ownerLastName": zod.string().nullish()
+}),
+  "summary": zod.object({
+  "sourceDatabaseVersion": zod.string().nullable(),
+  "tableCount": zod.int().min(importErpTenantBackupAdminResponseSummaryTableCountMin),
+  "recordCounts": zod.record(zod.string(), zod.int().min(importErpTenantBackupAdminResponseSummaryRecordCountsMinOne)),
+  "archiveSha256": zod.string().regex(importErpTenantBackupAdminResponseSummaryArchiveSha256RegExp)
+})
+})
+
+

@@ -50,6 +50,13 @@
       "when": 1790687352604,
       "tag": "0006_add_desktop_licenses",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791032587917,
+      "tag": "0007_safe_erp_data_import",
+      "breakpoints": true
     }
   ]
 }

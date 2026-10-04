@@ -22,6 +22,11 @@ import { runPurchaseOrdersSchemaMigration } from "./lib/purchase-orders-schema-m
 import { getStorageMode, getLocalStorageBase, ensureLocalStorageReady } from "./lib/objectStorage";
 import { listReadyTenantDatabases } from "./lib/tenant-registry";
 import { resolvePlatformTenantDatabase } from "./lib/tenant-domain";
+import {
+  importTenantDatabaseBackup,
+  MAX_TENANT_BACKUP_BYTES,
+  TenantBackupImportError,
+} from "./lib/database-backup-import";
 
 const rawPort = process.env["PORT"];
 
@@ -1277,6 +1282,10 @@ app.get("/api/internal/erp/health/:tenantId", async (req, res): Promise<void> =>
       res.status(409).json({ error: "ERP tenant database is not ready" });
       return;
     }
+    if (!["not_requested", "completed"].includes(registered.dataImportStatus)) {
+      res.status(409).json({ error: "ERP tenant data import is not complete" });
+      return;
+    }
     const expectedDatabaseName = `erp_tenant_${tenantId}`;
     if (registered.databaseName !== expectedDatabaseName) {
       res.status(409).json({ error: "ERP tenant database registry mismatch" });
@@ -1330,6 +1339,10 @@ app.get("/api/internal/erp/store-summary/:tenantId", async (req, res): Promise<v
       res.status(409).json({ error: "ERP tenant database is not ready" });
       return;
     }
+    if (!["not_requested", "completed"].includes(registered.dataImportStatus)) {
+      res.status(409).json({ error: "ERP tenant data import is not complete" });
+      return;
+    }
     if (registered.databaseName !== `erp_tenant_${tenantId}`) {
       res.status(409).json({ error: "ERP tenant database registry mismatch" });
       return;
@@ -1364,6 +1377,7 @@ app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
   const databaseName = typeof req.body?.databaseName === "string"
     ? req.body.databaseName
     : "";
+  const deferInitialization = req.body?.deferInitialization === true;
   if (!Number.isInteger(tenantId) || tenantId <= 0 ||
       databaseName !== `erp_tenant_${tenantId}`) {
     res.status(400).json({ error: "Invalid tenant database provisioning payload" });
@@ -1371,6 +1385,11 @@ app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
   }
 
   try {
+    if (deferInitialization) {
+      await provisionTenantDatabase(databaseName, { createErpSchema: false });
+      res.json({ tenantId, databaseName, databaseStatus: "ready" });
+      return;
+    }
     await initializeTenantDatabase(tenantId, databaseName, true);
     res.json({ tenantId, databaseName, databaseStatus: "ready" });
   } catch (error) {
@@ -1378,6 +1397,85 @@ app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
     res.status(500).json({
       error: error instanceof Error ? error.message : "ERP tenant provisioning failed",
       databaseStatus: "failed",
+    });
+  }
+});
+
+app.post("/api/internal/erp/import-backup/:tenantId", async (req, res): Promise<void> => {
+  const expected = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!expected || req.header("X-Platform-Service-Secret") !== expected) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tenantId = Number(req.params.tenantId);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+  if (req.is("application/octet-stream") !== "application/octet-stream") {
+    res.status(415).json({ error: "Upload a PostgreSQL custom archive as application/octet-stream." });
+    return;
+  }
+  const contentLength = Number(req.header("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_TENANT_BACKUP_BYTES) {
+    res.status(413).json({ error: "The backup exceeds the 2 GB upload limit." });
+    return;
+  }
+
+  const databaseName = `erp_tenant_${tenantId}`;
+  try {
+    const registered = await resolvePlatformTenantDatabase(tenantId);
+    if (
+      !registered ||
+      registered.databaseStatus !== "ready" ||
+      registered.databaseName !== databaseName ||
+      registered.dataImportStatus !== "running"
+    ) {
+      res.status(409).json({ error: "This ERP tenant is not ready to receive a database backup." });
+      return;
+    }
+
+    const summary = await importTenantDatabaseBackup(
+      tenantId,
+      databaseName,
+      req,
+    );
+    try {
+      await initializeTenantDatabase(tenantId, databaseName, false);
+    } catch (error) {
+      logger.error(
+        {
+          tenantId,
+          errorType: error instanceof Error ? error.name : "UnknownError",
+        },
+        "Imported ERP data was retained but tenant migrations did not complete",
+      );
+      res.status(422).json({
+        error: "ERP data was copied, but current schema checks did not complete. The imported data remains in this tenant database; do not retry the upload.",
+        dataRetained: true,
+        summary,
+      });
+      return;
+    }
+
+    res.json({ tenantId, databaseName, summary });
+  } catch (error) {
+    const safeMessage = error instanceof TenantBackupImportError
+      ? error.message
+      : "The PostgreSQL backup could not be imported. No changes were made to the old system.";
+    logger.warn(
+      {
+        tenantId,
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      },
+      "ERP backup import failed before migration completed",
+    );
+    res.status(error instanceof TenantBackupImportError ? 422 : 500).json({
+      error: safeMessage,
+      dataRetained: error instanceof TenantBackupImportError && error.dataRetained,
     });
   }
 });

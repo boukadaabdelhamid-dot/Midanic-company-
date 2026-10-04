@@ -386,6 +386,175 @@ export interface PublicStats {
   yearsInBusiness?: number;
 }
 
+export interface ErpTenantCreateInput {
+  /** @minimum 1 */
+  ownerUserId: number;
+  /** @minLength 1 */
+  companyName: string;
+  subdomain?: string;
+  importExistingData?: boolean;
+}
+
+/**
+ * Raw bytes of a PostgreSQL custom-format archive.
+ */
+export type ErpTenantBackupUpload = string;
+
+export type ErpDataImportSummaryRecordCounts = {[key: string]: number};
+
+export interface ErpDataImportSummary {
+  /** @nullable */
+  sourceDatabaseVersion: string | null;
+  /** @minimum 0 */
+  tableCount: number;
+  recordCounts: ErpDataImportSummaryRecordCounts;
+  /** @pattern ^[a-f0-9]{64}$ */
+  archiveSha256: string;
+}
+
+export type ErpTenantAdminRecordDomainStatus = typeof ErpTenantAdminRecordDomainStatus[keyof typeof ErpTenantAdminRecordDomainStatus];
+
+
+export const ErpTenantAdminRecordDomainStatus = {
+  inactive: 'inactive',
+  active: 'active',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ErpTenantAdminRecordContractPeriod = typeof ErpTenantAdminRecordContractPeriod[keyof typeof ErpTenantAdminRecordContractPeriod] | null;
+
+
+export const ErpTenantAdminRecordContractPeriod = {
+  monthly: 'monthly',
+  yearly: 'yearly',
+} as const;
+
+export type ErpTenantAdminRecordDatabaseStatus = typeof ErpTenantAdminRecordDatabaseStatus[keyof typeof ErpTenantAdminRecordDatabaseStatus];
+
+
+export const ErpTenantAdminRecordDatabaseStatus = {
+  unprovisioned: 'unprovisioned',
+  provisioning: 'provisioning',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type ErpTenantAdminRecordDataImportStatus = typeof ErpTenantAdminRecordDataImportStatus[keyof typeof ErpTenantAdminRecordDataImportStatus];
+
+
+export const ErpTenantAdminRecordDataImportStatus = {
+  not_requested: 'not_requested',
+  awaiting_backup: 'awaiting_backup',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type ErpTenantAdminRecordWebStoreStatus = typeof ErpTenantAdminRecordWebStoreStatus[keyof typeof ErpTenantAdminRecordWebStoreStatus];
+
+
+export const ErpTenantAdminRecordWebStoreStatus = {
+  inactive: 'inactive',
+  active: 'active',
+} as const;
+
+export type ErpTenantAdminRecordWebStoreDomainStatus = typeof ErpTenantAdminRecordWebStoreDomainStatus[keyof typeof ErpTenantAdminRecordWebStoreDomainStatus];
+
+
+export const ErpTenantAdminRecordWebStoreDomainStatus = {
+  inactive: 'inactive',
+  active: 'active',
+} as const;
+
+export type ErpTenantAdminRecordFeatureFlags = {[key: string]: boolean};
+
+export type ErpTenantAdminRecordStoreCountStatus = typeof ErpTenantAdminRecordStoreCountStatus[keyof typeof ErpTenantAdminRecordStoreCountStatus];
+
+
+export const ErpTenantAdminRecordStoreCountStatus = {
+  ready: 'ready',
+  not_ready: 'not_ready',
+  unavailable: 'unavailable',
+} as const;
+
+export interface ErpTenantAdminRecord {
+  id: number;
+  ownerUserId: number;
+  companyName: string;
+  status: string;
+  /** @nullable */
+  subdomain?: string | null;
+  /** @nullable */
+  hostname?: string | null;
+  domainStatus: ErpTenantAdminRecordDomainStatus;
+  /** @nullable */
+  domainActivatedAt?: string | null;
+  /** @nullable */
+  trialStartedAt?: string | null;
+  /** @nullable */
+  trialEndsAt?: string | null;
+  /** @nullable */
+  contractPeriod?: ErpTenantAdminRecordContractPeriod;
+  /** @nullable */
+  contractStartsAt?: string | null;
+  /** @nullable */
+  contractEndsAt?: string | null;
+  /** @nullable */
+  approvedAt?: string | null;
+  /** @nullable */
+  suspendedAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  databaseName?: string | null;
+  databaseStatus: ErpTenantAdminRecordDatabaseStatus;
+  /** @nullable */
+  databaseProvisionedAt?: string | null;
+  /** @nullable */
+  databaseLastError?: string | null;
+  dataImportStatus: ErpTenantAdminRecordDataImportStatus;
+  /** @nullable */
+  dataImportStartedAt?: string | null;
+  /** @nullable */
+  dataImportedAt?: string | null;
+  /** @nullable */
+  dataImportError?: string | null;
+  dataImportSummary?: ErpDataImportSummary | null;
+  webStoreStatus?: ErpTenantAdminRecordWebStoreStatus;
+  /** @nullable */
+  webStoreSubdomain?: string | null;
+  /** @nullable */
+  webStoreHostname?: string | null;
+  webStoreDomainStatus?: ErpTenantAdminRecordWebStoreDomainStatus;
+  /** @nullable */
+  webStoreDomainActivatedAt?: string | null;
+  featureFlags?: ErpTenantAdminRecordFeatureFlags;
+  /** @nullable */
+  maxStores?: number | null;
+  /** @nullable */
+  currentStores?: number | null;
+  storeCountStatus?: ErpTenantAdminRecordStoreCountStatus;
+  createdAt?: string;
+  /** @nullable */
+  ownerEmail?: string | null;
+  /** @nullable */
+  ownerFirstName?: string | null;
+  /** @nullable */
+  ownerLastName?: string | null;
+  [key: string]: unknown;
+ }
+
+export interface ErpTenantListResponse {
+  tenants: ErpTenantAdminRecord[];
+}
+
+export interface ErpTenantBackupImportResponse {
+  tenant: ErpTenantAdminRecord;
+  summary: ErpDataImportSummary;
+}
+
 export interface DesktopLicense {
   id: number;
   /** @nullable */
@@ -438,5 +607,9 @@ limit?: number;
  * @maxLength 180
  */
 search?: string;
+};
+
+export type ListErpTenantsAdminParams = {
+status?: string;
 };
 

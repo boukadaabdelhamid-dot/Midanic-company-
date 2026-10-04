@@ -18,3 +18,10 @@ For new contracts consumed by a legacy Zod 3 application, prefer explicitly pinn
 **Why:** Auto-detection can emit Zod 4 syntax despite a Zod 3 consumer. Pinning the compatible output keeps generation deterministic without broad changes to legacy schemas and bundling.
 
 **How to apply:** Decide the output target from the consumer's actual runtime, not from another package's codegen setup. Keep the existing platform V4 shim/plugin for contracts that already need it.
+
+## Type-only contract imports
+When the Zod 3 Midanic web app needs generated API types, import them from `@workspace/api-zod/types`, not the package root. The root barrel also pulls in generated Zod 4 validators.
+
+**Why:** TypeScript follows the root barrel into Zod 4 syntax, where the web app's Zod 3 dependency lacks methods such as `int()` and `email()`.
+
+**How to apply:** Keep web imports type-only and use the types subpath for contracts; use the root package only in consumers configured for the Zod 4 shim.

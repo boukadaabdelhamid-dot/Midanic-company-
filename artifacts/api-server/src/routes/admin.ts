@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { createHash, randomBytes } from "node:crypto";
+import { Readable } from "node:stream";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -30,7 +31,7 @@ import {
   type ProductRequestField,
   type ErpFeatureFlags,
 } from "@workspace/db";
-import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt } from "drizzle-orm";
+import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { generateErpSsoToken } from "../lib/auth";
 import {
@@ -57,6 +58,8 @@ import {
 const router: IRouter = Router();
 
 type TenantStoreCountStatus = "ready" | "not_ready" | "unavailable";
+const MAX_TENANT_BACKUP_BYTES = 2 * 1024 * 1024 * 1024;
+const STALE_IMPORT_AFTER_MS = 12 * 60 * 60 * 1000;
 
 type TenantStoreSummary = {
   currentStores: number | null;
@@ -313,6 +316,11 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
        databaseStatus: erpTenantsTable.databaseStatus,
        databaseProvisionedAt: erpTenantsTable.databaseProvisionedAt,
        databaseLastError: erpTenantsTable.databaseLastError,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
+      dataImportStartedAt: erpTenantsTable.dataImportStartedAt,
+      dataImportedAt: erpTenantsTable.dataImportedAt,
+      dataImportError: erpTenantsTable.dataImportError,
+      dataImportSummary: erpTenantsTable.dataImportSummary,
       featureFlags: erpTenantsTable.featureFlags,
       webStoreStatus: erpTenantsTable.webStoreStatus,
       webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
@@ -369,6 +377,14 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   const ownerUserId = Number(body.ownerUserId);
   const companyName = typeof body.companyName === "string" ? body.companyName.trim() : "";
+  if (
+    Object.prototype.hasOwnProperty.call(body, "importExistingData") &&
+    typeof body.importExistingData !== "boolean"
+  ) {
+    res.status(400).json({ error: "importExistingData must be a boolean" });
+    return;
+  }
+  const importExistingData = body.importExistingData === true;
   let subdomain: string | null;
   try {
     subdomain = parseErpSubdomain(body.subdomain);
@@ -402,6 +418,7 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
         subdomain,
         hostname: subdomain ? buildErpTenantHostname(subdomain) : null,
         domainStatus: "inactive",
+        dataImportStatus: importExistingData ? "awaiting_backup" : "not_requested",
       })
       .returning();
     await db
@@ -420,7 +437,9 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
       .where(eq(erpTenantsTable.id, tenant.id))
       .returning();
     try {
-      const provisioning = await provisionErpTenantDatabase(tenant.id);
+      const provisioning = await provisionErpTenantDatabase(tenant.id, {
+        deferInitialization: importExistingData,
+      });
       [provisionedTenant] = await db
         .update(erpTenantsTable)
         .set({
@@ -462,6 +481,176 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/admin/erp/tenants/:id/import-backup", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid tenant id" });
+    return;
+  }
+  if (req.header("content-type")?.split(";")[0]?.trim() !== "application/octet-stream") {
+    res.status(415).json({ error: "Upload the PostgreSQL custom archive as a binary file." });
+    return;
+  }
+  const contentLengthHeader = req.header("content-length");
+  const contentLength = contentLengthHeader ? Number(contentLengthHeader) : null;
+  if (contentLength !== null && (!Number.isSafeInteger(contentLength) || contentLength <= 0)) {
+    res.status(400).json({ error: "Invalid backup file size." });
+    return;
+  }
+  if (contentLength !== null && contentLength > MAX_TENANT_BACKUP_BYTES) {
+    res.status(413).json({ error: "The backup exceeds the 2 GB upload limit." });
+    return;
+  }
+
+  const [tenant] = await db
+    .select({
+      id: erpTenantsTable.id,
+      status: erpTenantsTable.status,
+      databaseStatus: erpTenantsTable.databaseStatus,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
+      dataImportStartedAt: erpTenantsTable.dataImportStartedAt,
+      dataImportSummary: erpTenantsTable.dataImportSummary,
+      domainStatus: erpTenantsTable.domainStatus,
+      webStoreStatus: erpTenantsTable.webStoreStatus,
+      webStoreDomainStatus: erpTenantsTable.webStoreDomainStatus,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.id, id))
+    .limit(1);
+  if (!tenant) {
+    res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+  const staleRunningImport = tenant.dataImportStatus === "running" &&
+    tenant.dataImportStartedAt !== null &&
+    Date.now() - tenant.dataImportStartedAt.getTime() > STALE_IMPORT_AFTER_MS;
+  const retryable = tenant.dataImportStatus === "awaiting_backup" ||
+    (tenant.dataImportStatus === "failed" && tenant.dataImportSummary === null) ||
+    staleRunningImport;
+  if (!retryable) {
+    res.status(409).json({
+      error: tenant.dataImportStatus === "failed"
+        ? "An earlier import copied data into this tenant and needs review; another upload is blocked to protect those records."
+        : "This tenant is not waiting for a backup import.",
+    });
+    return;
+  }
+  if (
+    tenant.status !== "pending" ||
+    tenant.databaseStatus !== "ready" ||
+    tenant.domainStatus !== "inactive" ||
+    tenant.webStoreStatus !== "inactive" ||
+    tenant.webStoreDomainStatus !== "inactive"
+  ) {
+    res.status(409).json({ error: "Only an unpublished, pending tenant can receive an imported backup." });
+    return;
+  }
+
+  const [claimed] = await db
+    .update(erpTenantsTable)
+    .set({
+      dataImportStatus: "running",
+      dataImportStartedAt: new Date(),
+      dataImportError: null,
+    })
+    .where(and(
+      eq(erpTenantsTable.id, id),
+      eq(erpTenantsTable.dataImportStatus, tenant.dataImportStatus),
+      tenant.dataImportStartedAt === null
+        ? isNull(erpTenantsTable.dataImportStartedAt)
+        : eq(erpTenantsTable.dataImportStartedAt, tenant.dataImportStartedAt),
+    ))
+    .returning({ id: erpTenantsTable.id });
+  if (!claimed) {
+    res.status(409).json({ error: "Another backup import is already running for this tenant." });
+    return;
+  }
+
+  const erpUrl = process.env["ERP_API_URL"]?.replace(/\/+$/, "");
+  const secret = process.env["PLATFORM_SERVICE_SECRET"] ??
+    process.env["PLATFORM_SSO_SECRET"] ??
+    process.env["SESSION_SECRET"];
+  if (!erpUrl || !secret) {
+    await db.update(erpTenantsTable)
+      .set({ dataImportStatus: "failed", dataImportError: "ERP import bridge is not configured" })
+      .where(eq(erpTenantsTable.id, id));
+    res.status(503).json({ error: "ERP backup import is not configured." });
+    return;
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/octet-stream",
+    "X-Platform-Service-Secret": secret,
+  };
+  if (contentLengthHeader) headers["Content-Length"] = contentLengthHeader;
+
+  try {
+    const uploadBody = Readable.toWeb(req) as ReadableStream<Uint8Array>;
+    const upstream = await fetch(`${erpUrl}/api/internal/erp/import-backup/${id}`, {
+      method: "POST",
+      headers,
+      body: uploadBody,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    const result = await upstream.json().catch(() => ({})) as Record<string, unknown>;
+    const safeSummary = result.summary && typeof result.summary === "object"
+      ? result.summary as Record<string, unknown>
+      : null;
+    if (!upstream.ok) {
+      const retained = result.dataRetained === true;
+      await db.update(erpTenantsTable)
+        .set({
+          dataImportStatus: "failed",
+          dataImportError: typeof result.error === "string"
+            ? result.error.slice(0, 500)
+            : "Backup import failed",
+          dataImportSummary: retained ? safeSummary as never : null,
+        })
+        .where(eq(erpTenantsTable.id, id));
+      res.status(upstream.status).json({
+        error: typeof result.error === "string" ? result.error : "Backup import failed",
+        dataRetained: retained,
+      });
+      return;
+    }
+    if (!safeSummary || typeof safeSummary.archiveSha256 !== "string") {
+      await db.update(erpTenantsTable)
+        .set({
+          dataImportStatus: "failed",
+          dataImportError: "ERP returned an invalid backup import summary",
+        })
+        .where(eq(erpTenantsTable.id, id));
+      res.status(502).json({ error: "ERP returned an invalid backup import summary." });
+      return;
+    }
+
+    const [updated] = await db.update(erpTenantsTable)
+      .set({
+        dataImportStatus: "completed",
+        dataImportedAt: new Date(),
+        dataImportError: null,
+        dataImportSummary: safeSummary as import("@workspace/db").ErpDataImportSummary,
+      })
+      .where(eq(erpTenantsTable.id, id))
+      .returning();
+    res.json({ tenant: updated, summary: safeSummary });
+  } catch (error) {
+    await db.update(erpTenantsTable)
+      .set({
+        dataImportStatus: "failed",
+        dataImportError: "Backup transfer did not complete; the tenant must be checked before another upload.",
+      })
+      .where(eq(erpTenantsTable.id, id));
+    req.log.error(
+      { tenantId: id, errorType: error instanceof Error ? error.name : "UnknownError" },
+      "ERP backup transfer failed",
+    );
+    res.status(502).json({
+      error: "The backup transfer did not complete. The tenant database must be checked before another upload.",
+    });
+  }
+});
+
 router.post("/admin/erp/tenants/:id/provision", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -473,6 +662,7 @@ router.post("/admin/erp/tenants/:id/provision", async (req, res): Promise<void> 
     .select({
       id: erpTenantsTable.id,
       databaseStatus: erpTenantsTable.databaseStatus,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.id, id))
@@ -481,13 +671,22 @@ router.post("/admin/erp/tenants/:id/provision", async (req, res): Promise<void> 
     res.status(404).json({ error: "ERP tenant not found" });
     return;
   }
+  if (currentTenant.dataImportStatus === "failed" || currentTenant.dataImportStatus === "running") {
+    res.status(409).json({
+      error: "This tenant has an incomplete or uncertain data import. Review the import status before provisioning.",
+      dataImportStatus: currentTenant.dataImportStatus,
+    });
+    return;
+  }
 
   await db.update(erpTenantsTable)
     .set({ databaseStatus: "provisioning", databaseLastError: null })
     .where(eq(erpTenantsTable.id, id));
 
   try {
-    const provisioning = await provisionErpTenantDatabase(id);
+    const provisioning = await provisionErpTenantDatabase(id, {
+      deferInitialization: currentTenant.dataImportStatus === "awaiting_backup",
+    });
     const [tenant] = await db
       .update(erpTenantsTable)
       .set({
@@ -528,6 +727,7 @@ router.get("/admin/erp/tenants/:id/database-health", async (req, res): Promise<v
     .select({
       id: erpTenantsTable.id,
       databaseStatus: erpTenantsTable.databaseStatus,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.id, id))
@@ -536,7 +736,9 @@ router.get("/admin/erp/tenants/:id/database-health", async (req, res): Promise<v
     res.status(404).json({ error: "ERP tenant not found" });
     return;
   }
-  if (tenant.databaseStatus !== "ready") {
+  if (tenant.databaseStatus !== "ready" ||
+      (tenant.dataImportStatus !== "not_requested" &&
+       tenant.dataImportStatus !== "completed")) {
     res.status(409).json({
       error: "ERP tenant database is not ready",
       databaseStatus: tenant.databaseStatus,
@@ -633,6 +835,7 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
       contractStartsAt: erpTenantsTable.contractStartsAt,
       contractEndsAt: erpTenantsTable.contractEndsAt,
       databaseStatus: erpTenantsTable.databaseStatus,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
       webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
       featureFlags: erpTenantsTable.featureFlags,
     })
@@ -641,6 +844,19 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
     .limit(1);
   if (!currentTenant) {
     res.status(404).json({ error: "ERP tenant not found" });
+    return;
+  }
+  const dataImportReady = currentTenant.dataImportStatus === "not_requested" ||
+    currentTenant.dataImportStatus === "completed";
+  if (
+    !dataImportReady &&
+    (status === "active" || status === "converted" ||
+     domainStatus === "active" || webStoreStatus === "active")
+  ) {
+    res.status(409).json({
+      error: "Complete and verify the tenant data import before activating ERP or Web Store access.",
+      dataImportStatus: currentTenant.dataImportStatus,
+    });
     return;
   }
   if ((status === "active" || status === "converted") &&

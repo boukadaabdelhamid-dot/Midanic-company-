@@ -30,13 +30,17 @@ export function isTenantDatabaseName(value: unknown): value is string {
   return typeof value === "string" && tenantDatabaseNameRe.test(value);
 }
 
-function tenantDatabaseUrl(databaseName: string): string {
+export function getTenantDatabaseAdminUrl(databaseName: string): string {
   if (!isTenantDatabaseName(databaseName)) {
     throw new Error("Invalid tenant database name");
   }
   const url = new URL(tenantAdminUrl());
   url.pathname = `/${databaseName}`;
   return url.toString();
+}
+
+function tenantDatabaseUrl(databaseName: string): string {
+  return getTenantDatabaseAdminUrl(databaseName);
 }
 
 function getTenantPool(databaseName: string): Pool {
@@ -105,7 +109,10 @@ export function runWithTenantDatabase<T>(
   return tenantContext.run(context, callback);
 }
 
-export async function provisionTenantDatabase(databaseName: string): Promise<{
+export async function provisionTenantDatabase(
+  databaseName: string,
+  options: { createErpSchema?: boolean } = {},
+): Promise<{
   created: boolean;
 }> {
   if (!isTenantDatabaseName(databaseName)) {
@@ -127,8 +134,10 @@ export async function provisionTenantDatabase(databaseName: string): Promise<{
         created = false;
       }
     }
-    const tenantPool = getTenantPool(databaseName);
-    await tenantPool.query('CREATE SCHEMA IF NOT EXISTS "erp"');
+    if (options.createErpSchema !== false) {
+      const tenantPool = getTenantPool(databaseName);
+      await tenantPool.query('CREATE SCHEMA IF NOT EXISTS "erp"');
+    }
     return { created };
   } finally {
     await adminPool.end();

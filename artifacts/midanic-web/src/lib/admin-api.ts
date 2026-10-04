@@ -3,6 +3,12 @@
  * Reads the Bearer token from localStorage and adds it to every request.
  */
 
+import type {
+  ErpDataImportSummary as ApiErpDataImportSummary,
+  ErpTenantBackupImportResponse,
+  ErpTenantCreateInput,
+} from "@workspace/api-zod/types";
+
 const BASE = "/api";
 
 function getToken(): string {
@@ -152,11 +158,26 @@ export const adminApi = {
       currentStores: number | null;
       storeCountStatus: "ready" | "not_ready" | "unavailable";
     }>(`/admin/erp/tenants/${id}/store-count`),
-  createErpTenant: (body: { ownerUserId: number; companyName: string; subdomain?: string }) =>
+  createErpTenant: (body: ErpTenantCreateInput) =>
     request<ErpTenant>("/admin/erp/tenants", {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  importErpTenantBackup: async (id: number, backup: File) => {
+    const response = await fetch(`${BASE}/admin/erp/tenants/${id}/import-backup`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: backup,
+    });
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(typeof payload.error === "string" ? payload.error : `HTTP ${response.status}`);
+    }
+    return payload as unknown as ErpTenantBackupImportResponse;
+  },
   updateErpTenant: (
     id: number,
     body: {
@@ -747,6 +768,10 @@ export interface ErpTenant {
   suspendedAt: string | null;
   notes: string | null;
   databaseStatus: "unprovisioned" | "provisioning" | "ready" | "failed";
+  dataImportStatus: "not_requested" | "awaiting_backup" | "running" | "completed" | "failed";
+  dataImportedAt: string | null;
+  dataImportError: string | null;
+  dataImportSummary: ErpDataImportSummary | null;
   webStoreStatus: "inactive" | "active";
   webStoreSubdomain: string | null;
   webStoreHostname: string | null;
@@ -761,6 +786,8 @@ export interface ErpTenant {
   ownerFirstName: string | null;
   ownerLastName: string | null;
 }
+
+export type ErpDataImportSummary = ApiErpDataImportSummary;
 
 export interface MyErpAccess {
   hasAccount: boolean;

@@ -22,6 +22,7 @@ export type PlatformTenantDatabase = {
   tenantId: number;
   databaseName: string | null;
   databaseStatus: string;
+  dataImportStatus: string;
 };
 
 const domainCache = new Map<string, { expiresAt: number; value: PlatformTenantDomain }>();
@@ -223,7 +224,11 @@ export async function resolvePlatformTenantDatabase(
     throw new Error(`Tenant database registry lookup failed (${response.status})`);
   }
   const value = await response.json() as PlatformTenantDatabase;
-  if (value.tenantId !== tenantId || typeof value.databaseStatus !== "string") {
+  if (
+    value.tenantId !== tenantId ||
+    typeof value.databaseStatus !== "string" ||
+    typeof value.dataImportStatus !== "string"
+  ) {
     throw new Error("Tenant database registry returned an invalid response");
   }
   if (value.databaseName !== null && !/^erp_tenant_[1-9][0-9]*$/.test(value.databaseName)) {

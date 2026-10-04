@@ -1,4 +1,5 @@
 - [Zod v4 codegen resolution](zod-v4-codegen.md) — Orval 8.23+ generates v4 syntax; zod@3.x ships v4 under 'zod/v4'; fix requires tsconfig paths alias + esbuild plugin (not alias option)
+- [OpenAPI raw upload types](openapi-raw-upload-types.md) — `format: binary` generates `Blob`; Node-only api-zod consumers need a plain string schema for streamed octet uploads.
 - [esbuild alias prefix matching](esbuild-alias-prefix.md) — esbuild alias does prefix matching, so alias {zod→zod/v4} also remaps zod/v4→zod/v4/v4; use an onResolve plugin with /^zod$/ filter instead
 - [i18next package firewall](i18next-version.md) — Replit package firewall only serves i18next v26+; design subagent may request v23.x which fails; always use ^26.0.0 in midanic-web
 - [API production bundle dependencies](api-production-bundle-dependencies.md) — Docker runtime copies only dist; dependencies used by the API must be bundled or explicitly copied into the final image

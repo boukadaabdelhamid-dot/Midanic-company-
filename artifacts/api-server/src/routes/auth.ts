@@ -9,7 +9,7 @@ import {
   defaultErpFeatureFlags,
   customerEntitlementsTable,
 } from "@workspace/db";
-import { and, eq, isNotNull, isNull, lt, desc, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, desc, or, ne } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import {
@@ -668,6 +668,9 @@ router.get("/internal/erp/databases", async (req, res): Promise<void> => {
     .where(and(
       eq(erpTenantsTable.databaseStatus, "ready"),
       isNotNull(erpTenantsTable.databaseName),
+      ne(erpTenantsTable.dataImportStatus, "awaiting_backup"),
+      ne(erpTenantsTable.dataImportStatus, "running"),
+      ne(erpTenantsTable.dataImportStatus, "failed"),
     ))
     .orderBy(erpTenantsTable.id);
 
@@ -694,6 +697,7 @@ router.get("/internal/erp/database/:tenantId", async (req, res): Promise<void> =
       id: erpTenantsTable.id,
       databaseName: erpTenantsTable.databaseName,
       databaseStatus: erpTenantsTable.databaseStatus,
+      dataImportStatus: erpTenantsTable.dataImportStatus,
     })
     .from(erpTenantsTable)
     .where(eq(erpTenantsTable.id, tenantId))
@@ -708,6 +712,7 @@ router.get("/internal/erp/database/:tenantId", async (req, res): Promise<void> =
     tenantId: tenant.id,
     databaseName: tenant.databaseName,
     databaseStatus: tenant.databaseStatus,
+    dataImportStatus: tenant.dataImportStatus,
   });
 });
 

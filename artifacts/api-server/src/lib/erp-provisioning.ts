@@ -30,7 +30,10 @@ function getErpApiUrl(): string {
   return baseUrl;
 }
 
-export async function provisionErpTenantDatabase(tenantId: number): Promise<ProvisionResponse> {
+export async function provisionErpTenantDatabase(
+  tenantId: number,
+  options: { deferInitialization?: boolean } = {},
+): Promise<ProvisionResponse> {
   const databaseName = getTenantDatabaseName(tenantId);
   const response = await fetch(`${getErpApiUrl()}/api/internal/erp/provision`, {
     method: "POST",
@@ -38,7 +41,11 @@ export async function provisionErpTenantDatabase(tenantId: number): Promise<Prov
       "Content-Type": "application/json",
       "X-Platform-Service-Secret": getServiceSecret(),
     },
-    body: JSON.stringify({ tenantId, databaseName }),
+    body: JSON.stringify({
+      tenantId,
+      databaseName,
+      deferInitialization: options.deferInitialization === true,
+    }),
   });
 
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;

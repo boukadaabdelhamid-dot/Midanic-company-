@@ -30,6 +30,8 @@ tags:
     description: Object storage upload and serving endpoints.
   - name: desktop-licenses
     description: Legacy desktop application license tracking and key issuance.
+  - name: admin
+    description: Super administrator operations for tenant lifecycle and backup import.
 
 paths:
   /healthz:
@@ -883,6 +885,164 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/erp/tenants:
+    get:
+      tags: [admin]
+      operationId: listErpTenantsAdmin
+      summary: List ERP tenants for the super administrator
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ERP tenants and their import status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpTenantListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [admin]
+      operationId: createErpTenantAdmin
+      summary: Create an ERP tenant, optionally waiting for a customer backup
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpTenantCreateInput"
+      responses:
+        "201":
+          description: ERP tenant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpTenantAdminRecord"
+        "400":
+          description: Invalid tenant input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tenant subdomain already assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/erp/tenants/{id}/import-backup:
+    post:
+      tags: [admin]
+      operationId: importErpTenantBackupAdmin
+      summary: Stream a PostgreSQL custom archive into an unpublished ERP tenant
+      description: Imports only the ERP tables and required types into the new tenant. The source database is not contacted or changed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              $ref: "#/components/schemas/ErpTenantBackupUpload"
+      responses:
+        "200":
+          description: ERP data imported and tenant schema verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpTenantBackupImportResponse"
+        "400":
+          description: Invalid tenant ID or file size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: ERP tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tenant is not eligible for import
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Backup exceeds the 2 GB limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported upload type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Backup layout is unsupported or restore validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Backup transfer did not complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1444,6 +1604,167 @@ components:
           type: integer
         yearsInBusiness:
           type: integer
+
+    ErpTenantCreateInput:
+      type: object
+      required: [ownerUserId, companyName]
+      properties:
+        ownerUserId:
+          type: integer
+          minimum: 1
+        companyName:
+          type: string
+          minLength: 1
+        subdomain:
+          type: string
+        importExistingData:
+          type: boolean
+          default: false
+
+    ErpTenantBackupUpload:
+      type: string
+      description: Raw bytes of a PostgreSQL custom-format archive.
+
+    ErpDataImportSummary:
+      type: object
+      required: [sourceDatabaseVersion, tableCount, recordCounts, archiveSha256]
+      properties:
+        sourceDatabaseVersion:
+          type: ["string", "null"]
+        tableCount:
+          type: integer
+          minimum: 0
+        recordCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        archiveSha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+
+    ErpTenantAdminRecord:
+      type: object
+      required: [id, ownerUserId, companyName, status, domainStatus, databaseStatus, dataImportStatus]
+      properties:
+        id:
+          type: integer
+        ownerUserId:
+          type: integer
+        companyName:
+          type: string
+        status:
+          type: string
+        subdomain:
+          type: ["string", "null"]
+        hostname:
+          type: ["string", "null"]
+        domainStatus:
+          type: string
+          enum: [inactive, active]
+        domainActivatedAt:
+          type: ["string", "null"]
+          format: date-time
+        trialStartedAt:
+          type: ["string", "null"]
+          format: date-time
+        trialEndsAt:
+          type: ["string", "null"]
+          format: date-time
+        contractPeriod:
+          type: ["string", "null"]
+          enum: [monthly, yearly, null]
+        contractStartsAt:
+          type: ["string", "null"]
+          format: date
+        contractEndsAt:
+          type: ["string", "null"]
+          format: date
+        approvedAt:
+          type: ["string", "null"]
+          format: date-time
+        suspendedAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        databaseName:
+          type: ["string", "null"]
+        databaseStatus:
+          type: string
+          enum: [unprovisioned, provisioning, ready, failed]
+        databaseProvisionedAt:
+          type: ["string", "null"]
+          format: date-time
+        databaseLastError:
+          type: ["string", "null"]
+        dataImportStatus:
+          type: string
+          enum: [not_requested, awaiting_backup, running, completed, failed]
+        dataImportStartedAt:
+          type: ["string", "null"]
+          format: date-time
+        dataImportedAt:
+          type: ["string", "null"]
+          format: date-time
+        dataImportError:
+          type: ["string", "null"]
+        dataImportSummary:
+          oneOf:
+            - $ref: "#/components/schemas/ErpDataImportSummary"
+            - type: "null"
+        webStoreStatus:
+          type: string
+          enum: [inactive, active]
+        webStoreSubdomain:
+          type: ["string", "null"]
+        webStoreHostname:
+          type: ["string", "null"]
+        webStoreDomainStatus:
+          type: string
+          enum: [inactive, active]
+        webStoreDomainActivatedAt:
+          type: ["string", "null"]
+          format: date-time
+        featureFlags:
+          type: object
+          additionalProperties:
+            type: boolean
+        maxStores:
+          type: ["integer", "null"]
+        currentStores:
+          type: ["integer", "null"]
+        storeCountStatus:
+          type: string
+          enum: [ready, not_ready, unavailable]
+        createdAt:
+          type: string
+          format: date-time
+        ownerEmail:
+          type: ["string", "null"]
+        ownerFirstName:
+          type: ["string", "null"]
+        ownerLastName:
+          type: ["string", "null"]
+      additionalProperties: true
+
+    ErpTenantListResponse:
+      type: object
+      required: [tenants]
+      properties:
+        tenants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErpTenantAdminRecord"
+
+    ErpTenantBackupImportResponse:
+      type: object
+      required: [tenant, summary]
+      properties:
+        tenant:
+          $ref: "#/components/schemas/ErpTenantAdminRecord"
+        summary:
+          $ref: "#/components/schemas/ErpDataImportSummary"
 
     DesktopLicense:
       type: object

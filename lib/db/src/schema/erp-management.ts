@@ -23,6 +23,22 @@ export const erpTenantDatabaseStatusValues = [
 
 export type ErpTenantDatabaseStatus = (typeof erpTenantDatabaseStatusValues)[number];
 
+export const erpDataImportStatusValues = [
+  "not_requested",
+  "awaiting_backup",
+  "running",
+  "completed",
+  "failed",
+] as const;
+export type ErpDataImportStatus = (typeof erpDataImportStatusValues)[number];
+
+export type ErpDataImportSummary = {
+  sourceDatabaseVersion: string | null;
+  tableCount: number;
+  recordCounts: Record<string, number>;
+  archiveSha256: string;
+};
+
 export const webStoreStatusValues = ["inactive", "active"] as const;
 export type WebStoreStatus = (typeof webStoreStatusValues)[number];
 
@@ -91,6 +107,14 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   databaseStatus: text("database_status").notNull().default("unprovisioned"),
   databaseProvisionedAt: timestamp("database_provisioned_at", { withTimezone: true }),
   databaseLastError: text("database_last_error"),
+  dataImportStatus: text("data_import_status")
+    .$type<ErpDataImportStatus>()
+    .notNull()
+    .default("not_requested"),
+  dataImportStartedAt: timestamp("data_import_started_at", { withTimezone: true }),
+  dataImportedAt: timestamp("data_imported_at", { withTimezone: true }),
+  dataImportError: text("data_import_error"),
+  dataImportSummary: jsonb("data_import_summary").$type<ErpDataImportSummary | null>(),
   webStoreStatus: text("web_store_status").notNull().default("inactive"),
   webStoreSubdomain: text("web_store_subdomain"),
   webStoreHostname: text("web_store_hostname"),
