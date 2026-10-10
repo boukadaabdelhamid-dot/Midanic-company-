@@ -28,4 +28,5 @@
 - [Password reset delivery verification](password-reset-delivery-verification.md) — forgot-password intentionally returns generic success even when Brevo fails; verify provider logs, not only HTTP 200
 - [Railway stale wildcard bindings](railway-stale-wildcard-bindings.md) — when a wildcard target changes, Railway MCP can inspect/add but not remove the stuck custom-domain binding; recreate it in Railway UI
 - [Tenant multipart context](tenant-multipart-context.md) — Multer callbacks can outlive AsyncLocalStorage; re-enter the authenticated tenant database before upload handlers query or write
+- [Composite workflow restarts](composite-workflow-restarts.md) — stop child artifact workflows before restarting the Run composite or old listeners can cause port conflicts
 - [Guest order identity](guest-order-identity.md) — registration stays optional; phone/name search aids CRM, but an unverified phone must never grant account or order-history access

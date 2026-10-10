@@ -12,3 +12,9 @@ When a deployed database was created with `drizzle-kit push` before tracked migr
 An absent `drizzle.__drizzle_migrations` table must be checked with `to_regclass` first; PostgreSQL still resolves a table reference inside a `CASE` subquery even when that branch would not execute.
 
 Historical migrations must also be self-sufficient: a migration that alters a table introduced only by startup reconciliation must create its baseline table first. Post-migration reconciliation runs too late to prevent the migration from failing.
+
+The bootstrap can insert the legacy `0001` journal sentinel with the current runtime timestamp. Drizzle may then skip a new migration generated earlier than that timestamp, even though the migration was never applied.
+
+**Why:** Drizzle orders pending migrations by journal timestamps, while the compatibility sentinel uses `Date.now()` to skip historical DDL.
+
+**How to apply:** Keep the tracked migration for fresh databases and future schema generation, and add an idempotent post-migration reconciliation for new standalone tables that must appear in push-bootstrapped production databases. Do not backdate the migration journal.

@@ -5,17 +5,15 @@ A SaaS platform with a React/Vite frontend, Express 5 API server, and PostgreSQL
 ## Run & Operate
 
 - `pnpm install --frozen-lockfile` — restore all workspace dependencies after import
-- `pnpm --filter @workspace/midanic-web run dev` — run the main Midanic web app
-- `pnpm --filter @workspace/api-server run dev` — run the platform API
-- `pnpm --filter @workspace/erp run dev` — run the ERP web app
-- `pnpm --filter @workspace/erp-api-server run dev` — run the ERP API
-- `pnpm --filter @workspace/web-store run dev` — run the storefront
+- Replit's **Run** button starts the `Project` workflow, which starts the managed services `artifacts/api-server: API Server`, `artifacts/midanic-web: web`, `artifacts/erp: web`, and `artifacts/web-store: web`, plus the existing `ERP API` workflow. You can start these individually instead when working on one app.
+- Previews: `/` (platform), `/erp/` (ERP), `/store/` (storefront). Development health checks: `/api/healthz`, `/erp/api/healthz`, `/store/api/healthz`. The ERP and storefront dev servers proxy their own `/api` requests to the ERP API.
+- Outside the managed workflows, each service needs its configured `PORT`; Vite also needs `BASE_PATH` (`/`, `/erp/`, or `/store/`). Do not start these packages with bare `pnpm dev` at the workspace root.
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` (provided by Replit PostgreSQL) and `SESSION_SECRET`
-- In Replit, use the managed artifact workflows rather than assigning ports manually.
+- The platform and ERP APIs apply their existing development database migrations on startup; a separate schema push is not needed for a fresh import.
+- Required env: `DATABASE_URL` (runtime-managed by Replit PostgreSQL) and `SESSION_SECRET` (secret). External email, R2 upload storage, and production administrator bootstrap require their respective service credentials/configuration; do not invent values.
+- Development startup seeds demonstration accounts. Do not treat those credentials or the local ERP upload directory as production-ready.
 
 ## Stack
 
