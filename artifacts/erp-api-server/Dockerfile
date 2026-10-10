@@ -19,13 +19,16 @@ RUN rm -rf /app/artifacts/erp-api-server/dist /app/artifacts/erp/dist && \
     pnpm --filter @workspace/erp-api-server run build
 
 # ── Runtime image ─────────────────────────────────────────────────────────────
-FROM node:22-alpine AS runtime
+FROM node:22-alpine3.23 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
 # Install every package that esbuild externalises so they are real npm
 # installations (not broken pnpm symlinks). Exact versions match package.json.
-RUN apk add --no-cache postgresql16-client && \
+# PostgreSQL 18 exports archive format 1.16, which pg_restore 16 cannot read.
+# Pin a compatible Alpine release and verify the restore tool during the build.
+RUN apk add --no-cache postgresql18-client && \
+    pg_restore --version | grep -E 'PostgreSQL\) 18\.' && \
     npm install \
       pg@8 \
       nodemailer@9 \
