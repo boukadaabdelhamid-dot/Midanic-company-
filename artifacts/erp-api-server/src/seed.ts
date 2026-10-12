@@ -1,7 +1,8 @@
 import { db, schema } from "./lib/db";
 import bcrypt from "bcryptjs";
-import { eq, asc, and, isNull } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 import { getTenantDatabaseContext } from "./lib/db";
+import { planTenantStoreBootstrap } from "./lib/tenant-store-mapping";
 
 /**
  * bootstrap() — Production-safe initialisation.
@@ -19,34 +20,43 @@ import { getTenantDatabaseContext } from "./lib/db";
 export async function bootstrap() {
   const tenantContext = getTenantDatabaseContext();
 
-  // Tenant databases must have one canonical store. The legacy bootstrap
-  // created "principal" without a tenant id, which made the SSO path create
-  // a second store in a freshly published tenant.
+  // A tenant database is isolated to one company. Tag every imported store
+  // with that company rather than creating a synthetic store beside them.
   if (tenantContext) {
-    await db.update(schema.storesTable)
-      .set({ platformTenantId: tenantContext.tenantId })
-      .where(and(
-        eq(schema.storesTable.slug, "principal"),
-        isNull(schema.storesTable.platformTenantId),
-      ));
+    const existingStores = await db.select({ id: schema.storesTable.id })
+      .from(schema.storesTable);
+    const plan = planTenantStoreBootstrap(
+      existingStores.map((store) => store.id),
+      tenantContext.tenantId,
+    );
+    if (!plan.shouldCreatePrincipalStore) {
+      await db.update(schema.storesTable)
+        .set({ platformTenantId: tenantContext.tenantId });
+    } else {
+      await db.insert(schema.storesTable).values({
+        platformTenantId: tenantContext.tenantId,
+        nameAr: "ميدانيك الرئيسي",
+        nameEn: "Midanic Principal",
+        slug: "principal",
+        isActive: true,
+      }).onConflictDoNothing();
+    }
+  } else {
+    // Shared legacy database still requires its canonical principal store.
+    await db.insert(schema.storesTable).values({
+      nameAr: "ميدانيك الرئيسي",
+      nameEn: "Midanic Principal",
+      slug: "principal",
+      isActive: true,
+    }).onConflictDoNothing();
   }
 
-  // ── 1. Magasin Principal ──────────────────────────────────────────────────
-  await db.insert(schema.storesTable).values({
-    ...(tenantContext ? { platformTenantId: tenantContext.tenantId } : {}),
-    nameAr: "ميدانيك الرئيسي",
-    nameEn: "Midanic Principal",
-    slug: "principal",
-    isActive: true,
-  }).onConflictDoNothing();
-
-  const [principal] = await db
-    .select()
+  const [bootstrapStore] = await db
+    .select({ id: schema.storesTable.id })
     .from(schema.storesTable)
-    .where(eq(schema.storesTable.slug, "principal"))
     .limit(1);
 
-  if (!principal) throw new Error("Failed to ensure principal store.");
+  if (!bootstrapStore) throw new Error("Failed to ensure an ERP store.");
 
   // ── 2. Compte Administrateur ──────────────────────────────────────────────
   // The global Midanic Admin is only a local-development account. It must

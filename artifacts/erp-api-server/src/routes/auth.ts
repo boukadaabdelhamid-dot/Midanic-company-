@@ -1,10 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "crypto";
 import { db, runWithTenantDatabase, schema } from "../lib/db";
 import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verifyPlatformSsoToken, updatePlatformPassword, type AuthRequest } from "../lib/auth";
 import { listUserStores } from "../lib/store-context";
+import { createTenantOwnerStoreLinks } from "../lib/tenant-store-mapping";
 import { sendPasswordResetEmail } from "../lib/email";
 import {
   getRequestTenantHostname,
@@ -125,10 +126,10 @@ router.post("/auth/sso/exchange", async (req, res) => {
         .returning();
     }
 
-    const [store] = await db.select().from(schema.storesTable)
+    let tenantStores = await db.select().from(schema.storesTable)
       .where(eq(schema.storesTable.platformTenantId, sso.tenantId))
-      .limit(1);
-    let activeStore = store;
+      .orderBy(asc(schema.storesTable.id));
+    let activeStore = tenantStores[0];
     if (!activeStore) {
       const [principalStore] = await db.select().from(schema.storesTable)
         .where(and(
@@ -149,9 +150,10 @@ router.post("/auth/sso/exchange", async (req, res) => {
           slug: `tenant-${sso.tenantId}`,
         }).returning();
       }
+      tenantStores = [activeStore];
     }
     await db.insert(schema.userStoresTable)
-      .values({ userId: user.id, storeId: activeStore.id })
+      .values(createTenantOwnerStoreLinks(user.id, tenantStores.map((store) => store.id)))
       .onConflictDoNothing();
     const token = signToken({
       id: user.id,
@@ -169,7 +171,7 @@ router.post("/auth/sso/exchange", async (req, res) => {
       token,
       currentStoreId: activeStore.id,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
-      stores: [activeStore],
+      stores: tenantStores,
     });
     };
 
