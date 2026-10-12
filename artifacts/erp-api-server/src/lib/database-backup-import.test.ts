@@ -41,6 +41,20 @@ test("rejects archives that do not contain the ERP schema", () => {
   );
 });
 
+test("keeps required inventory and payroll enum dependencies without including unrelated public types", () => {
+  const archive = [
+    validTenantArchive,
+    "14; 1247 26000 TYPE public inventory_count_status owner",
+    "15; 1247 26001 TYPE public payroll_adjustment_type owner",
+    "16; 1247 26002 TYPE public unrelated_platform_type owner",
+  ].join("\n");
+  const result = selectTenantArchiveEntries(archive);
+
+  assert.match(result.list, /TYPE public inventory_count_status/);
+  assert.match(result.list, /TYPE public payroll_adjustment_type/);
+  assert.doesNotMatch(result.list, /unrelated_platform_type/);
+});
+
 test("rejects archives with global large objects before restore", () => {
   const archiveWithLargeObjects = [
     validTenantArchive,
