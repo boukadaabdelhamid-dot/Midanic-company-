@@ -95,6 +95,7 @@ function KpiCardSkeleton() {
 
 // ─── Shared fetch hook ─────────────────────────────────────────────
 function useFetch<T>(path: string, refreshKey = 0) {
+  const { token } = useAuth();
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,25 +104,28 @@ function useFetch<T>(path: string, refreshKey = 0) {
     setLoading(true);
     setData(null);
     setError(null);
+    const controller = new AbortController();
     const apiBase = getApiBase();
-    const token = localStorage.getItem("midanic_token");
     fetch(`${apiBase}${path}`, {
+      signal: controller.signal,
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     })
       .then((r) => {
         if (!r.ok) return Promise.reject(new Error(`HTTP ${r.status}`));
         return r.json() as Promise<T>;
       })
-      .then(setData)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erreur"))
-      .finally(() => setLoading(false));
+      .then(value => { if (!controller.signal.aborted) setData(value); })
+      .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Erreur"); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, refreshKey]);
+  }, [path, refreshKey, token]);
 
   return { data, loading, error };
 }
 
 function useFetchList<T>(path: string, refreshKey = 0) {
+  const { token } = useAuth();
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,20 +134,22 @@ function useFetchList<T>(path: string, refreshKey = 0) {
     setLoading(true);
     setRows([]);
     setError(null);
+    const controller = new AbortController();
     const apiBase = getApiBase();
-    const token = localStorage.getItem("midanic_token");
     fetch(`${apiBase}${path}`, {
+      signal: controller.signal,
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     })
       .then((r) => {
         if (!r.ok) return Promise.reject(new Error(`HTTP ${r.status}`));
         return r.json() as Promise<T[]>;
       })
-      .then(setRows)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erreur"))
-      .finally(() => setLoading(false));
+      .then(value => { if (!controller.signal.aborted) setRows(value); })
+      .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Erreur"); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, refreshKey]);
+  }, [path, refreshKey, token]);
 
   return { rows, loading, error };
 }
@@ -165,6 +171,10 @@ function getTokenRole(token: string | null): string | null {
     const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, "=");
     return (JSON.parse(atob(padded)) as Record<string, unknown>).role as string ?? null;
   } catch { return null; }
+}
+
+function canAggregateDashboard(role: string | null): boolean {
+  return role === "admin" || role === "tenant_admin";
 }
 
 // ─── Error / Empty states ──────────────────────────────────────────
@@ -1354,7 +1364,7 @@ export default function Dashboard() {
   const currency = lang === "ar" ? "دج" : "DA";
 
   const { token } = useAuth();
-  const isAdmin = getTokenRole(token) === "admin";
+  const isAdmin = canAggregateDashboard(getTokenRole(token));
   const { can } = usePermissions();
   const canViewProfit = can("products", "view_purchase_price");
 
@@ -1362,19 +1372,29 @@ export default function Dashboard() {
 
   const [selectedStore, setSelectedStore] = useState<string>("all");
   const [stores, setStores] = useState<{ id: number; nameAr: string; nameEn: string }[]>([]);
+  const [storesError, setStoresError] = useState(false);
 
   useEffect(() => {
+    setStores([]);
+    setStoresError(false);
+    setSelectedStore("all");
     if (!isAdmin) return;
+    const controller = new AbortController();
     const apiBase = getApiBase();
     fetch(`${apiBase}/api/erp/stores/all`, {
+      signal: controller.signal,
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     })
-      .then(r => r.ok ? r.json() as Promise<{ id: number; nameAr: string; nameEn: string }[]> : Promise.resolve([]))
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<{ id: number; nameAr: string; nameEn: string }[]>;
+      })
       .then(setStores)
-      .catch(() => {});
+      .catch(() => { if (!controller.signal.aborted) setStoresError(true); });
+    return () => controller.abort();
   }, [isAdmin, token]);
 
-  const storeIdParam = selectedStore === "all" ? undefined : selectedStore;
+  const storeIdParam = isAdmin ? selectedStore : undefined;
 
   return (
     <div className="flex flex-col h-full">
@@ -1400,6 +1420,12 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {storesError && (
+        <p role="alert" className="text-sm text-destructive mb-3">
+          {t("Impossible de charger la liste des magasins.", "تعذر تحميل قائمة المتاجر.")}
+        </p>
+      )}
 
       <Tabs defaultValue="general" className="flex flex-col flex-1 min-h-0">
         <div className="shrink-0 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-0.5">

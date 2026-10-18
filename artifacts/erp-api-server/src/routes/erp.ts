@@ -2,7 +2,8 @@ import { Router, type Response } from "express";
 import { randomUUID } from "crypto";
 import { eq, desc, asc, sql, and, gt, ne, or, inArray, isNull, notLike, ilike } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { db, schema } from "../lib/db";
+import { db, schema, getTenantDatabaseContext } from "../lib/db";
+import { DashboardScopeError, resolveDashboardStoreId, validateDashboardStore } from "../lib/dashboard-scope";
 import { authenticate, configuredTenantLimit, requireAdmin, requireTenantAdmin, requireStaff, requireStore, isAdmin, requirePermission, normalizeEmail, isEmailUniqueViolation, updatePlatformPassword, type AuthRequest } from "../lib/auth";
 import { countLimitReached } from "../lib/entitlement-limits";
 import { broadcastToAdmins, broadcastCaisseChanged } from "../lib/ws";
@@ -295,16 +296,43 @@ async function linkLegacyCustomerSiblings(
 // Add new fields here as the tab grows (receivables, caisse balance, etc.)
 // ─── Dashboard helper: resolve effective storeId (null = all stores) ─
 function dashboardStoreId(req: AuthRequest): number | null {
-  const rawSid = req.query["storeId"] as string | undefined;
-  if (req.user?.role === "admin") {
-    if (rawSid && rawSid !== "all") {
-      const n = parseInt(rawSid, 10);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  }
-  return req.currentStoreId ?? null;
+  return resolveDashboardStoreId({
+    user: req.user,
+    currentStoreId: req.currentStoreId,
+    query: req.query,
+    databaseContext: getTenantDatabaseContext(),
+  });
 }
+
+// Authenticate before resolving scope: null means all stores of the selected
+// tenant database, never all companies in the platform.
+router.use("/erp/dashboard", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res, next) => {
+  try {
+    await validateDashboardStore({
+      user: req.user,
+      currentStoreId: req.currentStoreId,
+      query: req.query,
+      databaseContext: getTenantDatabaseContext(),
+    }, async (storeId, tenantId) => {
+      const [store] = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(and(
+          eq(schema.storesTable.id, storeId),
+          eq(schema.storesTable.isActive, true),
+          tenantId === undefined ? undefined : eq(schema.storesTable.platformTenantId, tenantId),
+        )).limit(1);
+      return Boolean(store);
+    });
+    next();
+  } catch (err) {
+    if (err instanceof DashboardScopeError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    req.log.error(err);
+    res.status(500).json({ error: "Unable to resolve dashboard scope" });
+  }
+});
 
 export type DashboardBalanceDirection = "receivable" | "payable";
 
@@ -383,7 +411,7 @@ export async function getUnifiedDashboardBalances(
   `);
 }
 
-router.get("/erp/dashboard/general", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/general", async (req: AuthRequest, res) => {
   try {
     const sid = dashboardStoreId(req);
     const storeCondition = sid !== null
@@ -409,7 +437,7 @@ router.get("/erp/dashboard/general", authenticate, requireStaff, requireStore, r
 
 // ─── Employees ─────────────────────────────────────────────────────
 // ─── Dashboard — Stock Detail (drill-down) ────────────────────────
-router.get("/erp/dashboard/stock-detail", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/stock-detail", async (req: AuthRequest, res) => {
   try {
     const sid = dashboardStoreId(req);
     const storeCondition = sid !== null
@@ -433,7 +461,7 @@ router.get("/erp/dashboard/stock-detail", authenticate, requireStaff, requireSto
 });
 
 // ─── Dashboard — Créances (all positive balances) ─────────────────
-router.get("/erp/dashboard/client-receivables", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/client-receivables", async (req: AuthRequest, res) => {
   try {
     const result = await getUnifiedDashboardBalances(dashboardStoreId(req), "receivable");
     res.json(result.rows);
@@ -441,14 +469,14 @@ router.get("/erp/dashboard/client-receivables", authenticate, requireStaff, requ
 });
 
 // ─── Dashboard — Dettes (all negative balances) ───────────────────
-router.get("/erp/dashboard/supplier-debts", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/supplier-debts", async (req: AuthRequest, res) => {
   try {
     const result = await getUnifiedDashboardBalances(dashboardStoreId(req), "payable");
     res.json(result.rows);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.get("/erp/dashboard/caisses", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/caisses", async (req: AuthRequest, res) => {
   try {
     // Global caisse model: the dashboard widget shows the org-wide set
     // (the single main caisse + every user's personal caisse).
@@ -465,7 +493,7 @@ router.get("/erp/dashboard/caisses", authenticate, requireStaff, requireStore, r
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.get("/erp/dashboard/ventes", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/ventes", async (req: AuthRequest, res) => {
   try {
     const sid = dashboardStoreId(req);
     const { groupBy = "jour", dateFrom, dateTo, source } = req.query as Record<string, string | undefined>;
@@ -585,7 +613,7 @@ router.get("/erp/dashboard/ventes", authenticate, requireStaff, requireStore, re
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.get("/erp/dashboard/ventes-produits", authenticate, requireStaff, requireStore, requirePermission("dashboard", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/dashboard/ventes-produits", async (req: AuthRequest, res) => {
   try {
     const sid = dashboardStoreId(req);
     const { dateFrom, dateTo, source } = req.query as Record<string, string | undefined>;

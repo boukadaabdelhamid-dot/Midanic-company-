@@ -14,6 +14,7 @@ const ast = ts.createSourceFile("Dashboard.tsx", source, ts.ScriptTarget.Latest,
 const names = [
   "fmtNum", "partyTypeLabel", "KpiCard", "SimpleTable",
   "ClientsTab", "FournisseursTab", "ClientReceivablesModal", "SupplierDebtsModal",
+  "canAggregateDashboard", "getTokenRole", "GeneralTab",
 ];
 const functions = ast.statements.filter((node) =>
   ts.isFunctionDeclaration(node) && names.includes(node.name?.text),
@@ -24,10 +25,15 @@ const compiled = ts.transpileModule(functions.map((node) => node.getText(ast)).j
 }).outputText;
 const container = ({ children }) => React.createElement("div", null, children);
 
-function setup(rows, { loading = false, error = null } = {}) {
+function setup(rows, { loading = false, error = null, general, caisses, debts } = {}) {
   const requests = [];
   const context = vm.createContext({
     React,
+    atob,
+    useState: (value) => [value, () => {}],
+    useEffect: () => {},
+    Package: container, RefreshCw: container,
+    StockDetailModal: () => null,
     Card: container, CardHeader: container, CardTitle: container, CardContent: container,
     Dialog: container, DialogContent: container, DialogHeader: container, DialogTitle: container,
     Users: container, Truck: container, Wallet: container, TrendingUp: container,
@@ -38,7 +44,11 @@ function setup(rows, { loading = false, error = null } = {}) {
     buildPath: (url, storeId) => `${url}?storeId=${storeId}`,
     useFetchList: (url) => {
       requests.push(url);
-      return { rows, loading, error };
+      return { rows: url.includes("supplier-debts") && debts ? debts : rows, loading, error };
+    },
+    useFetch: (url) => {
+      requests.push(url);
+      return { data: url.includes("/caisses") ? caisses : general, loading, error };
     },
   });
   const components = vm.runInContext(`${compiled}\n({${names.join(",")}})`, context);
@@ -103,4 +113,80 @@ test("Company API routing and Arabic tab labels are preserved", () => {
   assert.ok(!source.includes("import.meta.env.VITE_API_URL"));
   assert.match(source, /value: "clients".*labelAr: "المستحقات"/);
   assert.match(source, /value: "fournisseurs".*labelAr: "الديون"/);
+});
+
+test("company owners and standalone admins have the store selector, employees do not", () => {
+  const { components } = setup([]);
+  for (const role of ["admin", "tenant_admin", "employee", "customer"]) {
+    const token = `header.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.signature`;
+    assert.equal(components.canAggregateDashboard(components.getTokenRole(token)),
+      role === "admin" || role === "tenant_admin");
+  }
+  assert.equal(components.canAggregateDashboard(components.getTokenRole(null)), false);
+});
+
+test("actual General tab reproduces both screenshots' assets formulas and scopes", () => {
+  for (const sample of [
+    { scope: "1", stock: 7788615.32, debt: "-2440893.70", total: 8288709.22 },
+    { scope: "all", stock: 10579512.82, debt: "-2515893.70", total: 11004606.72 },
+  ]) {
+    const { components, requests } = setup([
+      { id: "customer:1", name: "Example", party_type: "customer", balance: "1519511" },
+    ], {
+      general: { stockValue: sample.stock, productsWithoutCost: 0 },
+      caisses: { total: "1421476.60", caisses: [] },
+      debts: [{ id: "supplier:1", name: "Example", party_type: "supplier", balance: sample.debt }],
+    });
+    const html = renderToStaticMarkup(React.createElement(components.GeneralTab, {
+      t: (fr) => fr, lang: "fr", currency: "DA", storeId: sample.scope,
+    }));
+    const compact = html.replace(/[\s\u00a0\u202f]/g, "");
+    assert.ok(compact.includes(sample.total.toFixed(2).replace(".", ",")));
+    for (const endpoint of ["general", "caisses", "client-receivables", "supplier-debts"]) {
+      assert.ok(requests.includes(`/api/erp/dashboard/${endpoint}?storeId=${sample.scope}`));
+    }
+  }
+});
+
+test("store selector is rendered for tenant owners but never for employees", () => {
+  const dashboard = ast.statements.find((node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "Dashboard",
+  ).getText(ast).replace("export default ", "");
+  const tabs = ast.statements.find((node) =>
+    ts.isVariableStatement(node) && node.declarationList.declarations.some(
+      (d) => d.name.getText(ast) === "ALL_TABS",
+    ),
+  ).getText(ast);
+  const js = ts.transpileModule(`${dashboard}\n${tabs}`, {
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  for (const role of ["tenant_admin", "admin", "employee"]) {
+    const token = `header.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.signature`;
+    const { components } = setup([]);
+    const context = vm.createContext({
+      React, ...components,
+      useAuth: () => ({ token }),
+      useLang: () => ({ lang: "fr" }),
+      usePermissions: () => ({ can: () => true }),
+      useEffect: () => {},
+      useState: (value) => [
+        Array.isArray(value) ? [{ id: 1, nameEn: "Store One", nameAr: "المتجر الأول" }] : value,
+        () => {},
+      ],
+      LayoutDashboard: container, ShoppingCart: container, TrendingUp: container,
+      Users: container, UserCog: container, Package: container, Wallet: container,
+      Truck: container, Building2: container,
+      Tabs: container, TabsList: container, TabsTrigger: container, TabsContent: () => null,
+      GeneralTab: () => null, VentesTab: () => null, VentePlusTab: () => null,
+      BeneficeTab: () => null, ClientsTab: () => null, EmployesTab: () => null,
+      StockTab: () => null, CaissesTab: () => null, FournisseursTab: () => null,
+    });
+    const Component = vm.runInContext(`${js}\nDashboard`, context);
+    const html = renderToStaticMarkup(React.createElement(Component));
+    assert.equal(html.includes("<select"), role !== "employee");
+    if (role !== "employee") {
+      assert.ok(html.includes("Tous les magasins"));
+      assert.ok(html.includes("Store One"));
+    }
+  }
 });
