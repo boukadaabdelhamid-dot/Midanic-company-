@@ -50,6 +50,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ProductDetailsDialog from "@/components/ProductDetailsDialog";
+import ProductExposureFilter from "@/components/ProductExposureFilter";
 import ProductHistorySheet from "@/components/ProductHistorySheet";
 import CopyToStoresModal from "@/components/CopyToStoresModal";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -484,7 +485,7 @@ export default function Products() {
   }, [columnFilters]);
 
   useEffect(() => { setPage(1); }, [debouncedSearch, pageSize, debouncedFilters]);
-  useEffect(() => { setSelected(new Set()); }, [page]);
+  useEffect(() => { setSelected(new Set()); }, [page, debouncedSearch, debouncedFilters]);
 
   const setColumnFilter = (key: keyof typeof columnFilters, value: string) =>
     setColumnFilters((f) => ({ ...f, [key]: value }));
@@ -946,7 +947,7 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -956,6 +957,10 @@ export default function Products() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <ProductExposureFilter
+          value={columnFilters.exposed}
+          onChange={(value) => setColumnFilter("exposed", value)}
+        />
         {hasActiveFilters && (
           <Button
             variant="outline" size="sm" className="h-9 gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
@@ -1107,7 +1112,7 @@ export default function Products() {
                     {col("catalogue5")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue5} onChange={(e) => setColumnFilter("catalogue5", e.target.value)} /></div></TableHead>}
                     {col("catalogue6")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue6} onChange={(e) => setColumnFilter("catalogue6", e.target.value)} /></div></TableHead>}
                     {col("createdAt")    && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.createdAt} onChange={(e) => setColumnFilter("createdAt", e.target.value)} /></div></TableHead>}
-                    {col("isExposed")    && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="oui/non" value={columnFilters.exposed} onChange={(e) => setColumnFilter("exposed", e.target.value)} /></div></TableHead>}
+                    {col("isExposed")    && <TableHead className="w-20 px-2 py-1"><ProductExposureFilter compact value={columnFilters.exposed} onChange={(value) => setColumnFilter("exposed", value)} /></TableHead>}
                     {col("isActive")     && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="actif…" value={columnFilters.active} onChange={(e) => setColumnFilter("active", e.target.value)} /></div></TableHead>}
                     {col("price")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.price} onChange={(e) => setColumnFilter("price", e.target.value)} /></div></TableHead>}
                     {col("priceGros")    && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.priceGros} onChange={(e) => setColumnFilter("priceGros", e.target.value)} /></div></TableHead>}
