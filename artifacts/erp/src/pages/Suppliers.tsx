@@ -322,13 +322,17 @@ function ImportDialog({
 type UnifiedOp = GlobalOperation & { source?: "supplier" | "customer" };
 
 function StatementSheet({
-  supplier, open, onOpenChange,
-}: { supplier: Supplier | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  supplier, open, onOpenChange, expanded, onToggleExpanded,
+}: {
+  supplier: Supplier | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
-  useEffect(() => { if (!open) setExpanded(false); }, [open]);
   const linked = !!(supplier as GlobalSupplier | null)?.globalSupplierId;
   const { data, isLoading } = useGetSupplierOperations(supplier?.id ?? 0, {
     query: { enabled: open && !!supplier, queryKey: getGetSupplierOperationsQueryKey(supplier?.id ?? 0) },
@@ -430,26 +434,31 @@ function StatementSheet({
       <SheetContent
         side="right"
         className={`w-full p-0 overflow-y-auto transition-[width,max-width] duration-200 ${expanded ? "w-[96vw] max-w-[96vw]" : "max-w-2xl"}`}
+        style={expanded ? { width: "96vw", maxWidth: "96vw" } : undefined}
       >
         <SheetHeader className="px-5 py-4 border-b bg-[#1B3057] text-white">
-          <SheetTitle className="text-white flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              {t("Relevé de compte", "كشف حساب")} — {supplier?.name ?? ""}
-              {isUnified && <span className="text-xs font-normal bg-white/20 px-2 py-0.5 rounded-full">{t("Unifié", "موحّد")}</span>}
-            </span>
-            <div className="flex shrink-0 items-center gap-1 pr-7">
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <SheetTitle className="min-w-0 flex-1 text-white">
+              <span className="inline-flex items-center gap-2">
+                <FileText className="h-4 w-4 shrink-0" />
+                {t("Relevé de compte", "كشف حساب")} — {supplier?.name ?? ""}
+                {isUnified && <span className="text-xs font-normal bg-white/20 px-2 py-0.5 rounded-full">{t("Unifié", "موحّد")}</span>}
+              </span>
+            </SheetTitle>
+            <div className="flex shrink-0 items-center gap-1">
               <Button
+                type="button"
                 size="icon" variant="ghost"
                 className="h-7 w-7 text-white hover:bg-white/20"
                 title={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
                 aria-label={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
                 data-testid="button-toggle-supplier-statement-width"
-                onClick={() => setExpanded((value) => !value)}
+                onClick={onToggleExpanded}
               >
                 {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </Button>
               <Button
+                type="button"
                 size="icon" variant="ghost"
                 className="h-7 w-7 text-white hover:bg-white/20"
                 title={t("Actualiser", "تحديث")}
@@ -459,7 +468,7 @@ function StatementSheet({
                 <RefreshCw className="h-3.5 w-3.5" />
               </Button>
             </div>
-          </SheetTitle>
+          </div>
         </SheetHeader>
 
         {supplier && (
@@ -606,6 +615,7 @@ export default function Suppliers() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [statementSupplier, setStatementSupplier] = useState<Supplier | null>(null);
   const [statementOpen, setStatementOpen] = useState(false);
+  const [statementExpanded, setStatementExpanded] = useState(false);
   const [paymentSupplier, setPaymentSupplier] = useState<Supplier | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [adjustSupplier, setAdjustSupplier] = useState<Supplier | null>(null);
@@ -624,7 +634,15 @@ export default function Suppliers() {
     setSaveError(null);
     setDialog({ open: true, editing: s });
   };
-  const openStatement = (s: Supplier) => { setStatementSupplier(s); setStatementOpen(true); };
+  const openStatement = (s: Supplier) => {
+    setStatementSupplier(s);
+    setStatementExpanded(false);
+    setStatementOpen(true);
+  };
+  const handleStatementOpenChange = (nextOpen: boolean) => {
+    setStatementOpen(nextOpen);
+    if (!nextOpen) setStatementExpanded(false);
+  };
   const openPayment = (s: Supplier) => { setPaymentSupplier(s); setPaymentOpen(true); };
   const openAdjust = (s: Supplier) => { setAdjustSupplier(s); setAdjustOpen(true); };
   const openImport = (s: GlobalSupplier) => { setImportSupplier(s); setImportOpen(true); };
@@ -863,7 +881,9 @@ export default function Suppliers() {
       <StatementSheet
         supplier={statementSupplier}
         open={statementOpen}
-        onOpenChange={setStatementOpen}
+        onOpenChange={handleStatementOpenChange}
+        expanded={statementExpanded}
+        onToggleExpanded={() => setStatementExpanded((value) => !value)}
       />
 
       {/* Payment Dialog */}
