@@ -36,7 +36,7 @@ export type PermAction =
   | "receive" | "manage_charges" | "column_settings"
   // settings
   | "edit_store_name" | "edit_default_customer" | "manage_permissions" | "manage_stores"
-  | "create_family"
+  | "create_family" | "create_brand" | "create_color" | "create_type"
   // orders – sidebar child visibility
   | "view_sale_orders"
   // inventory

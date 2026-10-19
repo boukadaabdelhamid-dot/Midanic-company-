@@ -116,7 +116,7 @@ router.get("/erp/settings/products/brands", authenticate, requireStaff, requireS
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/brands", authenticate, requireStaff, requireStore, requirePermission("settings", "create"), async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/brands", authenticate, requireStaff, requireStore, requirePermission("settings", "create_brand"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const parsed = attributeSchema.safeParse(req.body);
@@ -177,7 +177,7 @@ router.get("/erp/settings/products/types", authenticate, requireStaff, requirePe
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/types", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/types", authenticate, requireStaff, requireStore, requirePermission("settings", "create_type"), async (req: AuthRequest, res) => {
   try {
     const parsed = typeAttributeSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" }); return; }
@@ -249,7 +249,7 @@ router.get("/erp/settings/products/colors", authenticate, requireStaff, requireS
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/colors", authenticate, requireStaff, requireStore, requirePermission("settings", "create"), async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/colors", authenticate, requireStaff, requireStore, requirePermission("settings", "create_color"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const parsed = colorAttributeSchema.safeParse(req.body);

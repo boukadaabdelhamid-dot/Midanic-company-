@@ -791,7 +791,8 @@ router.put("/erp/permissions/:userId", authenticate, requireTenantAdmin, require
       // inventory
       "count",
       // settings
-      "edit_store_name", "edit_default_customer", "manage_permissions", "manage_stores", "create_family",
+      "edit_store_name", "edit_default_customer", "manage_permissions", "manage_stores",
+      "create_family", "create_brand", "create_color", "create_type",
       // customers (granular)
       "view_balance",
       // web_store

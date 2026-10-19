@@ -44,6 +44,7 @@ import {
 import { Pencil, Trash2, Plus, Loader2, Layers, Tag, Palette, LayoutGrid, Image as ImageIcon, Upload, X, Send } from "lucide-react";
 import CopyAttributesToStoresModal from "@/components/CopyAttributesToStoresModal";
 import { resolveImg } from "@/lib/utils";
+import { useMe } from "@/hooks/use-me";
 
 const API_BASE = getApiBase();
 const tok = () => localStorage.getItem("midanic_token") ?? "";
@@ -168,6 +169,7 @@ export default function ProductSettings() {
   const { toast } = useToast();
   const { lang } = useLang();
   const { can } = usePermissions();
+  const { isAdmin } = useMe();
   const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
 
   const { data: familiesData, isLoading: loadingFamilies } = useGetErpSettingsProductsFamilies();
@@ -345,7 +347,9 @@ export default function ProductSettings() {
             icon={LayoutGrid}
             items={types}
             isLoading={loadingTypes}
-            canAdd={can("settings", "create")}
+            canAdd={can("settings", "create_type")}
+            canEdit={isAdmin}
+            canDelete={isAdmin}
             onAdd={() => openAdd("type")}
             onEdit={(item) => openEdit("type", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "type" })}
@@ -385,7 +389,9 @@ export default function ProductSettings() {
             icon={Tag}
             items={brands}
             isLoading={loadingBrands}
-            canAdd={can("settings", "create")}
+            canAdd={can("settings", "create_brand")}
+            canEdit={can("settings", "edit")}
+            canDelete={can("settings", "delete")}
             onAdd={() => openAdd("brand")}
             onEdit={(item) => openEdit("brand", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "brand" })}
@@ -401,7 +407,9 @@ export default function ProductSettings() {
             icon={Palette}
             items={colors}
             isLoading={loadingColors}
-            canAdd={can("settings", "create")}
+            canAdd={can("settings", "create_color")}
+            canEdit={can("settings", "edit")}
+            canDelete={can("settings", "delete")}
             onAdd={() => openAdd("color")}
             onEdit={(item) => openEdit("color", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "color" })}
