@@ -25,8 +25,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setStoresState(s);
     if (cur != null) {
       window.localStorage.setItem(STORE_KEY, String(cur));
-      setCurrentStoreIdState(cur);
+    } else {
+      window.localStorage.removeItem(STORE_KEY);
     }
+    setCurrentStoreIdState(cur);
   }, []);
 
   const setCurrentStoreId = useCallback((id: number | null) => {

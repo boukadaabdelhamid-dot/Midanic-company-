@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { createServer } from "node:http";
@@ -9,8 +9,17 @@ import { authenticate, optionalAuth, optionalTenantAuth, optionalAuthStrict, isO
 import productsRouter from "../routes/products";
 import { setupWebSocket, broadcastToUsers } from "./ws";
 import { pool } from "./db";
+import { sessionAccounts, type SessionAccount } from "./session-account";
 
 test("password rotation revokes only the owner's HTTP and open WebSocket sessions", async () => {
+  const accounts = new Map<number, SessionAccount>([
+    [91001, { role: "admin", isActive: true, sessionVersion: 0, platformUserId: 701 }],
+    [91002, { role: "employee", isActive: true, sessionVersion: 0, platformUserId: null }],
+    [91003, { role: "admin", isActive: true, sessionVersion: 0, platformUserId: 702 }],
+    [91004, { role: "admin", isActive: true, sessionVersion: 0, platformUserId: null }],
+  ]);
+  const accountMock = mock.method(sessionAccounts, "load", async (user: JwtPayload) => accounts.get(user.id));
+  const storesMock = mock.method(sessionAccounts, "storeIds", async () => new Set<number>());
   const previousUrl = process.env.PLATFORM_API_URL;
   const previousSecret = process.env.PLATFORM_SERVICE_SECRET;
   const fixtureSecret = "owner-session-revocation-fixture";
@@ -85,6 +94,20 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
     assert.equal((await request(secondCompanyToken, `second-${hostname}`)).status, 200);
     assert.equal((await request(employeeToken)).status, 200);
     assert.equal((await request(localAdminToken)).status, 200);
+    const localAccount = accounts.get(localAdmin.id)!;
+    localAccount.sessionVersion = 1;
+    assert.equal((await request(localAdminToken)).status, 401, "a local password reset must revoke the old local session");
+    const newLocalToken = signToken({ ...localAdmin, userSessionVersion: 1 });
+    assert.equal((await request(newLocalToken)).status, 200);
+    localAccount.role = "employee";
+    assert.equal((await request(newLocalToken)).status, 401, "a demoted administrator must not keep administrator access");
+    const employeeSession = signToken({ ...localAdmin, role: "employee", userSessionVersion: 1 });
+    assert.equal((await request(employeeSession)).status, 200);
+    localAccount.isActive = false;
+    assert.equal((await request(employeeSession)).status, 401, "disabled accounts must be denied immediately");
+    localAccount.isActive = true;
+    localAccount.role = "admin";
+    localAccount.sessionVersion = 0;
     assert.equal((await request(otherToken, otherOwner.tenantHostname)).status, 200);
     const optionalRequest = (path: string, token?: string) => fetch(`${origin}${path}`, {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "X-Tenant-Hostname": hostname },
@@ -156,6 +179,8 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
     assert.equal((await request(signToken({ ...owner, platformSessionVersion: 2 }))).status, 200);
     assert.equal((await request(localAdminToken)).status, 200);
   } finally {
+    accountMock.mock.restore();
+    storesMock.mock.restore();
     for (const ws of sockets) ws.terminate();
     wss.close();
     await new Promise<void>((resolve) => erpServer.close(() => resolve()));

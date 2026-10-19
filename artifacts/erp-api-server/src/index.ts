@@ -846,6 +846,7 @@ async function runMigrations(targetPool: Pool = pool) {
   }
   logger.info({ applied, skipped }, "DB migrations done.");
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
+  await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "session_version" integer NOT NULL DEFAULT 0`);
   await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
   // A tenant database can contain multiple stores. Older deployments
   // created a unique partial index here, which made the second store fail

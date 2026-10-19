@@ -15,6 +15,7 @@ import { Layout } from "@/components/layout/Layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import SelectStore from "@/pages/SelectStore";
 import Stores from "@/pages/Stores";
 import Home from "@/pages/Home";
@@ -70,7 +71,7 @@ const queryClient = new QueryClient({
     onError: (error) => { if (is401(error)) forceLogout("expired"); },
   }),
   mutationCache: new MutationCache({
-    onError: (error) => { if (is401(error)) forceLogout("expired"); },
+    onError: (error) => { if (is401(error) && localStorage.getItem("midanic_token")) forceLogout("expired"); },
   }),
   defaultOptions: {
     queries: {
@@ -180,6 +181,9 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/auth/reset-password/:token">
+        {(params) => <ResetPassword token={params.token} />}
+      </Route>
       <Route path="/sso" component={SsoExchange} />
       <Route path="/select-store" component={SelectStore} />
       <Route path="/">

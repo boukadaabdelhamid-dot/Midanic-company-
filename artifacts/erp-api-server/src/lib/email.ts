@@ -1,3 +1,5 @@
+import { logger } from "./logger";
+
 interface SendResetEmailOptions {
   to: string;
   resetUrl: string;
@@ -54,7 +56,6 @@ async function sendViaBrevoApi(options: SendResetEmailOptions): Promise<void> {
   const smtpFrom = process.env["EMAIL_FROM"] ?? process.env["SMTP_FROM"];
   const sender = parseSender(smtpFrom ?? smtpUser);
 
-  console.log(`[email/brevo-api] sender=${JSON.stringify(sender)} to=${to}`);
 
   const body = JSON.stringify({
     sender,
@@ -77,11 +78,11 @@ async function sendViaBrevoApi(options: SendResetEmailOptions): Promise<void> {
   const payload = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    console.error(`[email/brevo-api] failed status=${res.status} body=${JSON.stringify(payload)}`);
-    throw new Error(`Brevo API error ${res.status}: ${(payload as { message?: string }).message ?? res.statusText}`);
+    logger.error({ status: res.status }, "Password reset email provider rejected delivery");
+    throw new Error(`Email provider error ${res.status}`);
   }
 
-  console.log(`[email/brevo-api] delivered messageId=${(payload as { messageId?: string }).messageId}`);
+  logger.info("Password reset email delivered via Brevo");
 }
 
 async function sendViaSmtp(options: SendResetEmailOptions): Promise<void> {
@@ -96,7 +97,6 @@ async function sendViaSmtp(options: SendResetEmailOptions): Promise<void> {
   const host = process.env["SMTP_HOST"]!;
   const user = process.env["SMTP_USER"]!;
 
-  console.log(`[email/smtp] host=${host} port=${port} secure=${secure} user=${user}`);
 
   const transporter = nodemailer.createTransport({
     host,
@@ -112,7 +112,6 @@ async function sendViaSmtp(options: SendResetEmailOptions): Promise<void> {
   const raw = process.env["SMTP_FROM"] ?? user;
   const from = raw.includes("<") ? raw : `"Midanic · ميدانيك" <${raw}>`;
 
-  console.log(`[email/smtp] attempting to=${to} from=${from}`);
 
   try {
     const info = await transporter.sendMail({
@@ -122,13 +121,11 @@ async function sendViaSmtp(options: SendResetEmailOptions): Promise<void> {
       html: buildHtml(resetUrl),
       text: `Reset your password: ${resetUrl}\n\nExpires in 1 hour, single-use only.`,
     });
-    console.log(`[email/smtp] delivered messageId=${info.messageId} response=${info.response}`);
+    logger.info("Password reset email delivered via SMTP");
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException & { command?: string; responseCode?: number; response?: string };
-    console.error(
-      `[email/smtp] error code=${e.code} command=${e.command} responseCode=${e.responseCode} response=${e.response} message=${e.message}`
-    );
-    throw err;
+    logger.error({ code: e.code, responseCode: e.responseCode }, "Password reset SMTP delivery failed");
+    throw new Error("Password reset email delivery failed");
   }
 }
 
@@ -143,10 +140,8 @@ export async function sendPasswordResetEmail(options: SendResetEmailOptions): Pr
   }
 
   if (hasBrevoApi) {
-    console.log("[email] using Brevo API transport");
     return sendViaBrevoApi(options);
   }
 
-  console.log("[email] using SMTP transport (SMTP_API_BREVO not set)");
   return sendViaSmtp(options);
 }

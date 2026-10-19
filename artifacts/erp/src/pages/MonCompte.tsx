@@ -10,6 +10,7 @@ import { useMe } from "@/hooks/use-me";
 import { useLang } from "@/hooks/use-lang";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/use-permissions";
+import { forceLogout } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,8 +150,9 @@ export default function MonCompte() {
       });
       toast({ title: t("Mot de passe modifié", "تم تغيير كلمة المرور"), description: t("Votre mot de passe a été mis à jour.", "تم تحديث كلمة مرورك بنجاح.") });
       setPwMode(false);
+      forceLogout();
     } catch (err) {
-      const msg = err instanceof ApiError && err.status === 401
+      const msg = err instanceof ApiError && (err.data as { code?: string })?.code === "INVALID_CURRENT_PASSWORD"
         ? t("L'ancien mot de passe est incorrect.", "كلمة المرور الحالية غير صحيحة.")
         : (err instanceof ApiError
             ? ((err.data as { error?: string })?.error ?? t("Une erreur est survenue.", "حدث خطأ."))

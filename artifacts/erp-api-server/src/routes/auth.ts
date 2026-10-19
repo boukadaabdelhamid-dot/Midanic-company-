@@ -5,8 +5,9 @@ import { randomBytes, createHash } from "crypto";
 import { db, runWithTenantDatabase, schema } from "../lib/db";
 import { signToken, authenticate, normalizeEmail, isEmailUniqueViolation, verifyPlatformSsoToken, updatePlatformPassword, type AuthRequest } from "../lib/auth";
 import { listUserStores } from "../lib/store-context";
-import { createTenantOwnerStoreLinks } from "../lib/tenant-store-mapping";
 import { sendPasswordResetEmail } from "../lib/email";
+import { ensureOwnerStores } from "../lib/owner-stores";
+import { passwordResetContext, type PasswordResetRequest } from "../lib/password-reset-context";
 import {
   getRequestTenantHostname,
   isConfiguredTenantHostname,
@@ -161,9 +162,12 @@ router.post("/auth/sso/exchange", async (req, res) => {
       }
       tenantStores = [activeStore];
     }
-    await db.insert(schema.userStoresTable)
-      .values(createTenantOwnerStoreLinks(user.id, tenantStores.map((store) => store.id)))
-      .onConflictDoNothing();
+    tenantStores = await ensureOwnerStores(user.id, sso.tenantId);
+    if (!tenantStores.length) {
+      res.status(503).json({ error: "No active store is available", code: "TENANT_STORE_UNAVAILABLE" });
+      return;
+    }
+    activeStore = tenantStores[0];
     const token = signToken({
       id: user.id,
       email: user.email,
@@ -175,6 +179,7 @@ router.post("/auth/sso/exchange", async (req, res) => {
       platformUserId: sso.userId,
       platformSessionVersion: platformCredentials.erpSessionVersion,
       credentialSource: "platform",
+      userSessionVersion: user.sessionVersion,
       platformTenantId: sso.tenantId,
       tenantHostname: sso.hostname,
     });
@@ -219,7 +224,7 @@ router.post("/auth/register", async (req, res) => {
       name, email, passwordHash,
       preferredLang: preferredLang || "ar",
     }).returning();
-    const token = signToken({ id: user.id, email: user.email, role: user.role });
+    const token = signToken({ id: user.id, email: user.email, role: user.role, credentialSource: "local", userSessionVersion: user.sessionVersion });
     res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role }, stores: [] });
   } catch (err) {
     if (isEmailUniqueViolation(err)) { res.status(409).json({ error: "Email already registered" }); return; }
@@ -306,10 +311,8 @@ router.post("/auth/login", async (req, res) => {
                 .returning();
             }
 
-            const [store] = await db.select().from(schema.storesTable)
-              .where(eq(schema.storesTable.platformTenantId, tenantDomain.tenantId))
-              .limit(1);
-            if (!store) {
+            const stores = await ensureOwnerStores(owner.id, tenantDomain.tenantId);
+            if (!stores.length) {
               res.status(503).json({
                 error: "ERP tenant store is unavailable",
                 code: "TENANT_STORE_UNAVAILABLE",
@@ -317,18 +320,17 @@ router.post("/auth/login", async (req, res) => {
               return;
             }
 
-            await db.insert(schema.userStoresTable)
-              .values({ userId: owner.id, storeId: store.id })
-              .onConflictDoNothing();
+            const currentStoreId = stores.length === 1 ? stores[0].id : null;
 
             const token = signToken({
               id: owner.id,
               email: owner.email,
               role: "tenant_admin",
-              currentStoreId: store.id,
+              currentStoreId,
               platformUserId: tenantDomain.ownerUserId,
               platformSessionVersion: platformCredentials.erpSessionVersion,
               credentialSource: "platform",
+              userSessionVersion: owner.sessionVersion,
               platformTenantId: tenantDomain.tenantId,
               tenantHostname: tenantDomain.hostname,
             });
@@ -341,8 +343,8 @@ router.post("/auth/login", async (req, res) => {
                 role: owner.role,
                 preferredLang: owner.preferredLang,
               },
-              stores: [store],
-              currentStoreId: store.id,
+              stores,
+              currentStoreId,
             });
             return;
           }
@@ -390,6 +392,7 @@ router.post("/auth/login", async (req, res) => {
         role: user.role === "admin" && tenantDomain ? "tenant_admin" : user.role,
         platformSessionVersion,
         credentialSource: user.platformUserId ? "platform" : "local",
+        userSessionVersion: user.sessionVersion,
         currentStoreId,
         ...(tenantDomain
           ? {
@@ -545,8 +548,8 @@ router.put("/auth/me/password", authenticate, async (req: AuthRequest, res) => {
     const validPlatform = platformCredentials
       ? await bcrypt.compare(String(currentPassword), platformCredentials.passwordHash)
       : false;
-    const valid = validLocal || validPlatform;
-    if (!valid) { res.status(401).json({ error: "Current password is incorrect" }); return; }
+    const valid = platformCredentials ? validPlatform : validLocal;
+    if (!valid) { res.status(400).json({ error: "Current password is incorrect", code: "INVALID_CURRENT_PASSWORD" }); return; }
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
 
     if (platformCredentials) {
@@ -559,7 +562,12 @@ router.put("/auth/me/password", authenticate, async (req: AuthRequest, res) => {
       }
     }
 
-    await db.update(schema.usersTable).set({ passwordHash }).where(eq(schema.usersTable.id, req.user!.id));
+    await db.transaction(async tx => {
+      await tx.update(schema.usersTable).set({
+        passwordHash, sessionVersion: sql`${schema.usersTable.sessionVersion} + 1`,
+      }).where(eq(schema.usersTable.id, req.user!.id));
+      await tx.delete(schema.passwordResetTokensTable).where(eq(schema.passwordResetTokensTable.userId, req.user!.id));
+    });
     res.json({ success: true });
   } catch (err) {
     req.log.error(err);
@@ -567,94 +575,62 @@ router.put("/auth/me/password", authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-router.post("/auth/forgot-password", async (req, res) => {
-  console.log("[forgot-password] 1. route entered — body:", JSON.stringify(req.body));
+router.post("/auth/forgot-password", passwordResetContext, async (req: PasswordResetRequest, res) => {
   try {
     const { email } = req.body || {};
     if (!email) {
-      console.log("[forgot-password] 2. missing email — returning 400");
       res.status(400).json({ error: "email required" });
       return;
     }
 
     const normalizedEmail = normalizeEmail(email);
-    console.log(`[forgot-password] 2. looking up email="${normalizedEmail}"`);
 
-    const [user] = await db.select({ id: schema.usersTable.id, email: schema.usersTable.email })
+    const [user] = await db.select({
+      id: schema.usersTable.id, email: schema.usersTable.email,
+      platformUserId: schema.usersTable.platformUserId, isActive: schema.usersTable.isActive,
+    })
       .from(schema.usersTable)
       .where(sql`lower(trim(${schema.usersTable.email})) = ${normalizedEmail}`)
       .limit(1);
 
-    console.log(`[forgot-password] 3. user lookup result: ${user ? `found id=${user.id} email=${user.email}` : "NOT FOUND — skipping email"}`);
-
-    if (user) {
+    if (user?.isActive) {
+      if (user.platformUserId) {
+        const credentials = await getPlatformCredentials(user.platformUserId);
+        if (!credentials.isActive || normalizeEmail(credentials.email) !== normalizedEmail) {
+          res.json({ success: true });
+          return;
+        }
+      }
+      if (!req.passwordResetBaseUrl) throw new Error("Password reset frontend URL is not configured");
       const rawToken = randomBytes(32).toString("hex");
       const tokenHash = createHash("sha256").update(rawToken).digest("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-      console.log(`[forgot-password] 4. token generated rawToken[0..8]=${rawToken.substring(0, 8)}... expiresAt=${expiresAt.toISOString()}`);
 
       await db.insert(schema.passwordResetTokensTable).values({
         userId: user.id,
         token: tokenHash,
         expiresAt,
       });
-      console.log(`[forgot-password] 5. token saved to DB for userId=${user.id}`);
-
-      // Must point to the web-store frontend, NOT the API server.
-      // Priority: WEB_STORE_URL > FRONTEND_URL > APP_URL  (RAILWAY_PUBLIC_DOMAIN is intentionally NOT used — it is the API server's own domain, not the web store's)
-      const _wsUrl    = process.env["WEB_STORE_URL"]         ?? "";
-      const _feUrl    = process.env["FRONTEND_URL"]           ?? "";
-      const _appUrl   = process.env["APP_URL"]                ?? "";
-      const _railwayDomain = process.env["RAILWAY_PUBLIC_DOMAIN"] ?? "";
-
-      const winner = _wsUrl ? "WEB_STORE_URL" : _feUrl ? "FRONTEND_URL" : _appUrl ? "APP_URL" : "NONE";
-      const webStoreUrl = (_wsUrl || _feUrl || _appUrl).replace(/\/$/, "");
-
-      console.log(
-        `[forgot-password] ENV_DUMP ` +
-        `WEB_STORE_URL="${_wsUrl}" ` +
-        `FRONTEND_URL="${_feUrl}" ` +
-        `APP_URL="${_appUrl}" ` +
-        `RAILWAY_PUBLIC_DOMAIN="${_railwayDomain}" ` +
-        `WINNER=${winner} ` +
-        `resolved_base="${webStoreUrl}"`
-      );
-
-      if (!webStoreUrl) {
-        console.error("[forgot-password] WARNING: no base URL configured — reset link will be broken. Set WEB_STORE_URL to the web-store public domain in Railway (e.g. https://midanic.up.railway.app).");
-      }
-
-      const resetUrl = `${webStoreUrl}/auth/reset-password/${rawToken}`;
-      console.log(`[forgot-password] RESET_URL="${resetUrl}"`);
-
-      if (process.env["NODE_ENV"] !== "production") {
-        req.log.info({ resetUrl }, "[DEV] Password reset link");
-      }
-
-      console.log(`[forgot-password] 7. calling sendPasswordResetEmail to=${user.email}`);
+      const resetUrl = `${req.passwordResetBaseUrl}/auth/reset-password/${rawToken}`;
       try {
         await sendPasswordResetEmail({ to: user.email, resetUrl });
-        console.log(`[forgot-password] 8. sendPasswordResetEmail completed OK`);
         req.log.info({ userId: user.id }, "Password reset email delivered");
       } catch (emailErr: unknown) {
-        const e = emailErr as Error;
-        console.error(`[forgot-password] 8. sendPasswordResetEmail FAILED: ${e.message}`);
-        req.log.error({ userId: user.id, err: emailErr }, "Failed to send password reset email");
+        req.log.error({ userId: user.id, errorName: emailErr instanceof Error ? emailErr.name : "UnknownError" }, "Failed to send password reset email");
       }
     }
 
     res.json({ success: true });
   } catch (err) {
-    console.error("[forgot-password] OUTER catch:", (err as Error).message);
-    req.log.error(err);
+    req.log.error({ errorName: err instanceof Error ? err.name : "UnknownError" }, "Password reset request failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.get("/auth/reset-password/:token", async (req, res) => {
+router.get("/auth/reset-password/:token", passwordResetContext, async (req, res) => {
   try {
-    const { token } = req.params;
-    if (!token) {
+    const token = req.params.token;
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
       res.status(400).json({ valid: false, error: "Token is required" });
       return;
     }
@@ -675,11 +651,11 @@ router.get("/auth/reset-password/:token", async (req, res) => {
   }
 });
 
-router.post("/auth/reset-password/:token", async (req, res) => {
+router.post("/auth/reset-password/:token", passwordResetContext, async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = req.params.token;
     const { password } = req.body || {};
-    if (!token) {
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
       res.status(400).json({ error: "Token is required" });
       return;
     }
@@ -707,20 +683,38 @@ router.post("/auth/reset-password/:token", async (req, res) => {
       if (new Date() > record.expiresAt) {
         throw Object.assign(new Error("This reset link has expired"), { statusCode: 400 });
       }
+      const [account] = await tx.select({
+        platformUserId: schema.usersTable.platformUserId,
+        isActive: schema.usersTable.isActive,
+      }).from(schema.usersTable).where(eq(schema.usersTable.id, record.userId)).limit(1);
+      if (!account?.isActive) {
+        throw Object.assign(new Error("Invalid or expired reset link"), { statusCode: 400 });
+      }
+      if (account.platformUserId) {
+        // Platform remains the only password authority for a linked owner.
+        // Holding the token lock prevents simultaneous reuse during this call.
+        const credentials = await getPlatformCredentials(account.platformUserId);
+        if (!credentials.isActive) throw Object.assign(new Error("Invalid or expired reset link"), { statusCode: 400 });
+        try {
+          await updatePlatformPassword(account.platformUserId, String(password));
+        } catch {
+          throw Object.assign(new Error("Platform password service unavailable"), { statusCode: 503 });
+        }
+      }
 
       await tx.update(schema.passwordResetTokensTable)
         .set({ used: true })
-        .where(eq(schema.passwordResetTokensTable.id, record.id));
+        .where(eq(schema.passwordResetTokensTable.userId, record.userId));
 
       await tx.update(schema.usersTable)
-        .set({ passwordHash })
+        .set({ passwordHash, sessionVersion: sql`${schema.usersTable.sessionVersion} + 1` })
         .where(eq(schema.usersTable.id, record.userId));
     });
 
     res.json({ success: true });
   } catch (err: any) {
-    if (err?.statusCode === 400) {
-      res.status(400).json({ error: err.message });
+    if (err?.statusCode === 400 || err?.statusCode === 503) {
+      res.status(err.statusCode).json({ error: err.message });
       return;
     }
     req.log.error(err);
@@ -774,6 +768,7 @@ router.post("/auth/select-store", authenticate, async (req: AuthRequest, res) =>
       platformUserId: req.user!.platformUserId,
       platformSessionVersion: req.user!.platformSessionVersion,
       credentialSource: req.user!.credentialSource,
+      userSessionVersion: req.user!.userSessionVersion,
       platformTenantId: req.user!.platformTenantId,
       tenantHostname: req.user!.tenantHostname,
     });

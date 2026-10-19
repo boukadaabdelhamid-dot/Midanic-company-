@@ -774,7 +774,7 @@ router.put("/erp/permissions/:userId", authenticate, requireTenantAdmin, require
     if (!Number.isFinite(userId)) { res.status(400).json({ error: "Invalid userId" }); return; }
     const perms = req.body as { section: string; action: string; granted: boolean }[];
     if (!Array.isArray(perms) || perms.length === 0) { res.status(400).json({ error: "perms array required" }); return; }
-    const VALID_SECTIONS = new Set(["dashboard", "orders", "products", "inventory", "customers", "purchases", "settings", "caisse", "suppliers", "employees", "realtime", "attendance", "leaves", "accounting", "web_store", "payroll", "alerts", "transfers"]);
+    const VALID_SECTIONS = new Set(["dashboard", "orders", "products", "inventory", "customers", "purchases", "settings", "caisse", "suppliers", "employees", "realtime", "attendance", "leaves", "accounting", "reports", "web_store", "payroll", "alerts", "transfers"]);
     const VALID_ACTIONS = new Set([
       // base actions (all modules)
       "view", "create", "edit", "delete",
@@ -799,19 +799,21 @@ router.put("/erp/permissions/:userId", authenticate, requireTenantAdmin, require
       "edit_settings", "manage_featured", "manage_orders",
     ]);
     for (const p of perms) {
-      if (!VALID_SECTIONS.has(p.section) || !VALID_ACTIONS.has(p.action)) {
-        res.status(400).json({ error: `Invalid section/action: ${p.section}/${p.action}` });
+      if (!p || typeof p.granted !== "boolean" || !VALID_SECTIONS.has(p.section) || !VALID_ACTIONS.has(p.action)) {
+        res.status(400).json({ error: "Invalid permission section, action or granted value" });
         return;
       }
     }
-    for (const p of perms) {
-      await db.execute(sql`
+    await db.transaction(async tx => {
+      for (const p of perms) {
+        await tx.execute(sql`
         INSERT INTO user_permissions (user_id, section, action, granted)
         VALUES (${userId}, ${p.section}, ${p.action}, ${p.granted})
         ON CONFLICT (user_id, section, action)
         DO UPDATE SET granted = ${p.granted}
       `);
-    }
+      }
+    });
     const rows = await db.select().from(schema.userPermissionsTable)
       .where(eq(schema.userPermissionsTable.userId, userId));
     res.json(rows);
@@ -3549,7 +3551,10 @@ router.post("/erp/customers", authenticate, requireStaff, requireStore, requireP
         const password = String(body.password ?? "").trim();
         const [updatedUser] = await tx.update(schema.usersTable).set({
           name,
-          ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+          ...(password ? {
+            passwordHash: await bcrypt.hash(password, 10),
+            sessionVersion: sql`${schema.usersTable.sessionVersion} + 1`,
+          } : {}),
           preferredLang: body.preferredLang === "en" ? "en" : existingUser.preferredLang,
           phone: asNullableText(body.phone) ?? existingUser.phone,
           address: asNullableText(body.address) ?? existingUser.address,
@@ -5016,7 +5021,7 @@ router.get("/erp/staff", authenticate, requireTenantAdmin, async (req: AuthReque
              FROM user_stores tenant_us
              JOIN stores tenant_s ON tenant_s.id = tenant_us.store_id
              WHERE tenant_us.user_id = u.id
-               AND tenant_s.platform_tenant_id = ${req.user!.platformTenantId}
+               AND tenant_s.platform_tenant_id = ${req.user!.platformTenantId ?? null}
            )
          )
       ORDER BY u.created_at DESC
@@ -5167,10 +5172,15 @@ router.put("/erp/staff/:id/stores", authenticate, requireTenantAdmin, async (req
       res.status(400).json({ error: "Cannot assign stores to customer accounts" });
       return;
     }
-    await db.delete(schema.userStoresTable).where(eq(schema.userStoresTable.userId, targetId));
-    await db.insert(schema.userStoresTable)
-      .values((storeIds as number[]).map(storeId => ({ userId: targetId, storeId })))
-      .onConflictDoNothing();
+    await db.transaction(async tx => {
+      await tx.delete(schema.userStoresTable).where(eq(schema.userStoresTable.userId, targetId));
+      await tx.insert(schema.userStoresTable)
+        .values((storeIds as number[]).map(storeId => ({ userId: targetId, storeId })))
+        .onConflictDoNothing();
+      await tx.update(schema.usersTable)
+        .set({ sessionVersion: sql`${schema.usersTable.sessionVersion} + 1` })
+        .where(eq(schema.usersTable.id, targetId));
+    });
     res.json({ success: true, userId: targetId, storeIds });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -5206,7 +5216,7 @@ router.put("/erp/staff/:id/role", authenticate, requireTenantAdmin, async (req: 
       }
     }
     await db.update(schema.usersTable)
-      .set({ role })
+      .set({ role, sessionVersion: sql`${schema.usersTable.sessionVersion} + 1` })
       .where(eq(schema.usersTable.id, targetId));
     res.json({ success: true, userId: targetId, role });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
@@ -5242,9 +5252,12 @@ router.put("/erp/staff/:id/password", authenticate, requireTenantAdmin, async (r
       }
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    await db.update(schema.usersTable)
-      .set({ passwordHash })
-      .where(eq(schema.usersTable.id, targetId));
+    await db.transaction(async tx => {
+      await tx.update(schema.usersTable)
+        .set({ passwordHash, sessionVersion: sql`${schema.usersTable.sessionVersion} + 1` })
+        .where(eq(schema.usersTable.id, targetId));
+      await tx.delete(schema.passwordResetTokensTable).where(eq(schema.passwordResetTokensTable.userId, targetId));
+    });
     res.json({ success: true, userId: targetId });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });

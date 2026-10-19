@@ -17,6 +17,7 @@
     "test:product-visibility": "tsx --test src/lib/product-visibility.test.ts src/lib/product-visibility.integration.test.ts",
     "test:product-settings-permissions": "tsx --test src/lib/product-settings-permissions.test.ts",
     "test:owner-session-revocation": "tsx --test src/lib/owner-session-revocation.test.ts",
+    "test:auth-permissions": "tsx --test src/lib/auth-permissions.integration.test.ts src/lib/owner-session-revocation.test.ts",
     "test:caisse-main-transfer-cancel": "tsx --test src/lib/caisse-main-transfer-cancel.test.ts"
   },
   "dependencies": {

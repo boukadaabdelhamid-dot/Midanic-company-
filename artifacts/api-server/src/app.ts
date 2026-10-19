@@ -20,7 +20,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: req.url?.split("?")[0].replace(/(\/auth\/reset-password\/)[^/]+/g, "$1[REDACTED]"),
         };
       },
       res(res) {

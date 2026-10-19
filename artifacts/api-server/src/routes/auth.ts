@@ -9,7 +9,7 @@ import {
   defaultErpFeatureFlags,
   customerEntitlementsTable,
 } from "@workspace/db";
-import { and, eq, isNotNull, isNull, lt, desc, or, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, desc, or, ne, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import {
@@ -411,11 +411,11 @@ router.post("/auth/reset-password/:token", async (req, res): Promise<void> => {
 
       const passwordHash = await hashPassword(password);
       await tx.update(usersTable)
-        .set({ passwordHash })
+        .set({ passwordHash, erpSessionVersion: sql`${usersTable.erpSessionVersion} + 1` })
         .where(eq(usersTable.id, record.userId));
       await tx.update(passwordResetTokensTable)
         .set({ used: true })
-        .where(eq(passwordResetTokensTable.id, record.id));
+        .where(eq(passwordResetTokensTable.userId, record.userId));
       await tx.delete(refreshTokensTable)
         .where(eq(refreshTokensTable.userId, record.userId));
     });
@@ -610,9 +610,13 @@ router.put("/internal/erp/credentials/:userId/password", async (req, res): Promi
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await db.update(usersTable)
-    .set({ passwordHash })
-    .where(eq(usersTable.id, userId));
+  await db.transaction(async tx => {
+    await tx.update(usersTable)
+      .set({ passwordHash, erpSessionVersion: sql`${usersTable.erpSessionVersion} + 1` })
+      .where(eq(usersTable.id, userId));
+    await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.userId, userId));
+    await tx.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.userId, userId));
+  });
   res.json({ success: true });
 });
 

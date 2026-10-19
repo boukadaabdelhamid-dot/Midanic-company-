@@ -120,7 +120,7 @@ test("only a super admin can replace an ERP owner's Platform password", async ()
 
     failNextDelivery = true;
     assert.equal((await update(endpoint, superToken, failedDeliveryPassword)).status, 200);
-    [record] = await db.select({ passwordHash: usersTable.passwordHash }).from(usersTable).where(eq(usersTable.id, owner.id));
+    [record] = await db.select({ passwordHash: usersTable.passwordHash, version: usersTable.erpSessionVersion }).from(usersTable).where(eq(usersTable.id, owner.id));
     assert.ok(await comparePassword(failedDeliveryPassword, record.passwordHash));
     assert.equal(sentEmails.length, 2);
     assert.deepEqual(sentEmails[1].payload.to, [owner.email]);

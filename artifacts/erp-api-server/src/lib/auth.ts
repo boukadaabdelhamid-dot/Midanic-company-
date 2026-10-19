@@ -9,6 +9,7 @@ import {
   type TenantDomainRequest,
 } from "./tenant-domain";
 import { runWithTenantDatabase, type TenantDatabaseContext } from "./db";
+import { isAccountSessionCurrent, sessionAccounts } from "./session-account";
 
 function resolveJwtSecret(): string {
   const envSecret = process.env["JWT_SECRET"] ?? process.env["SESSION_SECRET"];
@@ -52,6 +53,11 @@ export type JwtPayload = {
   platformTenantId?: number;
   tenantHostname?: string;
   platformSessionVersion?: number;
+  // The Platform user ID also routes local staff to their company. It does
+  // not mean that the company's owner supplied those staff credentials.
+  credentialSource?: "local" | "platform";
+  userSessionVersion?: number;
+  exp?: number;
 };
 
 export type PlatformSsoPayload = {
@@ -114,6 +120,7 @@ export function isOwnerSessionCurrent(
   tenant: { ownerUserId?: number; ownerSessionVersion?: number } | null,
 ): boolean {
   if (!user.platformUserId || (user.role !== "tenant_admin" && user.role !== "admin")) return true;
+  if (user.credentialSource === "local") return true;
   return tenant?.ownerUserId === user.platformUserId &&
     Number.isSafeInteger(tenant.ownerSessionVersion) &&
     (tenant.ownerSessionVersion ?? -1) >= 0 &&
@@ -237,6 +244,18 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       req.currentStoreId = req.user.currentStoreId;
     }
     const tenantId = req.user.platformTenantId;
+    const continueWithCurrentAccount = async () => {
+      try {
+        if (!isAccountSessionCurrent(req.user!, await sessionAccounts.load(req.user!))) {
+          res.status(401).json({ error: "Account or session changed. Sign in again.", code: "SESSION_REVOKED" });
+          return;
+        }
+      } catch {
+        res.status(503).json({ error: "Session verification unavailable", code: "SESSION_VERIFICATION_UNAVAILABLE" });
+        return;
+      }
+      next();
+    };
     if (tenantId) {
       const tenantDatabase = await resolvePlatformTenantDatabase(tenantId);
       if (!isOwnerSessionCurrent(req.user, tenantDatabase)) {
@@ -268,12 +287,12 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
         };
         await runWithTenantDatabase(
           req.tenantDatabaseContext,
-          () => next(),
+          continueWithCurrentAccount,
         );
         return;
       }
     }
-    next();
+    await continueWithCurrentAccount();
   } catch {
     res.status(401).json({ error: "Invalid token" });
   }

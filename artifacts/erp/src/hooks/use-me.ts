@@ -8,9 +8,8 @@ export function useMe() {
   const { data, isLoading } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(), enabled: !!token, staleTime: 60_000, retry: false,
-      // Detect an administrator's password rotation even in an otherwise idle tab.
-      refetchInterval: (query) =>
-        ["admin", "tenant_admin"].includes(String(query.state.data?.role)) ? 15_000 : false,
+      // Detect password, role and account-status changes for every staff role.
+      refetchInterval: 15_000,
       refetchIntervalInBackground: true,
     },
   });

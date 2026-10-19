@@ -19,6 +19,7 @@ export const usersTable = pgTable("users", {
   city: text("city"),
   notes: text("notes"),
   isActive: boolean("is_active").notNull().default(true),
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   // Canonical-email uniqueness: login matches case-insensitively, so two
@@ -26,6 +27,6 @@ export const usersTable = pgTable("users", {
   uniqueIndex("users_email_canonical_uq").on(sql`lower(trim(${t.email}))`),
 ]);
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, passwordHash: true, role: true });
+export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, passwordHash: true, role: true, sessionVersion: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;

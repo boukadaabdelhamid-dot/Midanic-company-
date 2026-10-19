@@ -1,5 +1,5 @@
 import { getApiBase } from "../lib/api-base";
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useAuth, forceLogout } from "./use-auth";
 import { useMe } from "./use-me";
 import { useStoreContext } from "./use-store";
@@ -64,6 +64,8 @@ const PermContext = createContext<PermContextType>({
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
+  const activeToken = useRef(token);
+  activeToken.current = token;
   const { isAdmin, isLoading: meLoading } = useMe();
   const { currentStoreId } = useStoreContext();
   const [rawPerms, setRawPerms] = useState<PermRow[]>([]);
@@ -82,14 +84,21 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       const res = await fetch(`${apiBase}/api/erp/permissions/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 401 || res.status === 403) {
+      if (activeToken.current !== token) return;
+      if (res.status === 401) {
         // Expired/invalid token — a silent empty-permission state looks like
         // "my permissions disappeared". Force a clean re-login instead.
         forceLogout("expired");
         return;
       }
-      if (!res.ok) { setIsLoaded(true); return; }
+      if (!res.ok) {
+        setRawPerms([]);
+        setPermMap(new Map());
+        setIsLoaded(true);
+        return;
+      }
       const rows: PermRow[] = await res.json();
+      if (activeToken.current !== token) return;
       const map = new Map<string, boolean>();
       rows.forEach((r) => map.set(`${r.section}:${r.action}`, r.granted));
       setRawPerms(rows);
@@ -102,7 +111,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     setIsLoaded(false);
+    setRawPerms([]);
+    setPermMap(new Map());
     fetchPerms();
+    const timer = setInterval(() => { void fetchPerms(); }, 15_000);
+    return () => clearInterval(timer);
   }, [fetchPerms]);
 
   const can = useCallback(

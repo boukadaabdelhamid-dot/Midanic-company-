@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,6 +29,7 @@ export default function Login() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const loginMutation = useLogin();
+  const qc = useQueryClient();
   const selectStore = useSelectStore();
   const [showPassword, setShowPassword] = useState(false);
   const [sessionExpired] = useState(() => {
@@ -81,6 +83,8 @@ export default function Login() {
               return;
             }
           }
+          await qc.cancelQueries();
+          qc.clear();
           setToken(res.token);
           clear();
           const stores = res.stores ?? [];
@@ -99,8 +103,8 @@ export default function Login() {
                   setLocation("/home");
                 },
                 onError: () => {
-                  setStores(stores, stores[0].id);
-                  setLocation("/home");
+                  setStores(stores, null);
+                  setLocation("/select-store");
                 },
               }
             );

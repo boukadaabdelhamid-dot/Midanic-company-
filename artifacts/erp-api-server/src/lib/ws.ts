@@ -4,6 +4,7 @@ import { enforcePlatformAccess, isOwnerSessionCurrent, verifyToken, type JwtPayl
 import { resolvePlatformTenantDatabase } from "./tenant-domain";
 import { db, schema } from "./db";
 import { and, eq, inArray } from "drizzle-orm";
+import { isAccountSessionCurrent, sessionAccounts } from "./session-account";
 
 interface WsClient {
   ws: WebSocket;
@@ -21,12 +22,15 @@ const isTenantAdmin = (c: WsClient) => c.role === "tenant_admin";
 
 async function checkClientSession(client: WsClient): Promise<boolean> {
   const user = client.authUser;
-  if (!user.platformUserId || (user.role !== "tenant_admin" && user.role !== "admin")) return true;
   try {
     const tenant = user.platformTenantId
       ? await resolvePlatformTenantDatabase(user.platformTenantId)
       : null;
-    if (isOwnerSessionCurrent(user, tenant)) return true;
+    if (isOwnerSessionCurrent(user, tenant) &&
+        isAccountSessionCurrent(user, await sessionAccounts.load(user))) {
+      client.storeIds = await sessionAccounts.storeIds(user);
+      return true;
+    }
     client.ws.close(4001, "SESSION_REVOKED");
   } catch {
     // A registry outage must not permit continued delivery of business data.
@@ -35,8 +39,8 @@ async function checkClientSession(client: WsClient): Promise<boolean> {
   return false;
 }
 
-async function sendIfCurrent(client: WsClient, payload: string): Promise<void> {
-  if (await checkClientSession(client) && client.ws.readyState === WebSocket.OPEN) {
+async function sendIfCurrent(client: WsClient, payload: string, canSend = () => true): Promise<void> {
+  if (await checkClientSession(client) && client.ws.readyState === WebSocket.OPEN && canSend()) {
     client.ws.send(payload);
   }
 }
@@ -70,28 +74,12 @@ export function setupWebSocket(server: Server) {
       return;
     }
 
-    let storeIds = new Set<number>();
-    try {
-      const rows = await db.select({ storeId: schema.userStoresTable.storeId })
-        .from(schema.userStoresTable)
-        .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
-        .where(and(
-          eq(schema.userStoresTable.userId, user.id),
-          user.platformTenantId === undefined
-            ? undefined
-            : eq(schema.storesTable.platformTenantId, user.platformTenantId),
-        ));
-      storeIds = new Set(rows.map((r) => r.storeId));
-    } catch {
-      // ignore
-    }
-
     const client: WsClient = {
       ws,
       userId: user.id,
       role: user.role,
       platformTenantId: user.platformTenantId,
-      storeIds,
+      storeIds: new Set(),
       authUser: user,
     };
     if (!(await checkClientSession(client))) return;
@@ -130,7 +118,7 @@ export function broadcastToAdmins(data: Record<string, unknown>) {
     // Unscoped/global admin events are never sent to tenant administrators.
     if (isTenantAdmin(c) && !targetStoreIds) continue;
     if (targetStoreIds && !targetStoreIds.some((id) => c.storeIds.has(id))) continue;
-    void sendIfCurrent(c, payload);
+    void sendIfCurrent(c, payload, () => !targetStoreIds || targetStoreIds.some(id => c.storeIds.has(id)));
   }
 }
 
@@ -149,7 +137,7 @@ export function broadcastToStoreUsers(
   for (const c of activeClients()) {
     const inStore = c.storeIds.has(storeId);
     if (!inStore && !extra.has(c.userId)) continue;
-    void sendIfCurrent(c, payload);
+    void sendIfCurrent(c, payload, () => c.storeIds.has(storeId) || extra.has(c.userId));
   }
 }
 
@@ -168,7 +156,7 @@ export function broadcastToStaffByStores(storeIds: number[], data: Record<string
       if (targets.has(id)) { match = true; break; }
     }
     if (!match) continue;
-    void sendIfCurrent(c, payload);
+    void sendIfCurrent(c, payload, () => [...c.storeIds].some(id => targets.has(id)));
   }
 }
 
