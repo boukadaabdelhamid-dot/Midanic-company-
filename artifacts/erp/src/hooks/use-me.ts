@@ -6,7 +6,13 @@ export type Role = "admin" | "tenant_admin" | "employee" | "customer";
 export function useMe() {
   const { token } = useAuth();
   const { data, isLoading } = useGetMe({
-    query: { queryKey: getGetMeQueryKey(), enabled: !!token, staleTime: 60_000, retry: false },
+    query: {
+      queryKey: getGetMeQueryKey(), enabled: !!token, staleTime: 60_000, retry: false,
+      // Detect an administrator's password rotation even in an otherwise idle tab.
+      refetchInterval: (query) =>
+        ["admin", "tenant_admin"].includes(String(query.state.data?.role)) ? 15_000 : false,
+      refetchIntervalInBackground: true,
+    },
   });
   const role = (data?.role ?? null) as Role | null;
   const features = (data as (typeof data & {

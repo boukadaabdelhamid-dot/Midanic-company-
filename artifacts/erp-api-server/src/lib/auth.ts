@@ -51,6 +51,7 @@ export type JwtPayload = {
   platformUserId?: number;
   platformTenantId?: number;
   tenantHostname?: string;
+  platformSessionVersion?: number;
 };
 
 export type PlatformSsoPayload = {
@@ -61,6 +62,7 @@ export type PlatformSsoPayload = {
   hostname: string;
   aud: "erp";
   purpose: "sso";
+  platformSessionVersion?: number;
 };
 
 export function signToken(payload: JwtPayload) {
@@ -102,6 +104,20 @@ export interface AuthRequest extends Request {
   tenantFeatures?: Record<string, unknown>;
   featureDisabled?: string;
   tenantDatabaseContext?: TenantDatabaseContext;
+}
+
+/** Legacy tokens represent generation zero; only the rotated owner's tokens
+ * are revoked. Employee/customer tokens carry the owner ID for routing, not
+ * for credential ownership, and must not be invalidated with that owner. */
+export function isOwnerSessionCurrent(
+  user: JwtPayload,
+  tenant: { ownerUserId?: number; ownerSessionVersion?: number } | null,
+): boolean {
+  if (!user.platformUserId || (user.role !== "tenant_admin" && user.role !== "admin")) return true;
+  return tenant?.ownerUserId === user.platformUserId &&
+    Number.isSafeInteger(tenant.ownerSessionVersion) &&
+    (tenant.ownerSessionVersion ?? -1) >= 0 &&
+    (user.platformSessionVersion ?? 0) === tenant.ownerSessionVersion;
 }
 
 /**
@@ -223,6 +239,10 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     const tenantId = req.user.platformTenantId;
     if (tenantId) {
       const tenantDatabase = await resolvePlatformTenantDatabase(tenantId);
+      if (!isOwnerSessionCurrent(req.user, tenantDatabase)) {
+        res.status(401).json({ error: "Session revoked. Sign in again.", code: "SESSION_REVOKED" });
+        return;
+      }
       if (!tenantDatabase && process.env["NODE_ENV"] === "production") {
         res.status(503).json({ error: "ERP tenant database is not configured", code: "TENANT_DATABASE_UNAVAILABLE" });
         return;
@@ -413,143 +433,28 @@ export function isEmailUniqueViolation(err: unknown): boolean {
 }
 
 export async function optionalAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    try {
-      req.user = verifyToken(authHeader.slice(7));
-      if (!(await enforcePlatformAccess(req, req.user))) {
-        res.status(403).json({
-          error: "ERP tenant domain is unknown, inactive, or does not match this session",
-          code: "TENANT_DOMAIN_MISMATCH",
-        });
-        return;
-      }
-      if (req.featureDisabled) {
-        res.status(403).json({
-          error: "This ERP feature is disabled for the company",
-          code: "FEATURE_DISABLED",
-        });
-        return;
-      }
-      if (typeof req.user.currentStoreId === "number") {
-        req.currentStoreId = req.user.currentStoreId;
-      }
-    } catch {
-      // ignore — auth is optional
-    }
+  if (!req.headers.authorization) {
+    next();
+    return;
   }
-  next();
+  // Optional means a token may be omitted, not that a supplied, revoked token
+  // may become anonymous or retain its privileged identity. Use exactly the
+  // same generation, domain, feature and tenant-database checks everywhere.
+  await authenticate(req, res, next);
 }
 
 /**
  * Optional authentication for routes that read tenant-owned data.
  *
- * Unlike optionalAuth, this also enters the resolved tenant database when a
- * bearer token is present. Anonymous requests continue without a tenant
- * context so public-store routes can resolve their store separately.
+ * All supplied tokens now share the full authentication path. Anonymous
+ * requests continue without a tenant context for public-store resolution.
  */
 export async function optionalTenantAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    next();
-    return;
-  }
-
-  let user: JwtPayload;
-  try {
-    user = verifyToken(authHeader.slice(7));
-  } catch {
-    // Preserve optional-auth semantics for public callers. A protected
-    // downstream route will still reject the request if it needs a session.
-    next();
-    return;
-  }
-
-  req.user = user;
-  try {
-    if (!(await enforcePlatformAccess(req, user))) {
-      res.status(403).json({
-        error: "ERP tenant domain is unknown, inactive, or does not match this session",
-        code: "TENANT_DOMAIN_MISMATCH",
-      });
-      return;
-    }
-    if (typeof user.currentStoreId === "number") {
-      req.currentStoreId = user.currentStoreId;
-    }
-
-    const tenantId = user.platformTenantId;
-    if (!tenantId) {
-      next();
-      return;
-    }
-
-    const tenantDatabase = await resolvePlatformTenantDatabase(tenantId);
-    if (!tenantDatabase && process.env["NODE_ENV"] === "production") {
-      res.status(503).json({ error: "ERP tenant database is not configured", code: "TENANT_DATABASE_UNAVAILABLE" });
-      return;
-    }
-    if (tenantDatabase?.databaseStatus === "failed") {
-      res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_FAILED" });
-      return;
-    }
-    if (tenantDatabase?.databaseStatus === "provisioning") {
-      res.status(503).json({ error: "ERP tenant database is still provisioning", code: "TENANT_DATABASE_PROVISIONING" });
-      return;
-    }
-    if (tenantDatabase && (
-      tenantDatabase.databaseStatus !== "ready" || !tenantDatabase.databaseName
-    )) {
-      res.status(503).json({ error: "ERP tenant database is not ready", code: "TENANT_DATABASE_UNAVAILABLE" });
-      return;
-    }
-    if (tenantDatabase?.databaseStatus === "ready" && tenantDatabase.databaseName) {
-      await runWithTenantDatabase(
-        { tenantId, databaseName: tenantDatabase.databaseName },
-        () => next(),
-      );
-      return;
-    }
-  } catch (err) {
-    (req as AuthRequest & { log?: { error: (e: unknown) => void } }).log?.error?.(err);
-    res.status(503).json({ error: "ERP tenant database is unavailable", code: "TENANT_DATABASE_UNAVAILABLE" });
-    return;
-  }
-
-  next();
+  await optionalAuth(req, res, next);
 }
 
-// Like optionalAuth, but if the client DID send a Bearer token that is
-// invalid or expired, reject with 401 instead of silently treating the
-// request as anonymous. Critical for order creation: a POS sale made with
-// an expired staff token must NOT fall through as an anonymous "online"
-// order (wrong channel, no seller, no caisse credit).
+// Kept as a compatibility name for callers that explicitly require fail-closed
+// supplied tokens (for example POS order creation).
 export async function optionalAuthStrict(req: AuthRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    try {
-      req.user = verifyToken(authHeader.slice(7));
-      if (!(await enforcePlatformAccess(req, req.user))) {
-        res.status(403).json({
-          error: "ERP tenant domain is unknown, inactive, or does not match this session",
-          code: "TENANT_DOMAIN_MISMATCH",
-        });
-        return;
-      }
-      if (req.featureDisabled) {
-        res.status(403).json({
-          error: "This ERP feature is disabled for the company",
-          code: "FEATURE_DISABLED",
-        });
-        return;
-      }
-      if (typeof req.user.currentStoreId === "number") {
-        req.currentStoreId = req.user.currentStoreId;
-      }
-    } catch {
-      res.status(401).json({ error: "Session expirée — veuillez vous reconnecter." });
-      return;
-    }
-  }
-  next();
+  await optionalAuth(req, res, next);
 }

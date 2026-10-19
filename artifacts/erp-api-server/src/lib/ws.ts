@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
-import { enforcePlatformAccess, verifyToken, type JwtPayload } from "./auth";
+import { enforcePlatformAccess, isOwnerSessionCurrent, verifyToken, type JwtPayload } from "./auth";
+import { resolvePlatformTenantDatabase } from "./tenant-domain";
 import { db, schema } from "./db";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -10,12 +11,35 @@ interface WsClient {
   role: string;
   platformTenantId?: number;
   storeIds: Set<number>;
+  authUser: JwtPayload;
 }
 
 let clients: WsClient[] = [];
 
 const isAdmin = (c: WsClient) => c.role === "admin" && c.platformTenantId === undefined;
 const isTenantAdmin = (c: WsClient) => c.role === "tenant_admin";
+
+async function checkClientSession(client: WsClient): Promise<boolean> {
+  const user = client.authUser;
+  if (!user.platformUserId || (user.role !== "tenant_admin" && user.role !== "admin")) return true;
+  try {
+    const tenant = user.platformTenantId
+      ? await resolvePlatformTenantDatabase(user.platformTenantId)
+      : null;
+    if (isOwnerSessionCurrent(user, tenant)) return true;
+    client.ws.close(4001, "SESSION_REVOKED");
+  } catch {
+    // A registry outage must not permit continued delivery of business data.
+    client.ws.close(1011, "Session verification unavailable");
+  }
+  return false;
+}
+
+async function sendIfCurrent(client: WsClient, payload: string): Promise<void> {
+  if (await checkClientSession(client) && client.ws.readyState === WebSocket.OPEN) {
+    client.ws.send(payload);
+  }
+}
 
 export function setupWebSocket(server: Server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -62,15 +86,21 @@ export function setupWebSocket(server: Server) {
       // ignore
     }
 
-    clients.push({
+    const client: WsClient = {
       ws,
       userId: user.id,
       role: user.role,
       platformTenantId: user.platformTenantId,
       storeIds,
-    });
+      authUser: user,
+    };
+    if (!(await checkClientSession(client))) return;
+    clients.push(client);
+    const timer = setInterval(() => { void checkClientSession(client); }, 15_000);
+    timer.unref();
 
     ws.on("close", () => {
+      clearInterval(timer);
       clients = clients.filter((c) => c.ws !== ws);
     });
 
@@ -100,7 +130,7 @@ export function broadcastToAdmins(data: Record<string, unknown>) {
     // Unscoped/global admin events are never sent to tenant administrators.
     if (isTenantAdmin(c) && !targetStoreIds) continue;
     if (targetStoreIds && !targetStoreIds.some((id) => c.storeIds.has(id))) continue;
-    c.ws.send(payload);
+    void sendIfCurrent(c, payload);
   }
 }
 
@@ -119,7 +149,7 @@ export function broadcastToStoreUsers(
   for (const c of activeClients()) {
     const inStore = c.storeIds.has(storeId);
     if (!inStore && !extra.has(c.userId)) continue;
-    c.ws.send(payload);
+    void sendIfCurrent(c, payload);
   }
 }
 
@@ -138,7 +168,7 @@ export function broadcastToStaffByStores(storeIds: number[], data: Record<string
       if (targets.has(id)) { match = true; break; }
     }
     if (!match) continue;
-    c.ws.send(payload);
+    void sendIfCurrent(c, payload);
   }
 }
 
@@ -151,7 +181,7 @@ export function broadcastToUsers(userIds: number[], data: Record<string, unknown
   const set = new Set(userIds);
   for (const c of activeClients()) {
     if (!set.has(c.userId)) continue;
-    c.ws.send(payload);
+    void sendIfCurrent(c, payload);
   }
 }
 

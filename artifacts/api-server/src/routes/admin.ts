@@ -403,7 +403,10 @@ router.put("/admin/erp/tenants/:id/owner-password", async (req, res): Promise<vo
 
   const passwordHash = await hashPassword(parsed.data.newPassword);
   await db.transaction(async (tx) => {
-    await tx.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, owner.id));
+    await tx.update(usersTable).set({
+      passwordHash,
+      erpSessionVersion: sql`${usersTable.erpSessionVersion} + 1`,
+    }).where(eq(usersTable.id, owner.id));
     await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.userId, owner.id));
     await tx.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.userId, owner.id));
   });

@@ -29,6 +29,7 @@ type PlatformCredentials = {
   address: string | null;
   role: string;
   isActive: boolean;
+  erpSessionVersion: number;
 };
 
 async function getPlatformCredentials(userId: number): Promise<PlatformCredentials> {
@@ -41,7 +42,11 @@ async function getPlatformCredentials(userId: number): Promise<PlatformCredentia
     headers: { "X-Platform-Service-Secret": secret },
   });
   if (!response.ok) throw new Error(`Platform credential lookup failed (${response.status})`);
-  return await response.json() as PlatformCredentials;
+  const credentials = await response.json() as PlatformCredentials;
+  if (!Number.isSafeInteger(credentials.erpSessionVersion) || credentials.erpSessionVersion < 0) {
+    throw new Error("Platform credential lookup returned an invalid session version");
+  }
+  return credentials;
 }
 
 router.post("/auth/sso/exchange", async (req, res) => {
@@ -85,6 +90,10 @@ router.post("/auth/sso/exchange", async (req, res) => {
 
     const exchange = async () => {
     const platformCredentials = await getPlatformCredentials(sso.userId);
+    if ((sso.platformSessionVersion ?? 0) !== platformCredentials.erpSessionVersion) {
+      res.status(401).json({ error: "SSO session revoked. Sign in again.", code: "SESSION_REVOKED" });
+      return;
+    }
     if (!platformCredentials.isActive) {
       res.status(403).json({ error: "Platform account is inactive" });
       return;
@@ -164,6 +173,7 @@ router.post("/auth/sso/exchange", async (req, res) => {
       role: "tenant_admin",
       currentStoreId: activeStore.id,
       platformUserId: sso.userId,
+      platformSessionVersion: platformCredentials.erpSessionVersion,
       platformTenantId: sso.tenantId,
       tenantHostname: sso.hostname,
     });
@@ -316,6 +326,7 @@ router.post("/auth/login", async (req, res) => {
               role: "tenant_admin",
               currentStoreId: store.id,
               platformUserId: tenantDomain.ownerUserId,
+              platformSessionVersion: platformCredentials.erpSessionVersion,
               platformTenantId: tenantDomain.tenantId,
               tenantHostname: tenantDomain.hostname,
             });
@@ -342,9 +353,11 @@ router.post("/auth/login", async (req, res) => {
         .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`).limit(1);
       if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
       let valid = false;
+      let platformSessionVersion: number | undefined;
       if (user.platformUserId) {
         try {
           const platformCredentials = await getPlatformCredentials(user.platformUserId);
+          platformSessionVersion = platformCredentials.erpSessionVersion;
           valid = platformCredentials.isActive && await bcrypt.compare(password, platformCredentials.passwordHash);
           if (valid) {
             await db.update(schema.usersTable).set({
@@ -373,6 +386,7 @@ router.post("/auth/login", async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role === "admin" && tenantDomain ? "tenant_admin" : user.role,
+        platformSessionVersion,
         currentStoreId,
         ...(tenantDomain
           ? {
@@ -755,6 +769,7 @@ router.post("/auth/select-store", authenticate, async (req: AuthRequest, res) =>
       role: req.user!.role,
       currentStoreId: store.id,
       platformUserId: req.user!.platformUserId,
+      platformSessionVersion: req.user!.platformSessionVersion,
       platformTenantId: req.user!.platformTenantId,
       tenantHostname: req.user!.tenantHostname,
     });

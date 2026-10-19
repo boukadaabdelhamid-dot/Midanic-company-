@@ -23,19 +23,22 @@ export interface JwtPayload {
   role: string;
 }
 
-export function generateErpSsoToken(payload: {
+export async function generateErpSsoToken(payload: {
   userId: number;
   email: string;
   role: string;
   tenantId: number;
   hostname: string;
-}): string {
+}): Promise<string> {
+  const [owner] = await db.select({ erpSessionVersion: usersTable.erpSessionVersion })
+    .from(usersTable).where(eq(usersTable.id, payload.userId)).limit(1);
+  if (!owner) throw new Error("ERP owner not found");
   const ssoSecret =
     process.env.PLATFORM_SERVICE_SECRET ??
     process.env.PLATFORM_SSO_SECRET ??
     ACCESS_TOKEN_SECRET;
   return jwt.sign(
-    { ...payload, aud: "erp", purpose: "sso" },
+    { ...payload, platformSessionVersion: owner.erpSessionVersion, aud: "erp", purpose: "sso" },
     ssoSecret,
     { expiresIn: "2m" },
   );

@@ -23,6 +23,8 @@ export type PlatformTenantDatabase = {
   databaseName: string | null;
   databaseStatus: string;
   dataImportStatus: string;
+  ownerUserId?: number;
+  ownerSessionVersion?: number;
 };
 
 const domainCache = new Map<string, { expiresAt: number; value: PlatformTenantDomain }>();
@@ -218,7 +220,7 @@ export async function resolvePlatformTenantDatabase(
 
   const response = await fetch(
     `${baseUrl}/api/internal/erp/database/${tenantId}`,
-    { headers: { "X-Platform-Service-Secret": secret } },
+    { headers: { "X-Platform-Service-Secret": secret }, signal: AbortSignal.timeout(8_000) },
   );
   if (!response.ok) {
     throw new Error(`Tenant database registry lookup failed (${response.status})`);

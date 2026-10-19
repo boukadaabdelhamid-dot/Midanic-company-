@@ -1,7 +1,7 @@
 import { getApiBase } from "../lib/api-base";
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, forceLogout } from "@/hooks/use-auth";
 import { useMe } from "@/hooks/use-me";
 import { useStoreContext } from "@/hooks/use-store";
 import { useToast } from "@/hooks/use-toast";
@@ -260,7 +260,11 @@ export function useRealtimeWS(): void {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (event.code === 4001) {
+          forceLogout("expired");
+          return;
+        }
         wsRef.current = null;
         if (closedRef.current) return;
         const delay = Math.min(30_000, 1000 * 2 ** retryRef.current);

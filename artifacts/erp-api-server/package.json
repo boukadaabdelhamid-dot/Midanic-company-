@@ -15,7 +15,8 @@
     "test:customer-limits": "tsx --test src/lib/customer-limits.test.ts",
     "test:web-orders": "tsx --test src/lib/web-orders.test.ts",
     "test:product-visibility": "tsx --test src/lib/product-visibility.test.ts src/lib/product-visibility.integration.test.ts",
-    "test:product-settings-permissions": "tsx --test src/lib/product-settings-permissions.test.ts"
+    "test:product-settings-permissions": "tsx --test src/lib/product-settings-permissions.test.ts",
+    "test:owner-session-revocation": "tsx --test src/lib/owner-session-revocation.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

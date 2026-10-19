@@ -75,6 +75,7 @@ async function ensureCustomerProfileSchema(): Promise<void> {
   await pool.query(`
     ALTER TABLE "users"
       ADD COLUMN IF NOT EXISTS "address" text,
+      ADD COLUMN IF NOT EXISTS "erp_session_version" integer NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS "last_login_at" timestamp with time zone
   `);
 }

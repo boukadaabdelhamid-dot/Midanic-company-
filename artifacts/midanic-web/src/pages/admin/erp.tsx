@@ -870,6 +870,7 @@ export default function AdminErp() {
           >
             <p className="text-sm text-muted-foreground">
               {tAdmin("This changes the owner's Platform and ERP login password. Their Platform refresh sessions and old reset links will be invalidated.")}
+              {" "}{tAdmin("Open ERP sessions will be signed out.")}
             </p>
             <div className="space-y-2">
               <label htmlFor="erp-owner-new-password" className="text-sm font-medium">{tAdmin("New password")}</label>

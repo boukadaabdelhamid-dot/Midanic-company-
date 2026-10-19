@@ -11,7 +11,8 @@ import {
   passwordResetTokensTable,
 } from "@workspace/db";
 import app from "../app";
-import { generateAccessToken, hashPassword, comparePassword } from "./auth";
+import { generateAccessToken, generateErpSsoToken, hashPassword, comparePassword } from "./auth";
+import jwt from "jsonwebtoken";
 
 test("only a super admin can replace an ERP owner's Platform password", async () => {
   if (process.env.NODE_ENV === "production") throw new Error("Never run fixture tests in production");
@@ -61,11 +62,28 @@ test("only a super admin can replace an ERP owner's Platform password", async ()
     assert.equal((await update(endpoint, superToken, "x".repeat(129))).status, 400);
     assert.equal((await update("/api/admin/erp/tenants/0/owner-password", superToken, newPassword)).status, 400);
     assert.equal((await update("/api/admin/erp/tenants/999999999/owner-password", superToken, newPassword)).status, 404);
-    let [record] = await db.select({ passwordHash: usersTable.passwordHash }).from(usersTable).where(eq(usersTable.id, owner.id));
+    const oldSso = jwt.decode(await generateErpSsoToken({
+      userId: owner.id, email: owner.email, role: owner.role, tenantId: tenant.id, hostname: "fixture.midanic.com",
+    })) as { platformSessionVersion: number };
+    let [record] = await db.select({
+      passwordHash: usersTable.passwordHash, version: usersTable.erpSessionVersion,
+    }).from(usersTable).where(eq(usersTable.id, owner.id));
+    const versionBefore = record.version;
     assert.ok(await comparePassword(oldPassword, record.passwordHash));
 
     assert.equal((await update(endpoint, superToken, newPassword)).status, 200);
-    [record] = await db.select({ passwordHash: usersTable.passwordHash }).from(usersTable).where(eq(usersTable.id, owner.id));
+    [record] = await db.select({
+      passwordHash: usersTable.passwordHash, version: usersTable.erpSessionVersion,
+    }).from(usersTable).where(eq(usersTable.id, owner.id));
+    assert.equal(record.version, versionBefore + 1);
+    const newSso = jwt.decode(await generateErpSsoToken({
+      userId: owner.id, email: owner.email, role: owner.role, tenantId: tenant.id, hostname: "fixture.midanic.com",
+    })) as { platformSessionVersion: number };
+    assert.equal(oldSso.platformSessionVersion, versionBefore);
+    assert.equal(newSso.platformSessionVersion, record.version);
+    const [unchangedAdmin] = await db.select({ version: usersTable.erpSessionVersion })
+      .from(usersTable).where(eq(usersTable.id, admin.id));
+    assert.equal(unchangedAdmin.version, 0);
     assert.ok(await comparePassword(newPassword, record.passwordHash));
     assert.equal(await comparePassword(oldPassword, record.passwordHash), false);
     assert.equal((await db.select().from(refreshTokensTable).where(eq(refreshTokensTable.userId, owner.id))).length, 0);

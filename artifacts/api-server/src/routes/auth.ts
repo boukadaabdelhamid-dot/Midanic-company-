@@ -487,7 +487,7 @@ router.post("/auth/erp-sso", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const token = generateErpSsoToken({
+  const token = await generateErpSsoToken({
     userId: req.user!.userId,
     email: req.user!.email,
     role: req.user!.role,
@@ -568,6 +568,7 @@ router.get("/internal/erp/credentials/:userId", async (req, res): Promise<void> 
     id: usersTable.id,
     email: usersTable.email,
     passwordHash: usersTable.passwordHash,
+    erpSessionVersion: usersTable.erpSessionVersion,
     firstName: usersTable.firstName,
     lastName: usersTable.lastName,
     companyName: usersTable.companyName,
@@ -698,8 +699,11 @@ router.get("/internal/erp/database/:tenantId", async (req, res): Promise<void> =
       databaseName: erpTenantsTable.databaseName,
       databaseStatus: erpTenantsTable.databaseStatus,
       dataImportStatus: erpTenantsTable.dataImportStatus,
+      ownerUserId: erpTenantsTable.ownerUserId,
+      ownerSessionVersion: usersTable.erpSessionVersion,
     })
     .from(erpTenantsTable)
+    .innerJoin(usersTable, eq(usersTable.id, erpTenantsTable.ownerUserId))
     .where(eq(erpTenantsTable.id, tenantId))
     .limit(1);
 
@@ -713,6 +717,8 @@ router.get("/internal/erp/database/:tenantId", async (req, res): Promise<void> =
     databaseName: tenant.databaseName,
     databaseStatus: tenant.databaseStatus,
     dataImportStatus: tenant.dataImportStatus,
+    ownerUserId: tenant.ownerUserId,
+    ownerSessionVersion: tenant.ownerSessionVersion,
   });
 });
 

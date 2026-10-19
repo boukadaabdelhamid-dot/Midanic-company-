@@ -71,7 +71,7 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
   const domainIsActive = tenant.domainStatus === "active" && Boolean(tenant.hostname);
   const canAccess = tenantIsActive && canAccessErpTenant(tenant) && domainIsActive;
   const ssoToken = canAccess
-    ? generateErpSsoToken({
+    ? await generateErpSsoToken({
         userId: req.user!.userId,
         email: req.user!.email,
         role: req.user!.role,

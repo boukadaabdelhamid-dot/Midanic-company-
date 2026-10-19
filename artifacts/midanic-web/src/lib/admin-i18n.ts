@@ -5,6 +5,7 @@ type SupportedLanguage = 'en' | 'fr' | 'ar';
 
 const translations: Record<SupportedLanguage, Record<string, string>> = {
   en: {
+    'Open ERP sessions will be signed out.': 'Open ERP sessions will be signed out.',
     'Change owner password': 'Change owner password',
     'New password': 'New password',
     'Confirm new password': 'Confirm new password',
@@ -105,6 +106,7 @@ const translations: Record<SupportedLanguage, Record<string, string>> = {
     'Desktop license key generation is not configured': 'Desktop license key generation is not configured',
   },
   fr: {
+    'Open ERP sessions will be signed out.': 'Les sessions ERP ouvertes seront déconnectées.',
     'Change owner password': 'Changer le mot de passe du propriétaire',
     'New password': 'Nouveau mot de passe',
     'Confirm new password': 'Confirmer le nouveau mot de passe',
@@ -465,6 +467,7 @@ const translations: Record<SupportedLanguage, Record<string, string>> = {
     'Desktop license key generation is not configured': 'La génération des clés de bureau n’est pas configurée',
   },
   ar: {
+    'Open ERP sessions will be signed out.': 'سيتم إنهاء جلسات ERP المفتوحة للمالك.',
     'Change owner password': 'تغيير كلمة مرور مالك الشركة',
     'New password': 'كلمة المرور الجديدة',
     'Confirm new password': 'تأكيد كلمة المرور الجديدة',
