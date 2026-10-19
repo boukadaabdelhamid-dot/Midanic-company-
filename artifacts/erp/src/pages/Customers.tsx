@@ -44,6 +44,7 @@ import {
   Briefcase, Info, FileText, X, Printer, MoreVertical,
   Pencil, Eye, EyeOff, ShoppingBag, BarChart2, StickyNote, KeyRound,
   ArrowDownCircle, ArrowUpCircle, Plus, ChevronLeft, Store, SlidersHorizontal,
+  Maximize2, Minimize2,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -577,8 +578,9 @@ function CustomerSheet({ customerId, onClose, t, lang, currency, initialTab = "b
 }
 
 // ─── Customer Detail Sheet ────────────────────────────────────────
-function CustomerDetailSheet({ customerId, onClose, t, lang, currency }: {
+function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded, onToggleExpanded }: {
   customerId: number; onClose: () => void; t: TFn; lang: string; currency: string;
+  expanded: boolean; onToggleExpanded: () => void;
 }) {
   const qc = useQueryClient();
   const { data: customer, isLoading } = useGetErpCustomer(customerId, {
@@ -745,6 +747,17 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency }: {
             <p className="text-sm text-muted-foreground truncate">{customer.email}</p>
           </div>
           <div className="flex items-center gap-3 text-center shrink-0">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-8 w-8 shrink-0 bg-background/70"
+              title={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
+              aria-label={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
+              data-testid="button-toggle-customer-detail-width"
+              onClick={onToggleExpanded}
+            >
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <div>
               <p className="font-bold text-primary">{orders.length}</p>
               <p className="text-[10px] text-muted-foreground">{t("Cmd.", "طلبات")}</p>
@@ -2041,6 +2054,7 @@ export default function Customers() {
   const tiers = normalizeArrayResponse<PriceTier>(rawTiers);
 
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailExpanded, setDetailExpanded] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedTab, setSelectedTab] = useState("basic");
   const [selectedEditing, setSelectedEditing] = useState(false);
@@ -2054,6 +2068,7 @@ export default function Customers() {
   const openDetail = (id: number) => {
     setOpsCustomer(null);
     setSelectedId(null);
+    setDetailExpanded(false);
     setDetailId(id);
   };
   const [opsCustomer, setOpsCustomer] = useState<{ id: number; name: string } | null>(null);
@@ -2394,8 +2409,11 @@ export default function Customers() {
       )}
 
       {/* CustomerDetailSheet — view-only with tabs DÉTAIL/BALANCE/VENTES/RETOURS */}
-      <Sheet open={!!detailId} onOpenChange={(v) => !v && setDetailId(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col">
+      <Sheet open={!!detailId} onOpenChange={(v) => { if (!v) { setDetailId(null); setDetailExpanded(false); } }}>
+        <SheetContent
+          side="right"
+          className={`p-0 flex flex-col transition-[width,max-width] duration-200 ${detailExpanded ? "w-[96vw] max-w-[96vw] sm:max-w-[96vw]" : "w-full sm:max-w-xl"}`}
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>{t("Détail client", "تفاصيل العميل")}</SheetTitle>
           </SheetHeader>
@@ -2404,6 +2422,8 @@ export default function Customers() {
               customerId={detailId}
               onClose={() => setDetailId(null)}
               t={t} lang={lang} currency={currency}
+              expanded={detailExpanded}
+              onToggleExpanded={() => setDetailExpanded((value) => !value)}
             />
           )}
         </SheetContent>

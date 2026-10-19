@@ -22,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, CreditCard, TrendingDown, TrendingUp, FileText, RefreshCw, SlidersHorizontal, MoreVertical, Link2, Store, UserPlus } from "lucide-react";
+import { Plus, Pencil, CreditCard, TrendingDown, TrendingUp, FileText, RefreshCw, SlidersHorizontal, MoreVertical, Link2, Store, UserPlus, Maximize2, Minimize2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ContactFormDialog, emptyContactForm, type ContactFormState } from "@/components/ContactFormDialog";
 
@@ -327,6 +327,8 @@ function StatementSheet({
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => { if (!open) setExpanded(false); }, [open]);
   const linked = !!(supplier as GlobalSupplier | null)?.globalSupplierId;
   const { data, isLoading } = useGetSupplierOperations(supplier?.id ?? 0, {
     query: { enabled: open && !!supplier, queryKey: getGetSupplierOperationsQueryKey(supplier?.id ?? 0) },
@@ -425,7 +427,10 @@ function StatementSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-2xl p-0 overflow-y-auto">
+      <SheetContent
+        side="right"
+        className={`w-full p-0 overflow-y-auto transition-[width,max-width] duration-200 ${expanded ? "w-[96vw] max-w-[96vw]" : "max-w-2xl"}`}
+      >
         <SheetHeader className="px-5 py-4 border-b bg-[#1B3057] text-white">
           <SheetTitle className="text-white flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -433,13 +438,27 @@ function StatementSheet({
               {t("Relevé de compte", "كشف حساب")} — {supplier?.name ?? ""}
               {isUnified && <span className="text-xs font-normal bg-white/20 px-2 py-0.5 rounded-full">{t("Unifié", "موحّد")}</span>}
             </span>
-            <Button
-              size="icon" variant="ghost"
-              className="h-7 w-7 text-white hover:bg-white/20"
-              onClick={() => { if (supplier) qc.invalidateQueries({ queryKey: getGetSupplierOperationsQueryKey(supplier.id) }); }}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
+            <div className="flex shrink-0 items-center gap-1 pr-7">
+              <Button
+                size="icon" variant="ghost"
+                className="h-7 w-7 text-white hover:bg-white/20"
+                title={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
+                aria-label={expanded ? t("Réduire la fenêtre", "استعادة حجم النافذة") : t("Agrandir la fenêtre", "تكبير النافذة")}
+                data-testid="button-toggle-supplier-statement-width"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </Button>
+              <Button
+                size="icon" variant="ghost"
+                className="h-7 w-7 text-white hover:bg-white/20"
+                title={t("Actualiser", "تحديث")}
+                aria-label={t("Actualiser", "تحديث")}
+                onClick={() => { if (supplier) qc.invalidateQueries({ queryKey: getGetSupplierOperationsQueryKey(supplier.id) }); }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </SheetTitle>
         </SheetHeader>
 
