@@ -12,3 +12,9 @@ Use the connected GitHub integration's authenticated proxy for repository writes
 If conversation setup text mentions a `connectorFetch` callback but that name is undefined in CodeExecution, use the documented GitHub connection's `proxyFetch` route instead; never expose credentials.
 
 If local history also contains unrelated workspace changes, do not push the whole local tree just to match `HEAD`. Preserve the remote base, match blob hashes for the specifically authorized files, and verify that no other file blobs changed before updating the ref. Require full tree equality only when syncing the entire local commit is in scope.
+
+Native GitHub source-control connections and the `github` API connector are distinct. An active source-control connection does not imply that `listConnections("github")` has an API client, or that shell Git authentication works.
+
+**Why:** The native connection reported active after reauthorization while Git pushes still failed authentication and the API connector list was empty.
+
+**How to apply:** Verify actual access rather than treating connection status as proof. If native Git authentication remains broken after reauthorization, report the blocker instead of repeatedly asking the user to reconnect.
