@@ -47,6 +47,7 @@ import {
   parseWebStoreSubdomain,
 } from "../lib/web-store-domain";
 import { isDatabaseUniqueViolation } from "../lib/db-errors";
+import { sendErpOwnerPasswordChangedEmail } from "../lib/erp-owner-password-email";
 import {
   addErpContractPeriod,
   getEffectiveErpTenantStatus,
@@ -384,13 +385,20 @@ router.put("/admin/erp/tenants/:id/owner-password", async (req, res): Promise<vo
     return;
   }
 
-  const [tenant] = await db.select({ ownerUserId: erpTenantsTable.ownerUserId })
+  const [tenant] = await db.select({
+    ownerUserId: erpTenantsTable.ownerUserId,
+    companyName: erpTenantsTable.companyName,
+  })
     .from(erpTenantsTable).where(eq(erpTenantsTable.id, id)).limit(1);
   if (!tenant) {
     res.status(404).json({ error: "ERP company not found" });
     return;
   }
-  const [owner] = await db.select({ id: usersTable.id, role: usersTable.role })
+  const [owner] = await db.select({
+    id: usersTable.id,
+    role: usersTable.role,
+    email: usersTable.email,
+  })
     .from(usersTable).where(eq(usersTable.id, tenant.ownerUserId)).limit(1);
   if (!owner) {
     res.status(404).json({ error: "Company owner not found" });
@@ -411,6 +419,19 @@ router.put("/admin/erp/tenants/:id/owner-password", async (req, res): Promise<vo
     await tx.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.userId, owner.id));
   });
   req.log.info({ tenantId: id, ownerUserId: owner.id, actorId: req.user!.userId }, "ERP owner password changed by super admin");
+  try {
+    await sendErpOwnerPasswordChangedEmail({
+      to: owner.email,
+      companyName: tenant.companyName,
+    });
+  } catch (error) {
+    req.log.error({
+      tenantId: id,
+      ownerUserId: owner.id,
+      actorId: req.user!.userId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    }, "ERP owner password changed by super admin, but security email delivery failed");
+  }
   res.json({ message: "Password changed" });
 });
 
