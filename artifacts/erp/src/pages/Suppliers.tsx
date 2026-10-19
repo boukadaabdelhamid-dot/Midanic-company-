@@ -547,7 +547,10 @@ function StatementSheet({
                 })}
               </div>
 
-              <div className="hidden overflow-hidden rounded-md border md:block">
+              <div
+                className="hidden overflow-hidden rounded-md border md:block"
+                data-testid="supplier-statement-table"
+              >
                 <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow>
