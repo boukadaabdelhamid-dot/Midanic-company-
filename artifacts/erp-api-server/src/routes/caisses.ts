@@ -399,7 +399,16 @@ router.get("/erp/caisse-transfers", authenticate, requireStaff, requireStore, as
       )!);
     }
     if (box === "inbox") conditions.push(eq(schema.caisseTransfersTable.recipientCaisseId, myCaisse.id));
-    else if (box === "outbox") conditions.push(eq(schema.caisseTransfersTable.senderCaisseId, myCaisse.id));
+    else if (box === "outbox") {
+      // A main-caisse transfer has no caisse owner, so the authenticated admin
+      // who initiated it is its sender for inbox/outbox purposes.
+      conditions.push(isCaisseAdmin(req)
+        ? or(
+            eq(schema.caisseTransfersTable.senderCaisseId, myCaisse.id),
+            eq(schema.caisseTransfersTable.requestedByUserId, userId),
+          )!
+        : eq(schema.caisseTransfersTable.senderCaisseId, myCaisse.id));
+    }
     if (status) conditions.push(eq(schema.caisseTransfersTable.status, status as CaisseTransferStatus));
 
     const rows = await db.select().from(schema.caisseTransfersTable)
@@ -721,7 +730,9 @@ router.post("/erp/caisse-transfers/:id/cancel", authenticate, requireStaff, requ
     }
     const [senderCaisse] = await db.select().from(schema.caissesTable)
       .where(eq(schema.caissesTable.id, t.senderCaisseId)).limit(1);
-    if (!senderCaisse || senderCaisse.ownerUserId !== userId) {
+    const ownsTransfer = senderCaisse?.ownerUserId === userId ||
+      (senderCaisse?.kind === "main" && isCaisseAdmin(req) && t.requestedByUserId === userId);
+    if (!senderCaisse || !ownsTransfer) {
       res.status(403).json({ error: "Only the sender can cancel" }); return;
     }
     if (t.status !== "pending") {

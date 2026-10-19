@@ -42,9 +42,11 @@ export default function MonCompte() {
 
   const mine = useMemo(
     () => (transfers ?? []).filter(
-      tr => tr.senderCaisse?.ownerUserId === myId || tr.recipientCaisse?.ownerUserId === myId,
+      tr => tr.senderCaisse?.ownerUserId === myId ||
+        tr.recipientCaisse?.ownerUserId === myId ||
+        (isAdmin && tr.senderCaisse?.kind === "main" && tr.requestedByUserId === myId),
     ),
-    [transfers, myId],
+    [transfers, myId, isAdmin],
   );
   const inbox = useMemo(
     () => (transfers ?? []).filter(tr =>
@@ -56,8 +58,11 @@ export default function MonCompte() {
     [transfers, myId, isAdmin],
   );
   const outbox = useMemo(
-    () => mine.filter(tr => tr.senderCaisse?.ownerUserId === myId),
-    [mine, myId],
+    () => mine.filter(tr =>
+      tr.senderCaisse?.ownerUserId === myId ||
+      (isAdmin && tr.senderCaisse?.kind === "main" && tr.requestedByUserId === myId),
+    ),
+    [mine, myId, isAdmin],
   );
 
   const [sendOpen, setSendOpen] = useState(false);

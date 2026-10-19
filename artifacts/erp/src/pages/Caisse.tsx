@@ -73,7 +73,10 @@ export default function Caisse() {
     if (isAdmin && tr.recipientCaisse?.kind === "main") return true;
     return tr.senderCaisse?.ownerUserId !== user?.id && tr.recipientCaisse?.ownerUserId === user?.id;
   });
-  const outbox = (transfers ?? []).filter(tr => tr.senderCaisse?.ownerUserId === user?.id);
+  const outbox = (transfers ?? []).filter(tr =>
+    tr.senderCaisse?.ownerUserId === user?.id ||
+    (isAdmin && tr.senderCaisse?.kind === "main" && tr.requestedByUserId === user?.id),
+  );
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: getGetErpCaissesQueryKey() });
