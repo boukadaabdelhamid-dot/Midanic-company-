@@ -87,6 +87,7 @@ export default function Pos() {
       customerName: string;
       customerPhone: string;
       items: { productId: number; quantity: number; unitPrice: number }[];
+      orderSource: "pos";
       paymentMethod: "comptant" | "a_terme";
       versement: number;
     }) => {
@@ -461,6 +462,7 @@ export default function Pos() {
         customerName,
         customerPhone: buyer.phone?.trim() || "0000000000",
         items,
+        orderSource: "pos",
         paymentMethod: opts.mode === "terme" ? "a_terme" : "comptant",
         versement: appliedVersement,
       },

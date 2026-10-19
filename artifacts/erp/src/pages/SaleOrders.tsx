@@ -144,7 +144,7 @@ export default function SaleOrders() {
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [orderSource, setOrderSource] = useState("");
+  const [orderSource, setOrderSource] = useState("bon");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -375,9 +375,9 @@ export default function SaleOrders() {
             onChange={(e) => setDateTo(e.target.value)}
             className="h-8 text-xs border rounded-md px-2 bg-background"
           />
-          {(dateFrom || dateTo || orderSource || paymentMethodFilter || statusFilter) && (
+          {(dateFrom || dateTo || orderSource !== "bon" || paymentMethodFilter || statusFilter) && (
             <button
-              onClick={() => { setDateFrom(""); setDateTo(""); setOrderSource(""); setPaymentMethodFilter(""); setStatusFilter(""); }}
+              onClick={() => { setDateFrom(""); setDateTo(""); setOrderSource("bon"); setPaymentMethodFilter(""); setStatusFilter(""); }}
               className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground border rounded-md bg-background"
             >
               {t("Réinitialiser", "إعادة ضبط")}

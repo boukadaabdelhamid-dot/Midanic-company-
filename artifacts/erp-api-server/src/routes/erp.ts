@@ -5840,6 +5840,16 @@ router.post("/erp/sale-orders", authenticate, requireStaff, requireStore, requir
       notes?: string;
       paymentMethod?: string;
     };
+    const requestedOrderSource = (req.body as { orderSource?: unknown }).orderSource;
+    if (
+      requestedOrderSource !== undefined &&
+      requestedOrderSource !== "bon" &&
+      requestedOrderSource !== "pos"
+    ) {
+      res.status(400).json({ error: "orderSource must be bon or pos" });
+      return;
+    }
+    const orderSource = requestedOrderSource === "pos" ? "pos" : "bon";
 
     const validErr = validateSaleItems(items);
     if (validErr) { res.status(400).json({ error: validErr }); return; }
@@ -5869,7 +5879,7 @@ router.post("/erp/sale-orders", authenticate, requireStaff, requireStore, requir
         VALUES (
           ${storeId}, ${customerUserId ?? null}, ${req.user!.id},
           ${cName}, ${cPhone}, ${notes ?? ""},
-          'pending', ${total.toFixed(2)}, '0', 'bon', ${pm}, NULL, NOW(), NOW()
+          'pending', ${total.toFixed(2)}, '0', ${orderSource}, ${pm}, NULL, NOW(), NOW()
         ) RETURNING id
       `);
       const newId = (orderRes.rows[0] as { id: number }).id;
