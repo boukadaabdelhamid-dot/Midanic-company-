@@ -33,6 +33,19 @@ const sampleData = {
     balanceAfter: "1234.50",
     storeNameEn: "Main Store",
     storeNameAr: "المتجر الرئيسي",
+  }, {
+    id: 42,
+    source: "supplier",
+    date: "2026-10-19",
+    type: "payment",
+    amount: "250.00",
+    reference: null,
+    note: `<script>alert('x')</script>\nline, "quoted"; note`,
+    runningBalance: "984.50",
+    balanceBefore: "1234.50",
+    balanceAfter: "984.50",
+    storeNameEn: "Main Store",
+    storeNameAr: "المتجر الرئيسي",
   }],
   contactBalance: null,
 };
@@ -49,10 +62,14 @@ const components = {
   Minimize2: icon,
   Maximize2: icon,
   RefreshCw: icon,
+  Download: icon,
+  Printer: icon,
   TrendingUp: icon,
   TrendingDown: icon,
   SlidersHorizontal: icon,
   Skeleton: () => React.createElement("span", null, "loading"),
+  Label: passthrough("label"),
+  Input: passthrough("input"),
   Table: ({ children, className }) => React.createElement(
     "div",
     { className: `relative w-full overflow-auto ${className ?? ""}`.trim() },
@@ -66,14 +83,51 @@ const components = {
 };
 
 function renderStatement(lang) {
+  const buttonHandlers = {};
+  const browser = { csvBlob: null, downloadedFilename: "", printHtml: "", popupBlocked: false };
+  const link = {
+    href: "",
+    download: "",
+    click() { browser.downloadedFilename = this.download; },
+    remove() {},
+  };
+  const printWindow = {
+    opener: null,
+    document: {
+      open() {},
+      write(html) { browser.printHtml = html; },
+      close() {},
+    },
+  };
+  const Button = ({ children, size, variant, ...props }) => {
+    if (props["data-testid"] && props.onClick) buttonHandlers[props["data-testid"]] = props.onClick;
+    return React.createElement("button", props, children);
+  };
   const context = vm.createContext({
     React,
+    useState: React.useState,
+    useEffect() {},
+    useQuery: () => ({ data: sampleData, isLoading: false, isError: false }),
     ...components,
+    Button,
     useLang: () => ({ lang }),
     useQueryClient: () => ({ invalidateQueries() {} }),
-    useGetSupplierOperations: () => ({ data: sampleData, isLoading: false }),
     getGetSupplierOperationsQueryKey: (id) => ["supplier-operations", id],
     fmt: (value) => String(value),
+    Blob,
+    URL: {
+      createObjectURL(blob) { browser.csvBlob = blob; return "blob:test"; },
+      revokeObjectURL() {},
+    },
+    document: {
+      createElement() { return link; },
+      body: { appendChild() {} },
+    },
+    window: {
+      open() { return printWindow; },
+      alert() { browser.popupBlocked = true; },
+      setTimeout() {},
+    },
   });
   const StatementSheet = vm.runInContext(`${compiled}\nStatementSheet`, context);
   const supplier = {
@@ -82,13 +136,14 @@ function renderStatement(lang) {
     currentBalance: "1234.50",
     globalSupplierId: 9,
   };
-  return renderToStaticMarkup(React.createElement(StatementSheet, {
+  const html = renderToStaticMarkup(React.createElement(StatementSheet, {
     supplier,
     open: true,
     onOpenChange() {},
     expanded: false,
     onToggleExpanded() {},
   }));
+  return { html, browser, buttonHandlers };
 }
 
 function findElementByTestId(html, testId) {
@@ -116,10 +171,33 @@ const mediumBreakpoint = 768;
 assert.ok(phoneWidth < mediumBreakpoint && desktopWidth >= mediumBreakpoint);
 
 for (const lang of ["fr", "ar"]) {
-  const html = renderStatement(lang);
+  const { html, browser, buttonHandlers } = renderStatement(lang);
   const expected = lang === "ar"
     ? ["شراء", "المرجع / ملاحظة", "مدين", "دائن", "الرصيد", "قبل", "بعد", "المتجر الرئيسي"]
     : ["Achat", "Référence / Note", "Débit", "Crédit", "Solde", "Ancien", "Nouveau", "Main Store"];
+
+  test(`statement exports are offered in the active language (${lang})`, () => {
+    assert.ok(html.includes('data-testid="button-download-supplier-statement-csv"'));
+    assert.ok(html.includes('data-testid="button-print-supplier-statement"'));
+    assert.ok(html.includes(lang === "ar" ? "تنزيل CSV" : "Télécharger CSV"));
+    assert.ok(html.includes(lang === "ar" ? "طباعة / PDF" : "Imprimer / PDF"));
+  });
+
+  test(`CSV and print exports keep statement order, locale, and safe text (${lang})`, async () => {
+    buttonHandlers["button-download-supplier-statement-csv"]();
+    const csv = Buffer.from(await browser.csvBlob.arrayBuffer()).toString("utf8");
+    assert.ok(csv.startsWith("\uFEFF"), "CSV should include a UTF-8 BOM for Arabic and Excel");
+    assert.ok(csv.includes(lang === "ar" ? "التاريخ" : "Date"));
+    assert.ok(csv.indexOf("2026-10-18") < csv.indexOf("2026-10-19"), "CSV should preserve operation order");
+    assert.ok(csv.includes(`"<script>alert('x')</script>\nline, ""quoted""; note"`), "CSV cells should quote delimiters, quotes, and line breaks");
+    assert.match(browser.downloadedFilename, /all-dates/);
+
+    buttonHandlers["button-print-supplier-statement"]();
+    assert.ok(browser.printHtml.includes(`lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}"`));
+    assert.ok(browser.printHtml.includes("2026-10-18") && browser.printHtml.includes("2026-10-19"));
+    assert.ok(browser.printHtml.includes("&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;"));
+    assert.ok(!browser.printHtml.includes("<script>alert('x')</script>"), "operation text must not become executable HTML");
+  });
 
   test(`phone layout keeps essential supplier-operation fields readable (${lang}, ${phoneWidth}px)`, () => {
     const cards = findElementByTestId(html, "supplier-statement-cards");

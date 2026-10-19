@@ -22,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, CreditCard, TrendingDown, TrendingUp, FileText, RefreshCw, SlidersHorizontal, MoreVertical, Link2, Store, UserPlus, Maximize2, Minimize2 } from "lucide-react";
+import { Plus, Pencil, CreditCard, TrendingDown, TrendingUp, FileText, RefreshCw, SlidersHorizontal, MoreVertical, Link2, Store, UserPlus, Maximize2, Minimize2, Download, Printer } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ContactFormDialog, emptyContactForm, type ContactFormState } from "@/components/ContactFormDialog";
 
@@ -454,6 +454,108 @@ function StatementSheet({
     return v > 0 ? "text-rose-600" : v < 0 ? "text-emerald-600" : "text-muted-foreground";
   };
 
+  const showStoreColumn = linked || isUnified;
+  const statementHeaders = [
+    t("Date", "التاريخ"),
+    ...(showStoreColumn ? [t("Magasin", "المتجر")] : []),
+    t("Type", "النوع"),
+    t("Référence / Note", "المرجع / ملاحظة"),
+    t("Débit", "مدين"),
+    t("Crédit", "دائن"),
+    t("Solde", "الرصيد"),
+  ];
+  const statementRows = ((data?.operations ?? []) as UnifiedOp[]).map((op) => {
+    const source = op.source ?? "supplier";
+    const type = op.type as string;
+    let typeLabel = type;
+    if (source === "customer") {
+      if (type === "vente_a_terme") typeLabel = t("Vente à terme", "بيع بالدين");
+      else if (type === "versement") typeLabel = t("Versement", "دفعة");
+      else if (type === "avoir_retour") typeLabel = t("Avoir retour", "أفوار");
+    } else if (type === "purchase") typeLabel = t("Achat", "شراء");
+    else if (type === "ajustement") typeLabel = t("Ajustement", "تعديل");
+    else if (type === "payment") typeLabel = t("Règlement", "تسديد");
+
+    const beforeAfter = `${t("Ancien", "قبل")}: ${op.balanceBefore != null ? fmt(op.balanceBefore) : "—"} → ${t("Nouveau", "بعد")}: ${op.balanceAfter != null ? fmt(op.balanceAfter) : "—"}`;
+    return [
+      op.date,
+      ...(showStoreColumn ? [(lang === "ar" ? op.storeNameAr : op.storeNameEn) ?? "—"] : []),
+      typeLabel,
+      op.reference ?? op.note ?? "—",
+      opDebit(op) != null ? fmt(opDebit(op)) : "—",
+      opCredit(op) != null ? fmt(opCredit(op)) : "—",
+      `${fmt(op.runningBalance)}\n${beforeAfter}`,
+    ];
+  });
+
+  const handleDownloadCsv = () => {
+    const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const csv = "\uFEFF" + [statementHeaders, ...statementRows]
+      .map((row) => row.map(csvCell).join(";"))
+      .join("\r\n");
+    const blobUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const link = document.createElement("a");
+    const supplierName = (supplier?.name ?? "supplier").replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "") || "supplier";
+    link.href = blobUrl;
+    link.download = `supplier-statement-${supplierName}-${startDate || "all"}-${endDate || "dates"}-${lang}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.alert(t("Autorisez les fenêtres contextuelles pour imprimer le relevé.", "يرجى السماح بالنوافذ المنبثقة لطباعة كشف الحساب."));
+      return;
+    }
+    printWindow.opener = null;
+    const direction = lang === "ar" ? "rtl" : "ltr";
+    const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[char] ?? char);
+    const printRows = statementRows.map((row) =>
+      `<tr>${row.map((cell, index) => `<td${index === (showStoreColumn ? 4 : 3) || index === (showStoreColumn ? 5 : 4) || index === (showStoreColumn ? 6 : 5) ? ' class="number"' : ""}>${escapeHtml(cell).replace(/\n/g, "<br>")}</td>`).join("")}</tr>`
+    ).join("");
+    const period = startDate || endDate
+      ? `${t("Période", "الفترة")}: ${startDate || "—"} — ${endDate || "—"}`
+      : t("Toutes les opérations", "جميع العمليات");
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="${lang}" dir="${direction}">
+        <head>
+          <meta charset="utf-8">
+          <title>${escapeHtml(t("Relevé de compte fournisseur", "كشف حساب المورد"))} — ${escapeHtml(supplier?.name ?? "")}</title>
+          <style>
+            @page { size: landscape; margin: 12mm; }
+            body { color: #172033; font: 12px Arial, "Noto Sans Arabic", sans-serif; direction: ${direction}; }
+            h1 { margin: 0 0 6px; font-size: 20px; }
+            .meta { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; direction: ${direction}; }
+            th, td { border: 1px solid #cbd5e1; padding: 7px 8px; text-align: start; vertical-align: top; white-space: pre-wrap; }
+            th { background: #f1f5f9; font-weight: 700; }
+            .number { direction: ltr; text-align: end; font-variant-numeric: tabular-nums; }
+            td:nth-child(${showStoreColumn ? 4 : 3}) { unicode-bidi: plaintext; }
+            tr { break-inside: avoid; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(t("Relevé de compte fournisseur", "كشف حساب المورد"))} — ${escapeHtml(supplier?.name ?? "")}</h1>
+          <div class="meta">
+            <span>${escapeHtml(period)}</span>
+            <span>${escapeHtml(t("Solde actuel", "الرصيد الحالي"))}: ${escapeHtml(fmt(displayBalance))} DA</span>
+          </div>
+          <table>
+            <thead><tr>${statementHeaders.map((header, index) => `<th${index >= statementHeaders.length - 3 ? ' class="number"' : ""}>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+            <tbody>${printRows || `<tr><td colspan="${statementHeaders.length}">${escapeHtml(t("Aucune opération", "لا توجد عمليات"))}</td></tr>`}</tbody>
+          </table>
+          <script>window.onload = function () { window.focus(); window.print(); };</script>
+        </body>
+      </html>`);
+    printWindow.document.close();
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -539,6 +641,16 @@ function StatementSheet({
               <p className="text-xs text-rose-600 sm:col-span-2">
                 {t("La date de début ne peut pas être après la date de fin.", "لا يمكن أن يكون تاريخ البداية بعد تاريخ النهاية.")}
               </p>
+            )}
+            {data && !isLoading && !isError && !invalidDateRange && (
+              <div className="flex flex-wrap gap-2 sm:col-span-2">
+                <Button type="button" size="sm" variant="outline" onClick={handleDownloadCsv} data-testid="button-download-supplier-statement-csv">
+                  <Download className="mr-1.5 h-4 w-4" />{t("Télécharger CSV", "تنزيل CSV")}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={handlePrint} data-testid="button-print-supplier-statement">
+                  <Printer className="mr-1.5 h-4 w-4" />{t("Imprimer / PDF", "طباعة / PDF")}
+                </Button>
+              </div>
             )}
           </div>
           {invalidDateRange ? null : isLoading ? (
