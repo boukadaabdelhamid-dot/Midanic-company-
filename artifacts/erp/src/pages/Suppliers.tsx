@@ -427,8 +427,6 @@ function StatementSheet({
     return v > 0 ? "text-rose-600" : v < 0 ? "text-emerald-600" : "text-muted-foreground";
   };
 
-  const colSpan = linked || isUnified ? 7 : 6;
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -480,32 +478,90 @@ function StatementSheet({
           </div>
         )}
 
-        <div className="p-4">
+        <div className="p-4" dir={lang === "ar" ? "rtl" : "ltr"}>
           {isLoading ? (
             <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : !data?.operations?.length ? (
+            <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground italic">
+              {t("Aucune opération", "لا توجد عمليات")}
+            </div>
           ) : (
-            <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-semibold">{t("Date", "التاريخ")}</TableHead>
-                    {(linked || isUnified) && <TableHead className="font-semibold">{t("Magasin", "المتجر")}</TableHead>}
-                    <TableHead className="font-semibold">{t("Type", "النوع")}</TableHead>
-                    <TableHead className="font-semibold">{t("Référence / Note", "المرجع / ملاحظة")}</TableHead>
-                    <TableHead className="font-semibold text-right">{t("Débit", "دين")}</TableHead>
-                    <TableHead className="font-semibold text-right">{t("Crédit", "دائن")}</TableHead>
-                    <TableHead className="font-semibold text-right">{t("Solde", "الرصيد")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(!data?.operations || data.operations.length === 0) ? (
+            <>
+              <div className="space-y-3 md:hidden" data-testid="supplier-statement-cards">
+                {(data.operations as UnifiedOp[]).map((op) => {
+                  const debit = opDebit(op);
+                  const credit = opCredit(op);
+                  return (
+                    <article
+                      key={`${op.source ?? "s"}-${op.id}`}
+                      data-testid={`card-supplier-statement-operation-${op.id}`}
+                      className="min-w-0 rounded-lg border bg-card p-3 space-y-3"
+                    >
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <div>{opTypeBadge(op)}</div>
+                          <p className="text-xs text-muted-foreground tabular-nums" dir="ltr">{op.date}</p>
+                        </div>
+                        {(linked || isUnified) && (
+                          <p className="min-w-0 max-w-[45%] break-words text-end text-[11px] text-muted-foreground">
+                            {(lang === "ar" ? op.storeNameAr : op.storeNameEn) ?? "—"}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 border-t pt-2">
+                        <p className="text-[10px] text-muted-foreground">{t("Référence / Note", "المرجع / ملاحظة")}</p>
+                        <p className="mt-0.5 break-words text-xs" dir="auto">{op.reference ?? op.note ?? "—"}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="min-w-0 rounded-md bg-rose-50 px-2.5 py-2">
+                          <p className="text-[10px] text-rose-700">{t("Débit", "مدين")}</p>
+                          <p className="mt-0.5 break-words text-xs font-semibold tabular-nums text-rose-600" dir="ltr">
+                            {debit != null ? fmt(debit) : "—"}
+                          </p>
+                        </div>
+                        <div className="min-w-0 rounded-md bg-emerald-50 px-2.5 py-2">
+                          <p className="text-[10px] text-emerald-700">{t("Crédit", "دائن")}</p>
+                          <p className="mt-0.5 break-words text-xs font-semibold tabular-nums text-emerald-600" dir="ltr">
+                            {credit != null ? fmt(credit) : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex min-w-0 items-start justify-between gap-2 border-t pt-2">
+                        <span className="shrink-0 text-xs text-muted-foreground">{t("Solde", "الرصيد")}</span>
+                        <div className="min-w-0 text-end">
+                          <p className={`break-words text-sm font-bold tabular-nums ${runningBalanceColor(op.runningBalance)}`} dir="ltr">
+                            {fmt(op.runningBalance)}
+                          </p>
+                          <p className="mt-0.5 break-words text-[10px] font-normal text-muted-foreground">
+                            {t("Ancien", "قبل")}: {op.balanceBefore != null ? fmt(op.balanceBefore) : "—"}
+                            {" → "}
+                            {t("Nouveau", "بعد")}: {op.balanceAfter != null ? fmt(op.balanceAfter) : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-hidden rounded-md border md:block">
+                <Table>
+                  <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
-                        {t("Aucune opération", "لا توجد عمليات")}
-                      </TableCell>
+                      <TableHead className="font-semibold">{t("Date", "التاريخ")}</TableHead>
+                      {(linked || isUnified) && <TableHead className="font-semibold">{t("Magasin", "المتجر")}</TableHead>}
+                      <TableHead className="font-semibold">{t("Type", "النوع")}</TableHead>
+                      <TableHead className="font-semibold">{t("Référence / Note", "المرجع / ملاحظة")}</TableHead>
+                      <TableHead className="font-semibold text-right">{t("Débit", "مدين")}</TableHead>
+                      <TableHead className="font-semibold text-right">{t("Crédit", "دائن")}</TableHead>
+                      <TableHead className="font-semibold text-right">{t("Solde", "الرصيد")}</TableHead>
                     </TableRow>
-                  ) : (
-                    (data.operations as UnifiedOp[]).map((op) => {
+                  </TableHeader>
+                  <TableBody>
+                    {(data.operations as UnifiedOp[]).map((op) => {
                       const debit = opDebit(op);
                       const credit = opCredit(op);
                       return (
@@ -538,11 +594,11 @@ function StatementSheet({
                           </TableCell>
                         </TableRow>
                       );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </div>
       </SheetContent>
