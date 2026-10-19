@@ -5805,7 +5805,7 @@ router.get("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
     const id = pid(req, "id");
     const result = await db.execute(sql`
       SELECT
-        o.id, o.status, o.customer_name, o.customer_phone, o.user_id,
+        o.id, o.status, o.order_source, o.customer_name, o.customer_phone, o.user_id,
         o.total_amount, o.discount_amount, o.created_at, o.updated_at, o.payment_method,
         COALESCE(json_agg(json_build_object(
           'id', oi.id,

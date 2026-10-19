@@ -468,6 +468,7 @@ export default function Pos() {
       },
       {
         onSuccess: (order) => {
+          void qc.invalidateQueries({ queryKey: ["erp-sale-orders"] });
           void qc.invalidateQueries({ queryKey: getGetTransactionsQueryKey() });
           void qc.invalidateQueries({ queryKey: getGetErpCustomersQueryKey() });
           const draftToDelete = activeDraftId;
