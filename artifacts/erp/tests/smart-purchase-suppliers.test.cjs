@@ -29,10 +29,15 @@ test("supplier options are refreshed and scoped per selected store", () => {
 });
 
 test("supplier filtering and quick ordering use searchable scrollable pickers", () => {
-  assert.equal((erpPage.match(/<SearchableSelect/g) ?? []).length, 4);
+  assert.equal((erpPage.match(/<SearchableSelect/g) ?? []).length, 9);
   assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher un fournisseur…", "ابحث عن مورد…"\)\}/);
+  assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher une famille…", "ابحث عن عائلة…"\)\}/);
+  assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher une marque…", "ابحث عن ماركة…"\)\}/);
   assert.match(erpPage, /function citySelectOptions\(cities: string\[\]\)/);
   assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher une ville\.\.\.", "ابحث عن مدينة\.\.\."\)\}/);
+  assert.match(erpPage, /options=\{familyOptions\}/);
+  assert.match(erpPage, /options=\{brandOptions\}/);
+  assert.match(erpPage, /options=\{cityOptions\}/);
   assert.doesNotMatch(erpPage, /placeholder=\{t\("Ex : Alger, Oran/);
   assert.match(selectComponent, /<CommandInput/);
   assert.match(selectComponent, /max-h-\[220px\]/);

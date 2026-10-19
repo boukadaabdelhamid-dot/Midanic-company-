@@ -160,6 +160,21 @@ function citySelectOptions(cities: string[]): SearchableSelectOption[] {
   return cities.map((city) => ({ value: city, labelFr: city }));
 }
 
+function attributeSelectOptions(
+  items: Array<{ id: number; nameFr: string; nameAr: string }>,
+  lang: string,
+): SearchableSelectOption[] {
+  return items.map(({ id, nameFr, nameAr }) => {
+    const primaryLabel = lang === "ar" ? (nameAr || nameFr) : (nameFr || nameAr);
+    const secondaryLabel = lang === "ar" ? nameFr : nameAr;
+    return {
+      value: String(id),
+      labelFr: primaryLabel,
+      labelAr: secondaryLabel && secondaryLabel !== primaryLabel ? secondaryLabel : undefined,
+    };
+  });
+}
+
 async function fetchFilterOptions(): Promise<FilterOptions> {
   const res = await fetch(`${API_BASE}/api/erp/purchases/filter-options`, { headers: authHeaders() });
   if (!res.ok) throw new Error("filter-options failed");
@@ -1391,6 +1406,8 @@ export default function SmartPurchase() {
   const brands   = useMemo(() => filterOpts?.brands   ?? [], [filterOpts]);
   const suppliers = useMemo(() => filterOpts?.suppliers ?? [], [filterOpts]);
   const supplierOptions = useMemo(() => supplierSelectOptions(suppliers), [suppliers]);
+  const familyOptions = useMemo(() => attributeSelectOptions(families, lang), [families, lang]);
+  const brandOptions = useMemo(() => attributeSelectOptions(brands, lang), [brands, lang]);
   const cityOptions = useMemo(() => citySelectOptions(filterOpts?.supplierCities ?? []), [filterOpts]);
 
   // Build query params — stockFilter included so tab changes reset pagination
@@ -1737,22 +1754,36 @@ export default function SmartPurchase() {
                 noneLabel={t("Fournisseur", "المورد")}
                 className="h-9 shrink-0 min-w-[160px] rounded-lg px-2 text-xs"
               />
-              <select
-                className="shrink-0 h-9 rounded-lg border bg-white px-2 text-xs appearance-none min-w-[100px]"
+              <SearchableSelect
                 value={filterFamilyId}
-                onChange={(e) => setFilterFamilyId(e.target.value)}
-              >
-                <option value="">{t("Famille", "العائلة")}</option>
-                {families.map((f) => <option key={f.id} value={String(f.id)}>{lang === "ar" ? f.nameAr : f.nameFr}</option>)}
-              </select>
-              <select
-                className="shrink-0 h-9 rounded-lg border bg-white px-2 text-xs appearance-none min-w-[100px]"
+                onValueChange={setFilterFamilyId}
+                options={familyOptions}
+                placeholder={t("Famille", "العائلة")}
+                searchPlaceholder={t("Rechercher une famille…", "ابحث عن عائلة…")}
+                emptyText={t("Aucune famille trouvée", "لم يتم العثور على عائلة")}
+                noneLabel={t("Toutes les familles", "كل العائلات")}
+                className="h-9 shrink-0 min-w-[145px] rounded-lg px-2 text-xs"
+              />
+              <SearchableSelect
                 value={filterBrandId}
-                onChange={(e) => setFilterBrandId(e.target.value)}
-              >
-                <option value="">{t("Marque", "الماركة")}</option>
-                {brands.map((b) => <option key={b.id} value={String(b.id)}>{lang === "ar" ? b.nameAr : b.nameFr}</option>)}
-              </select>
+                onValueChange={setFilterBrandId}
+                options={brandOptions}
+                placeholder={t("Marque", "الماركة")}
+                searchPlaceholder={t("Rechercher une marque…", "ابحث عن ماركة…")}
+                emptyText={t("Aucune marque trouvée", "لم يتم العثور على ماركة")}
+                noneLabel={t("Toutes les marques", "كل الماركات")}
+                className="h-9 shrink-0 min-w-[145px] rounded-lg px-2 text-xs"
+              />
+              <SearchableSelect
+                value={filterCity}
+                onValueChange={setFilterCity}
+                options={cityOptions}
+                placeholder={t("Ville", "المدينة")}
+                searchPlaceholder={t("Rechercher une ville...", "ابحث عن مدينة...")}
+                emptyText={t("Aucune ville trouvée", "لم يتم العثور على مدينة")}
+                noneLabel={t("Toutes les villes", "كل المدن")}
+                className="h-9 shrink-0 min-w-[145px] rounded-lg px-2 text-xs"
+              />
               <input
                 type="date"
                 className="shrink-0 h-9 rounded-lg border bg-white px-2 text-xs min-w-[130px]"
@@ -1767,7 +1798,7 @@ export default function SmartPurchase() {
                 min={filterDateFrom || undefined}
                 onChange={(e) => setFilterDateTo(e.target.value)}
               />
-              {(filterSupplierId || filterFamilyId || filterBrandId || filterDateFrom || filterDateTo) && (
+              {(filterSupplierId || filterFamilyId || filterBrandId || filterCity || filterDateFrom || filterDateTo) && (
                 <button
                   type="button"
                   className="shrink-0 h-9 px-2.5 text-xs text-muted-foreground border rounded-lg hover:bg-gray-50 flex items-center gap-1 whitespace-nowrap"
@@ -2255,35 +2286,31 @@ export default function SmartPurchase() {
             {/* Family */}
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("Famille", "العائلة")}</label>
-              <select
-                className="w-full h-12 rounded-xl border bg-white px-3 text-sm appearance-none"
+              <SearchableSelect
                 value={filterFamilyId}
-                onChange={(e) => setFilterFamilyId(e.target.value)}
-              >
-                <option value="">{t("Toutes les familles", "كل العائلات")}</option>
-                {families.map((f) => (
-                  <option key={f.id} value={String(f.id)}>
-                    {lang === "ar" ? f.nameAr : f.nameFr}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setFilterFamilyId}
+                options={familyOptions}
+                placeholder={t("Toutes les familles", "كل العائلات")}
+                searchPlaceholder={t("Rechercher une famille…", "ابحث عن عائلة…")}
+                emptyText={t("Aucune famille trouvée", "لم يتم العثور على عائلة")}
+                noneLabel={t("Toutes les familles", "كل العائلات")}
+                className="w-full h-12 rounded-xl"
+              />
             </div>
 
             {/* Brand */}
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("Marque", "الماركة")}</label>
-              <select
-                className="w-full h-12 rounded-xl border bg-white px-3 text-sm appearance-none"
+              <SearchableSelect
                 value={filterBrandId}
-                onChange={(e) => setFilterBrandId(e.target.value)}
-              >
-                <option value="">{t("Toutes les marques", "كل الماركات")}</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={String(b.id)}>
-                    {lang === "ar" ? b.nameAr : b.nameFr}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setFilterBrandId}
+                options={brandOptions}
+                placeholder={t("Toutes les marques", "كل الماركات")}
+                searchPlaceholder={t("Rechercher une marque…", "ابحث عن ماركة…")}
+                emptyText={t("Aucune marque trouvée", "لم يتم العثور على ماركة")}
+                noneLabel={t("Toutes les marques", "كل الماركات")}
+                className="w-full h-12 rounded-xl"
+              />
             </div>
 
             {/* Supplier city */}
