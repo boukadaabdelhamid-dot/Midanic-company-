@@ -18,3 +18,9 @@ Native GitHub source-control connections and the `github` API connector are dist
 **Why:** The native connection reported active after reauthorization while Git pushes still failed authentication and the API connector list was empty.
 
 **How to apply:** Verify actual access rather than treating connection status as proof. If native Git authentication remains broken after reauthorization, report the blocker instead of repeatedly asking the user to reconnect.
+
+Native source-control entries are not interchangeable with ordinary API connectors: generic integration reconnect cards can reject an apparently healthy GitHub entry as unconnected or missing a connector identifier.
+
+**Why:** Source-control connection discovery, native Git credentials, and generic connector authorization can report inconsistent states.
+
+**How to apply:** If native push fails and the reconnect card rejects that source-control entry, stop retrying generic integration proposals. Use the native Git pane or the account's Git Providers connection flow; never request tokens in chat.
