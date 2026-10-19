@@ -697,6 +697,32 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency }: {
     return { label: t("Vente à terme", "بيع آجل"), cls: "text-amber-700 bg-amber-50 border-amber-200" };
   };
 
+  const balanceLedgerRows = ops.map((op) => {
+    const numericAmount = Number(op.amount);
+    const amount = Math.abs(numericAmount);
+    const debit = op.type === "ajustement"
+      ? (numericAmount > 0 ? amount : null)
+      : (op.type === "versement" || op.type === "avoir_retour") ? null : amount;
+    const credit = op.type === "ajustement"
+      ? (numericAmount < 0 ? amount : null)
+      : (op.type === "versement" || op.type === "avoir_retour") ? amount : null;
+    const operation = op.type === "ajustement"
+      ? { label: t("Ajustement", "تعديل"), cls: "text-blue-700 bg-blue-50 border-blue-200" }
+      : opTypeLabel(op.type);
+    const parsedDate = op.date ? new Date(op.date) : null;
+
+    return {
+      op,
+      debit,
+      credit,
+      operation,
+      recordedBalance: op.balanceAfter == null ? null : Number(op.balanceAfter),
+      dateLabel: parsedDate && Number.isFinite(parsedDate.getTime())
+        ? format(parsedDate, "dd/MM/yyyy")
+        : fmtDt(op.createdAt),
+    };
+  });
+
   const statusLabel = (s: string) => {
     const map: Record<string, string> = {
       pending: t("En attente", "معلق"), confirmed: t("Confirmé", "مؤكد"),
@@ -908,53 +934,120 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency }: {
           </div>
 
           <Separator />
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("Historique des mouvements", "سجل الحركات المالية")}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">{t("Relevé des opérations", "كشف العمليات المالية")}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {t("Débit = montant dû par le client · Crédit = montant payé ou crédité", "مدين = مبلغ على الزبون · دائن = مبلغ مدفوع أو مضاف لرصيده")}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {t("Le solde après est la valeur enregistrée lors de l'opération; — = valeur historique indisponible.", "الرصيد بعد الحركة هو القيمة المسجلة وقت العملية؛ — يعني أن القيمة التاريخية غير متوفرة.")}
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {ops.length} {t("opération(s)", "عملية")}
+            </span>
+          </div>
 
           {ops.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">{t("Aucun mouvement", "لا توجد حركات")}</p>
-          ) : (
-            <div className="space-y-0">
-              {/* Running balance header */}
-              <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-1 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-b">
-                <span>{t("Opération", "العملية")}</span>
-                <span className="text-right">{t("Montant", "المبلغ")}</span>
-                <span className="text-right w-20">{t("Solde", "الرصيد")}</span>
-              </div>
-              {(() => {
-                let running = 0;
-                return ops.map((op) => {
-                  const delta = (op.type === "versement" || op.type === "avoir_retour") ? -Number(op.amount) : Number(op.amount);
-                  running += delta;
-                  const { label, cls } = opTypeLabel(op.type);
-                  const sign = (op.type === "versement" || op.type === "avoir_retour") ? "−" : "+";
-                  return (
-                    <div key={op.id} className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-start py-2.5 border-b border-muted last:border-0">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[10px] font-semibold border rounded px-1.5 py-0.5 shrink-0 ${cls}`}>{label}</span>
-                          {op.reference && <span className="text-[11px] text-muted-foreground font-mono truncate">{op.reference}</span>}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{fmtDt(op.createdAt)}</p>
-                        {op.note && <p className="text-[11px] text-muted-foreground italic mt-0.5">{op.note}</p>}
-                        {/* Real balance snapshot captured at write time — never guessed. "—" for
-                            rows created before this column existed (never backfilled). */}
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {t("Ancien", "قبل")}: {op.balanceBefore != null ? Number(op.balanceBefore).toFixed(2) : "—"}
-                          {" → "}
-                          {t("Nouveau", "بعد")}: {op.balanceAfter != null ? Number(op.balanceAfter).toFixed(2) : "—"}
-                        </p>
-                      </div>
-                      <p className={`text-sm font-bold shrink-0 text-right ${(op.type === "versement" || op.type === "avoir_retour") ? "text-green-700" : op.type === "remboursement" ? "text-red-600" : "text-amber-700"}`}>
-                        {sign}{Number(op.amount).toFixed(2)}
-                      </p>
-                      <p className={`text-sm font-bold shrink-0 text-right w-20 ${running > 0 ? "text-red-600" : running < 0 ? "text-green-700" : "text-muted-foreground"}`}>
-                        {running > 0 ? "+" : ""}{running.toFixed(2)}
-                      </p>
-                    </div>
-                  );
-                });
-              })()}
+            <div className="rounded-lg border border-dashed py-8 text-center">
+              <CreditCard className="h-6 w-6 mx-auto text-muted-foreground/60 mb-2" />
+              <p className="text-sm text-muted-foreground">{t("Aucune opération enregistrée", "لا توجد عمليات مالية مسجلة")}</p>
             </div>
+          ) : (
+            <>
+              <div className="space-y-2 md:hidden">
+                {balanceLedgerRows.map(({ op, debit, credit, operation, recordedBalance, dateLabel }) => (
+                  <article key={op.id} data-testid={`card-customer-balance-operation-${op.id}`} className="rounded-lg border bg-card p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className={`inline-flex text-[11px] font-semibold border rounded-full px-2 py-0.5 ${operation.cls}`}>
+                          {operation.label}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground mt-1">{dateLabel}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {op.reference || "—"}
+                      </span>
+                    </div>
+                    {op.note && <p className="text-xs text-muted-foreground -mt-1">{op.note}</p>}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-md bg-red-50 px-2.5 py-2">
+                        <p className="text-[10px] text-red-700">{t("Débit", "مدين")}</p>
+                        <p className="text-xs font-semibold text-red-600 tabular-nums mt-0.5">{debit == null ? "—" : `${debit.toFixed(2)} ${currency}`}</p>
+                      </div>
+                      <div className="rounded-md bg-green-50 px-2.5 py-2">
+                        <p className="text-[10px] text-green-700">{t("Crédit", "دائن")}</p>
+                        <p className="text-xs font-semibold text-green-700 tabular-nums mt-0.5">{credit == null ? "—" : `${credit.toFixed(2)} ${currency}`}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-2 text-xs">
+                      <span className="text-muted-foreground">{t("Solde après", "الرصيد بعد")}</span>
+                      <span className={`font-bold tabular-nums ${recordedBalance == null ? "text-muted-foreground" : recordedBalance > 0 ? "text-red-600" : recordedBalance < 0 ? "text-green-700" : "text-muted-foreground"}`}>
+                        {recordedBalance == null ? "—" : `${recordedBalance > 0 ? "+" : ""}${recordedBalance.toFixed(2)} ${currency}`}
+                      </span>
+                    </div>
+                    {op.balanceBefore != null && op.balanceAfter != null && (
+                      <p className="text-[10px] text-muted-foreground text-right">
+                        {t("Solde avant", "الرصيد قبل")}: {Number(op.balanceBefore).toFixed(2)} {currency}
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto rounded-lg border">
+              <Table className="min-w-[720px]">
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="text-xs whitespace-nowrap">{t("Date", "التاريخ")}</TableHead>
+                    <TableHead className="text-xs">{t("Opération", "العملية")}</TableHead>
+                    <TableHead className="text-xs">{t("Référence / Note", "المرجع / ملاحظة")}</TableHead>
+                    <TableHead className="text-xs text-right whitespace-nowrap">{t("Débit", "مدين")}</TableHead>
+                    <TableHead className="text-xs text-right whitespace-nowrap">{t("Crédit", "دائن")}</TableHead>
+                    <TableHead className="text-xs text-right whitespace-nowrap">{t("Solde après", "الرصيد بعد")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {balanceLedgerRows.map(({ op, debit, credit, operation, recordedBalance, dateLabel }) => {
+                    return (
+                      <TableRow key={op.id} data-testid={`row-customer-balance-operation-${op.id}`}>
+                        <TableCell className="text-xs tabular-nums whitespace-nowrap">{dateLabel}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex text-[11px] font-semibold border rounded-full px-2 py-0.5 whitespace-nowrap ${operation.cls}`}>
+                            {operation.label}
+                          </span>
+                        </TableCell>
+                        <TableCell className="max-w-[200px]">
+                          <div className="text-xs truncate" title={op.reference ?? undefined}>{op.reference || "—"}</div>
+                          {op.note && <div className="text-[10px] text-muted-foreground truncate mt-0.5" title={op.note}>{op.note}</div>}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums font-semibold text-red-600 whitespace-nowrap">
+                          {debit == null ? "—" : `${debit.toFixed(2)} ${currency}`}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums font-semibold text-green-700 whitespace-nowrap">
+                          {credit == null ? "—" : `${credit.toFixed(2)} ${currency}`}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums whitespace-nowrap">
+                          {recordedBalance == null ? (
+                            <span className="text-muted-foreground" title={t("Aucun instantané enregistré pour cette ancienne opération", "لا تتوفر قيمة محفوظة لهذه العملية القديمة")}>—</span>
+                          ) : (
+                            <span className={`font-bold ${recordedBalance > 0 ? "text-red-600" : recordedBalance < 0 ? "text-green-700" : "text-muted-foreground"}`}>
+                              {recordedBalance > 0 ? "+" : ""}{recordedBalance.toFixed(2)} {currency}
+                            </span>
+                          )}
+                          {op.balanceBefore != null && op.balanceAfter != null && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              {t("Avant", "قبل")}: {Number(op.balanceBefore).toFixed(2)}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              </div>
+            </>
           )}
         </TabsContent>
 
