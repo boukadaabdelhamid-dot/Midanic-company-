@@ -12,6 +12,11 @@ const pid = (req: { params: Record<string, string | string[]> }, key: string): n
 type TransferStatus = typeof schema.stockTransferStatusEnum.enumValues[number];
 
 // ─── helpers ───────────────────────────────────────────────────────
+// Company owners administer tenant-local transfers, not global ERP routes.
+function isTransferAdmin(req: AuthRequest): boolean {
+  return isAdmin(req) || req.user?.role === "tenant_admin";
+}
+
 async function storesBelongToTenant(req: AuthRequest, storeIds: number[]): Promise<boolean> {
   const tenantId = req.user?.platformTenantId;
   if (tenantId === undefined) return true;
@@ -69,7 +74,7 @@ function broadcastTransferChanged(t: { id: number; sourceStoreId: number; destin
 //   Admins may view transfers involving any store they have membership in,
 //   regardless of which store is currently active.
 async function adminHasStoreAccess(req: AuthRequest, storeId: number): Promise<boolean> {
-  if (!isAdmin(req) || !req.user) return false;
+  if (!isTransferAdmin(req) || !req.user) return false;
   const [link] = await db.select({ storeId: schema.userStoresTable.storeId })
     .from(schema.userStoresTable)
     .where(and(
@@ -305,7 +310,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
     // Build line items + match destination products
     const preparedMode = mode === "send";
     if (preparedMode) {
-      if (!isAdmin(req)) {
+      if (!isTransferAdmin(req)) {
         res.status(403).json({ error: "Only admins can send directly without prior approval" });
         return;
       }
@@ -481,14 +486,14 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can prepare")) return;
     if (t.status === "requested") {
       // Direct prepare from 'requested' only allowed for source admin (skip approval).
-      if (!isAdmin(req)) {
+      if (!isTransferAdmin(req)) {
         res.status(409).json({ error: `Cannot prepare from status ${t.status}` }); return;
       }
     } else if (t.status !== "approved") {
       res.status(409).json({ error: `Cannot prepare from status ${t.status}` }); return;
     }
 
-    const allowedFromStatuses: TransferStatus[] = isAdmin(req)
+    const allowedFromStatuses: TransferStatus[] = isTransferAdmin(req)
       ? ["approved", "requested"] : ["approved"];
 
     const updated = await db.transaction(async (tx) => {
@@ -641,7 +646,7 @@ router.post("/erp/transfers/:id/cancel", authenticate, requireStaff, requireStor
     if (t.status === "received" || t.status === "cancelled" || t.status === "rejected") {
       res.status(409).json({ error: `Cannot cancel from status ${t.status}` }); return;
     }
-    if ((t.status === "prepared" || t.status === "in_transit") && !isAdmin(req)) {
+    if ((t.status === "prepared" || t.status === "in_transit") && !isTransferAdmin(req)) {
       res.status(403).json({ error: "Only admin can cancel after items have been prepared/shipped" });
       return;
     }

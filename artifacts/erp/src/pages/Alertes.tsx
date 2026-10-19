@@ -3,6 +3,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLang } from "@/hooks/use-lang";
 import { useMe } from "@/hooks/use-me";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useStoreContext } from "@/hooks/use-store";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -211,6 +212,8 @@ export default function Alertes() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
   const { isAdmin } = useMe();
+  const { can } = usePermissions();
+  const canCreateTransfer = can("transfers", "create");
   const { currentStoreId } = useStoreContext();
   const qc = useQueryClient();
 
@@ -332,6 +335,7 @@ export default function Alertes() {
 
   // ── Dialog helpers ──
   const openDialog = (cfg: DialogConfig) => {
+    if (!canCreateTransfer) return;
     setDialogConfig(cfg);
     setDialogKey((k) => k + 1);
     setDialogOpen(true);
@@ -725,14 +729,14 @@ export default function Alertes() {
                               {t("Coût", "تكلفة")}: {formatPrice(Number(row.cost_price))}
                             </span>
                           )}
-                          <button
+                          {canCreateTransfer && <button
                             type="button"
                             onClick={() => openForSlowMoverTransfer(row)}
                             className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
                           >
                             <Send className="h-3 w-3" />
                             {t("Envoyer vers →", "← إرسال لمتجر")}
-                          </button>
+                          </button>}
                         </div>
                       )}
                     </div>
@@ -819,14 +823,14 @@ export default function Alertes() {
                           </span>
                         )}
                       </div>
-                      <button
+                      {canCreateTransfer && <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); openForProduct(row); }}
                         className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors"
                       >
                         <ArrowLeftRight className="h-3 w-3" />
                         {t("Demander un transfert →", "← طلب نقل")}
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 );
@@ -940,7 +944,7 @@ export default function Alertes() {
       </Tabs>
 
       {/* ── Floating action bar (cross-store multi-select) ─────────────── */}
-      {selected.size > 0 && (
+      {canCreateTransfer && selected.size > 0 && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 text-white rounded-2xl shadow-2xl px-4 py-2.5 max-w-[90vw]">
           {multiStoreConflict ? (
             <span className="text-[11px] text-amber-300 flex items-center gap-1.5 shrink-0">
@@ -975,7 +979,7 @@ export default function Alertes() {
       {/* ── Transfer dialog ────────────────────────────────────────────── */}
       <CreateTransferDialog
         key={dialogKey}
-        open={dialogOpen}
+        open={dialogOpen && canCreateTransfer}
         onOpenChange={(o) => {
           setDialogOpen(o);
           if (!o) setSelected(new Set());

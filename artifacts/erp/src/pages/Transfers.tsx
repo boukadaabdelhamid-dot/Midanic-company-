@@ -20,6 +20,7 @@ import {
 } from "@workspace/erp-api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useMe } from "@/hooks/use-me";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useStoreContext } from "@/hooks/use-store";
 import { useLang } from "@/hooks/use-lang";
 import { Card, CardContent } from "@/components/ui/card";
@@ -92,6 +93,7 @@ function findByCode(products: ProductLite[], raw: string): ProductLite | undefin
 export default function Transfers() {
   const qc = useQueryClient();
   const { user, isAdmin } = useMe();
+  const { can } = usePermissions();
   const { currentStoreId } = useStoreContext();
   const { lang } = useLang();
   const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
@@ -121,13 +123,13 @@ export default function Transfers() {
             {tr("Transferts de stock inter-magasins", "تحويلات المخزون بين المتاجر")}
           </p>
         </div>
-        <Button
+        {can("transfers", "create") && <Button
           onClick={() => setOpenCreate(true)}
           disabled={otherStores.length === 0}
           data-testid="button-new-transfer"
         >
           <Plus className="h-4 w-4 mr-2" /> {tr("Nouveau transfert", "تحويل جديد")}
-        </Button>
+        </Button>}
       </div>
 
       <Tabs value={direction} onValueChange={(v) => setDirection(v as "in" | "out" | "all")}>
@@ -431,6 +433,8 @@ export function CreateTransferDialog({
   initialPickedProducts?: Record<number, ProductLite>;
 }) {
   const { lang } = useLang();
+  const { can } = usePermissions();
+  const canCreate = can("transfers", "create");
   const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
   const [direction, setDirection] = useState<"out" | "in">(initialDirection ?? "out");
   const [otherStoreId, setOtherStoreId] = useState(initialStoreId ?? "");
@@ -446,7 +450,7 @@ export function CreateTransferDialog({
 
   const { data: inboundData } = useQuery({
     queryKey: ["/api/erp/stores/products", Number(otherStoreId)],
-    enabled: direction === "in" && !!otherStoreId,
+    enabled: open && canCreate && direction === "in" && !!otherStoreId,
     queryFn: async () => {
       const token = localStorage.getItem("midanic_token");
       const res = await fetch(`${API_BASE}/api/erp/stores/${otherStoreId}/products`, {
@@ -553,6 +557,7 @@ export function CreateTransferDialog({
   }, [otherStoreId, lines, hasUnmatchable]);
 
   const submit = () => {
+    if (!canCreate || !valid) return;
     const otherId = Number(otherStoreId);
     create.mutate(
       {
@@ -575,7 +580,7 @@ export function CreateTransferDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+    <Dialog open={open && canCreate} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{tr("Nouveau transfert", "تحويل جديد")}</DialogTitle>
@@ -741,7 +746,7 @@ export function CreateTransferDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tr("Annuler", "إلغاء")}</Button>
-          <Button onClick={submit} disabled={!valid || create.isPending} data-testid="button-submit-transfer">
+          <Button onClick={submit} disabled={!canCreate || !valid || create.isPending} data-testid="button-submit-transfer">
             {mode === "send" ? tr("Envoyer", "إرسال") : tr("Demander", "طلب")}
           </Button>
         </DialogFooter>
@@ -762,6 +767,8 @@ function TransferDetailDialog({
   onChanged: () => void;
 }) {
   const { lang } = useLang();
+  const { can } = usePermissions();
+  const canEdit = can("transfers", "edit");
   const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
   const { data: detail, isLoading } = useGetErpTransfer(id);
   const approve = useApproveErpTransfer();
@@ -776,6 +783,7 @@ function TransferDetailDialog({
   const isDest = td ? currentStoreId === td.destinationStoreId : false;
 
   const act = (m: { mutate: (v: { id: number }, opts: { onSuccess: () => void }) => void }) => {
+    if (!canEdit) return;
     m.mutate({ id }, { onSuccess: () => onChanged() });
   };
 
@@ -871,7 +879,7 @@ function TransferDetailDialog({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 pt-2 border-t">
+            {canEdit && <div className="flex flex-wrap gap-2 pt-2 border-t">
               {td.status === "requested" && isDest && (
                 <>
                   <Button size="sm" onClick={() => act(approve)} disabled={approve.isPending} data-testid="button-approve">
@@ -903,7 +911,7 @@ function TransferDetailDialog({
                   <Ban className="h-4 w-4 mr-1" /> {tr("Annuler", "إلغاء")}
                 </Button>
               )}
-            </div>
+            </div>}
             {(approve.error || reject.error || prepare.error || ship.error || receive.error || cancel.error) && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
                 {((approve.error || reject.error || prepare.error || ship.error || receive.error || cancel.error) as { error?: string })?.error ?? tr("Action échouée", "فشل الإجراء")}

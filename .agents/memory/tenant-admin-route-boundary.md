@@ -3,7 +3,7 @@ name: Tenant-admin route boundary
 description: Tenant-facing ERP administration must use tenant-aware authorization and must not seed the global platform admin into tenant data.
 ---
 
-Tenant company owners authenticate with the JWT role `tenant_admin`, even though their local ERP database user may have the database role `admin`. Tenant-facing store, staff, permission, and caisse-administration routes must therefore use the tenant-aware authorization boundary and scope records to the authenticated tenant; `requireAdmin`/`isAdmin` remain reserved for global platform administration.
+Tenant company owners authenticate with the JWT role `tenant_admin`, even though their local ERP database user may have the database role `admin`. Tenant-facing store, staff, permission, caisse-administration, and inter-store transfer operations must therefore use the tenant-aware authorization boundary and scope records to the authenticated tenant; `requireAdmin`/`isAdmin` remain reserved for global platform administration.
 
 **Why:** Using the global-admin middleware made company pages silently render empty after 403 responses, while the tenant bootstrap also seeded `Midanic Admin` into every company database.
 

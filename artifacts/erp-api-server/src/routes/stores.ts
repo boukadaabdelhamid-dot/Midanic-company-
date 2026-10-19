@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, sql, ilike, or, and } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
-import { authenticate, configuredTenantLimit, requireAdmin, requireTenantAdmin, requireStaff, requireStore, type AuthRequest } from "../lib/auth";
+import { authenticate, configuredTenantLimit, requireTenantAdmin, requireStaff, requireStore, requirePermission, type AuthRequest } from "../lib/auth";
 import { countLimitReached } from "../lib/entitlement-limits";
 import { resolvePublicStore, type PublicStoreRequest } from "../lib/store-context";
 
@@ -271,16 +271,29 @@ router.get("/erp/stores/:id/users", authenticate, requireTenantAdmin, async (req
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// Product catalogue for a specific store (read-only, admin only).
+// Read-only counterparty catalogue for staff creating an inter-store transfer.
 // Used by the "Demander depuis un autre magasin" flow so the initiating store
 // can search the SOURCE store's products by name / reference / barcode instead
 // of having to type raw product IDs.
-router.get("/erp/stores/:id/products", authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.get("/erp/stores/:id/products", authenticate, requireStaff, requireStore, requirePermission("transfers", "create"), async (req: AuthRequest, res) => {
   try {
-    const storeId = pid(req, "id");
-    if (!Number.isFinite(storeId)) {
+    const storeId = Number(req.params["id"]);
+    if (!Number.isInteger(storeId) || storeId <= 0 || storeId === req.currentStoreId) {
       res.status(400).json({ error: "Invalid storeId" }); return;
     }
+    const [counterparty] = await db.select({ id: schema.storesTable.id })
+      .from(schema.storesTable)
+      .where(and(
+        eq(schema.storesTable.id, storeId),
+        eq(schema.storesTable.isActive, true),
+        req.user!.platformTenantId === undefined
+          ? undefined
+          : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      )).limit(1);
+    if (!counterparty) {
+      res.status(404).json({ error: "Counterparty store not found or inactive" }); return;
+    }
+    res.set("Cache-Control", "no-store");
     const search = (req.query["search"] as string | undefined)?.trim();
     const searchFilter = search
       ? or(
