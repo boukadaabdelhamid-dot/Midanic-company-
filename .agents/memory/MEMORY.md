@@ -32,3 +32,4 @@
 - [Guest order identity](guest-order-identity.md) — registration stays optional; phone/name search aids CRM, but an unverified phone must never grant account or order-history access
 - [Supplier statement date filters](supplier-statement-date-filters.md) — filter displayed operations only after computing full-history balances; current account balance stays period-independent
 - [CSV BOM verification](csv-bom-verification.md) — use raw bytes to test UTF-8 BOMs; `Blob.text()` may consume the marker
+- [Legacy sales-source integrity](legacy-sales-source-integrity.md) — historical online labels may be wrong; do not infer a sale channel solely from a missing seller.
