@@ -67,6 +67,10 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
       platformUserId: 701, platformTenantId: 701, tenantHostname: hostname,
     };
     const employee = { ...owner, id: 91002, role: "employee" as const };
+    const localAdmin: JwtPayload = {
+      ...owner, id: 91004, email: "local-admin@example.test", credentialSource: "local",
+    };
+    const localAdminToken = signToken(localAdmin);
     const otherOwner = {
       ...owner, id: 91003, platformUserId: 702, platformTenantId: 702, tenantHostname: `other-${hostname}`,
     };
@@ -80,6 +84,7 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
     assert.equal((await request(oldOwnerToken)).status, 200);
     assert.equal((await request(secondCompanyToken, `second-${hostname}`)).status, 200);
     assert.equal((await request(employeeToken)).status, 200);
+    assert.equal((await request(localAdminToken)).status, 200);
     assert.equal((await request(otherToken, otherOwner.tenantHostname)).status, 200);
     const optionalRequest = (path: string, token?: string) => fetch(`${origin}${path}`, {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "X-Tenant-Hostname": hostname },
@@ -101,6 +106,7 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
     };
     const ownerSocket = await connect(oldOwnerToken, hostname);
     const employeeSocket = await connect(employeeToken, hostname);
+    const localAdminSocket = await connect(localAdminToken, hostname);
     const otherSocket = await connect(otherToken, otherOwner.tenantHostname);
     versions.set(701, 1);
 
@@ -109,6 +115,11 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
     assert.equal(((await revoked.json()) as { code: string }).code, "SESSION_REVOKED");
     assert.equal((await request(secondCompanyToken, `second-${hostname}`)).status, 401);
     assert.equal((await request(employeeToken)).status, 200);
+    assert.equal((await request(localAdminToken)).status, 200, "owner password rotation must not revoke a local admin");
+    assert.equal((await request(signToken({ ...localAdmin, role: "admin" }))).status, 200);
+    for (const path of ["/optional", "/optional-tenant", "/optional-strict"]) {
+      assert.equal((await optionalRequest(path, localAdminToken)).status, 200);
+    }
     assert.equal((await request(otherToken, otherOwner.tenantHostname)).status, 200);
     assert.equal((await request(signToken({ ...owner, platformSessionVersion: 1 }))).status, 200);
     for (const path of ["/optional", "/optional-tenant", "/optional-strict", "/products?filterExposed=false", "/products/999999999", "/categories"]) {
@@ -123,20 +134,27 @@ test("password rotation revokes only the owner's HTTP and open WebSocket session
       ownerUserId: 999, ownerSessionVersion: 1,
     }), false);
     assert.equal(isOwnerSessionCurrent(owner, { ownerUserId: 701 }), false);
+    assert.equal(isOwnerSessionCurrent({ ...owner, credentialSource: "platform" }, {
+      ownerUserId: 701, ownerSessionVersion: 1,
+    }), false, "platform-owned credentials must still require the current generation");
 
     const close = once(ownerSocket, "close");
     const employeeMessage = once(employeeSocket, "message");
     const otherMessage = once(otherSocket, "message");
-    broadcastToUsers([owner.id, employee.id, otherOwner.id], { type: "fixture-after-reset" });
+    const localAdminMessage = once(localAdminSocket, "message");
+    broadcastToUsers([owner.id, employee.id, otherOwner.id, localAdmin.id], { type: "fixture-after-reset" });
     assert.equal((await close)[0], 4001);
     assert.equal(JSON.parse(String((await employeeMessage)[0])).type, "fixture-after-reset");
     assert.equal(JSON.parse(String((await otherMessage)[0])).type, "fixture-after-reset");
+    assert.equal(JSON.parse(String((await localAdminMessage)[0])).type, "fixture-after-reset");
+    assert.equal(localAdminSocket.readyState, WebSocket.OPEN);
     assert.equal(employeeSocket.readyState, WebSocket.OPEN);
     assert.equal(otherSocket.readyState, WebSocket.OPEN);
 
     versions.set(701, 2);
     assert.equal((await request(signToken({ ...owner, platformSessionVersion: 1 }))).status, 401);
     assert.equal((await request(signToken({ ...owner, platformSessionVersion: 2 }))).status, 200);
+    assert.equal((await request(localAdminToken)).status, 200);
   } finally {
     for (const ws of sockets) ws.terminate();
     wss.close();

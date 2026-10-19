@@ -14,3 +14,9 @@ Owner session revocation belongs to Platform as a persistent, per-account genera
 **Why:** A password can control several tenant databases. Local revocation fan-out can partially fail or race with password updates. Also, employee/customer tokens carry the owner's Platform ID for tenant routing, not credential ownership: revoking everything with that ID would incorrectly disconnect the whole company.
 
 **How to apply:** Check generations only for linked owner/admin sessions, preserve them when reissuing store-selection tokens, and guard both HTTP requests and existing WebSocket deliveries. Optional-auth routes must use the same verification: “optional” allows no token, never a supplied revoked token falling through as anonymous or retaining owner privileges. Do not add a cached revocation grace period.
+
+Company administrator privileges do not imply ownership of the Platform credentials. Local-password administrators must remain independent of the owner's password rotation, even when their tenant token carries the owner's Platform ID for routing.
+
+**Why:** A full-permission local administrator can receive the same tenant-admin role as an owner. Inferring credential ownership from that role revoked the administrator's newly issued sessions after the owner's password changed.
+
+**How to apply:** Distinguish credential ownership using a server-signed source established during successful authentication, and retain that distinction across store switches. Tokens without that distinction retain the legacy fail-closed owner checks; do not exempt every tenant administrator or assign local administrators the owner's latest generation.

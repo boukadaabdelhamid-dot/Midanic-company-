@@ -52,6 +52,9 @@ export type JwtPayload = {
   platformTenantId?: number;
   tenantHostname?: string;
   platformSessionVersion?: number;
+  // Credential ownership is separate from the company owner's routing ID.
+  // Only the server's successful local-password login may issue "local".
+  credentialSource?: "local" | "platform";
 };
 
 export type PlatformSsoPayload = {
@@ -114,6 +117,7 @@ export function isOwnerSessionCurrent(
   tenant: { ownerUserId?: number; ownerSessionVersion?: number } | null,
 ): boolean {
   if (!user.platformUserId || (user.role !== "tenant_admin" && user.role !== "admin")) return true;
+  if (user.credentialSource === "local") return true;
   return tenant?.ownerUserId === user.platformUserId &&
     Number.isSafeInteger(tenant.ownerSessionVersion) &&
     (tenant.ownerSessionVersion ?? -1) >= 0 &&

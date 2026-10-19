@@ -174,6 +174,7 @@ router.post("/auth/sso/exchange", async (req, res) => {
       currentStoreId: activeStore.id,
       platformUserId: sso.userId,
       platformSessionVersion: platformCredentials.erpSessionVersion,
+      credentialSource: "platform",
       platformTenantId: sso.tenantId,
       tenantHostname: sso.hostname,
     });
@@ -327,6 +328,7 @@ router.post("/auth/login", async (req, res) => {
               currentStoreId: store.id,
               platformUserId: tenantDomain.ownerUserId,
               platformSessionVersion: platformCredentials.erpSessionVersion,
+              credentialSource: "platform",
               platformTenantId: tenantDomain.tenantId,
               tenantHostname: tenantDomain.hostname,
             });
@@ -387,6 +389,7 @@ router.post("/auth/login", async (req, res) => {
         email: user.email,
         role: user.role === "admin" && tenantDomain ? "tenant_admin" : user.role,
         platformSessionVersion,
+        credentialSource: user.platformUserId ? "platform" : "local",
         currentStoreId,
         ...(tenantDomain
           ? {
@@ -770,6 +773,7 @@ router.post("/auth/select-store", authenticate, async (req: AuthRequest, res) =>
       currentStoreId: store.id,
       platformUserId: req.user!.platformUserId,
       platformSessionVersion: req.user!.platformSessionVersion,
+      credentialSource: req.user!.credentialSource,
       platformTenantId: req.user!.platformTenantId,
       tenantHostname: req.user!.tenantHostname,
     });
