@@ -5326,7 +5326,9 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
     const supplierFilter = supplierId   ? sql` AND ls.supplier_id = ${parseInt(supplierId, 10)}`                                                                                                                                            : sql``;
     const familyFilter   = familyId     ? sql` AND p.family_id = ${parseInt(familyId, 10)}`                                                                                                                                                 : sql``;
     const brandFilter    = brandId      ? sql` AND p.brand_id = ${parseInt(brandId, 10)}`                                                                                                                                                   : sql``;
-    const cityFilter     = supplierCity ? sql` AND lower(sup.address) LIKE ${`%${supplierCity.toLowerCase()}%`}`                                                                                                                             : sql``;
+    const cityFilter     = supplierCity
+      ? sql` AND lower(COALESCE(NULLIF(BTRIM(sup.commune), ''), NULLIF(BTRIM(sup.wilaya), ''))) = lower(${supplierCity.trim()})`
+      : sql``;
     const searchFilter   = search       ? sql` AND (lower(p.name_en) LIKE ${`%${search.toLowerCase()}%`} OR lower(p.name_ar) LIKE ${`%${search.toLowerCase()}%`} OR lower(COALESCE(p.reference,'')) LIKE ${`%${search.toLowerCase()}%`})` : sql``;
     const dateFilter     = (dateFrom && dateTo)
       ? sql` AND o.created_at BETWEEN ${dateFrom}::timestamp AND (${dateTo}::timestamp + INTERVAL '1 day')`
@@ -5462,11 +5464,11 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// GET /erp/purchases/filter-options — families, brands & supplier cities (purchases:view, no settings perm needed)
+// GET /erp/purchases/filter-options — families, brands & supplier communes/wilayas (purchases:view, no settings perm needed)
 router.get("/erp/purchases/filter-options", authenticate, requireStaff, requireStore, requirePermission("purchases", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
-    const [families, brands, citiesRaw, suppliers] = await Promise.all([
+    const [families, brands, supplierLocations, suppliers] = await Promise.all([
       db.select({ id: schema.productFamiliesTable.id, nameFr: schema.productFamiliesTable.nameFr, nameAr: schema.productFamiliesTable.nameAr })
         .from(schema.productFamiliesTable)
         .where(eq(schema.productFamiliesTable.storeId, storeId))
@@ -5475,19 +5477,22 @@ router.get("/erp/purchases/filter-options", authenticate, requireStaff, requireS
         .from(schema.productBrandsTable)
         .where(eq(schema.productBrandsTable.storeId, storeId))
         .orderBy(schema.productBrandsTable.nameFr),
-      db.selectDistinct({ city: schema.suppliersTable.address })
+      db.select({
+        commune: schema.suppliersTable.commune,
+        wilaya: schema.suppliersTable.wilaya,
+      })
         .from(schema.suppliersTable)
-        .where(and(
-          eq(schema.suppliersTable.storeId, storeId),
-          sql`${schema.suppliersTable.address} IS NOT NULL AND TRIM(${schema.suppliersTable.address}) <> ''`,
-        ))
-        .orderBy(schema.suppliersTable.address),
+        .where(eq(schema.suppliersTable.storeId, storeId)),
       db.select({ id: schema.suppliersTable.id, name: schema.suppliersTable.name })
         .from(schema.suppliersTable)
         .where(eq(schema.suppliersTable.storeId, storeId))
         .orderBy(schema.suppliersTable.name),
     ]);
-    const supplierCities = citiesRaw.map(r => r.city).filter((c): c is string => !!c);
+    const supplierCities = Array.from(new Set(
+      supplierLocations
+        .map(({ commune, wilaya }) => commune?.trim() || wilaya?.trim() || "")
+        .filter(Boolean),
+    )).sort((a, b) => a.localeCompare(b));
     res.json({ families, brands, supplierCities, suppliers });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });

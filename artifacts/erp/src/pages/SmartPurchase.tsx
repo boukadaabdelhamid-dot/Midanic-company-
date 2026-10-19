@@ -156,6 +156,10 @@ function supplierSelectOptions(suppliers: Array<{ id: number; name: string }>): 
   return suppliers.map((supplier) => ({ value: String(supplier.id), labelFr: supplier.name }));
 }
 
+function citySelectOptions(cities: string[]): SearchableSelectOption[] {
+  return cities.map((city) => ({ value: city, labelFr: city }));
+}
+
 async function fetchFilterOptions(): Promise<FilterOptions> {
   const res = await fetch(`${API_BASE}/api/erp/purchases/filter-options`, { headers: authHeaders() });
   if (!res.ok) throw new Error("filter-options failed");
@@ -1387,6 +1391,7 @@ export default function SmartPurchase() {
   const brands   = useMemo(() => filterOpts?.brands   ?? [], [filterOpts]);
   const suppliers = useMemo(() => filterOpts?.suppliers ?? [], [filterOpts]);
   const supplierOptions = useMemo(() => supplierSelectOptions(suppliers), [suppliers]);
+  const cityOptions = useMemo(() => citySelectOptions(filterOpts?.supplierCities ?? []), [filterOpts]);
 
   // Build query params — stockFilter included so tab changes reset pagination
   const queryParams = useMemo(() => {
@@ -2284,11 +2289,15 @@ export default function SmartPurchase() {
             {/* Supplier city */}
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("Ville du fournisseur", "مدينة المورد")}</label>
-              <Input
-                className="h-12 rounded-xl"
-                placeholder={t("Ex : Alger, Oran…", "مثال: الجزائر، وهران…")}
+              <SearchableSelect
                 value={filterCity}
-                onChange={(e) => setFilterCity(e.target.value)}
+                onValueChange={setFilterCity}
+                options={cityOptions}
+                className="h-12 rounded-xl"
+                placeholder={t("Choisir une ville...", "اختر المدينة...")}
+                searchPlaceholder={t("Rechercher une ville...", "ابحث عن مدينة...")}
+                emptyText={t("Aucune ville trouvée", "لم يتم العثور على مدينة")}
+                noneLabel={t("Toutes les villes", "كل المدن")}
               />
             </div>
 

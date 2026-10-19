@@ -16,6 +16,8 @@ test("smart purchase filter options include every supplier for the active store"
   assert.match(filterOptionsRoute, /id: schema\.suppliersTable\.id,\s*name: schema\.suppliersTable\.name/);
   assert.match(filterOptionsRoute, /eq\(schema\.suppliersTable\.storeId, storeId\)/);
   assert.match(filterOptionsRoute, /orderBy\(schema\.suppliersTable\.name\)/);
+  assert.match(filterOptionsRoute, /commune: schema\.suppliersTable\.commune/);
+  assert.match(filterOptionsRoute, /wilaya: schema\.suppliersTable\.wilaya/);
   assert.match(filterOptionsRoute, /res\.json\(\{ families, brands, supplierCities, suppliers \}\)/);
 });
 
@@ -27,9 +29,16 @@ test("supplier options are refreshed and scoped per selected store", () => {
 });
 
 test("supplier filtering and quick ordering use searchable scrollable pickers", () => {
-  assert.equal((erpPage.match(/<SearchableSelect/g) ?? []).length, 3);
+  assert.equal((erpPage.match(/<SearchableSelect/g) ?? []).length, 4);
   assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher un fournisseur…", "ابحث عن مورد…"\)\}/);
+  assert.match(erpPage, /function citySelectOptions\(cities: string\[\]\)/);
+  assert.match(erpPage, /searchPlaceholder=\{t\("Rechercher une ville\.\.\.", "ابحث عن مدينة\.\.\."\)\}/);
+  assert.doesNotMatch(erpPage, /placeholder=\{t\("Ex : Alger, Oran/);
   assert.match(selectComponent, /<CommandInput/);
   assert.match(selectComponent, /max-h-\[220px\]/);
   assert.match(commandComponent, /overflow-y-auto/);
+});
+
+test("selected city filters by a supplier's saved commune, then wilaya", () => {
+  assert.match(apiRoutes, /COALESCE\(NULLIF\(BTRIM\(sup\.commune\), ''\), NULLIF\(BTRIM\(sup\.wilaya\), ''\)\)\) = lower\(\$\{supplierCity\.trim\(\)\}\)/);
 });
