@@ -25,6 +25,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/hooks/use-lang";
+import { usePermissions } from "@/hooks/use-permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,13 +54,13 @@ type AttributeForm = { nameAr: string; nameFr: string; hexCode?: string; imageUr
 
 function AttributeTable({
   title, titleAr, icon: Icon, items, isLoading, onAdd, onEdit, onDelete, onCopy,
-  showHex = false, showImage = false, t,
+  showHex = false, showImage = false, canAdd = true, canEdit = true, canDelete = true, t,
 }: {
   title: string; titleAr: string; icon: React.ComponentType<{ className?: string }>;
   items: AttributeItem[]; isLoading: boolean;
   onAdd: () => void; onEdit: (item: AttributeItem) => void; onDelete: (item: AttributeItem) => void;
   onCopy?: () => void;
-  showHex?: boolean; showImage?: boolean; t: TFn;
+  showHex?: boolean; showImage?: boolean; canAdd?: boolean; canEdit?: boolean; canDelete?: boolean; t: TFn;
 }) {
   return (
     <Card className="border shadow-sm">
@@ -77,10 +78,12 @@ function AttributeTable({
                 {t("Copier vers...", "نسخ إلى...")}
               </Button>
             )}
-            <Button size="sm" className="bg-[#1B3057] hover:bg-[#152544] h-8 text-xs gap-1" onClick={onAdd}>
-              <Plus className="h-3.5 w-3.5" />
-              {t("Ajouter", "إضافة")}
-            </Button>
+            {canAdd && (
+              <Button size="sm" className="bg-[#1B3057] hover:bg-[#152544] h-8 text-xs gap-1" onClick={onAdd}>
+                <Plus className="h-3.5 w-3.5" />
+                {t("Ajouter", "إضافة")}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -138,12 +141,16 @@ function AttributeTable({
                   )}
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-[#1B3057]" onClick={() => onEdit(item)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-red-600" onClick={() => onDelete(item)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {canEdit && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-[#1B3057]" onClick={() => onEdit(item)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-red-600" onClick={() => onDelete(item)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -160,6 +167,7 @@ export default function ProductSettings() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { lang } = useLang();
+  const { can } = usePermissions();
   const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
 
   const { data: familiesData, isLoading: loadingFamilies } = useGetErpSettingsProductsFamilies();
@@ -337,6 +345,7 @@ export default function ProductSettings() {
             icon={LayoutGrid}
             items={types}
             isLoading={loadingTypes}
+            canAdd={can("settings", "create")}
             onAdd={() => openAdd("type")}
             onEdit={(item) => openEdit("type", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "type" })}
@@ -358,10 +367,13 @@ export default function ProductSettings() {
             icon={Layers}
             items={families}
             isLoading={loadingFamilies}
+            canAdd={can("settings", "create_family")}
+            canEdit={can("settings", "edit")}
+            canDelete={can("settings", "delete")}
             onAdd={() => openAdd("family")}
             onEdit={(item) => openEdit("family", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "family" })}
-            onCopy={() => setCopyModal({ open: true, type: "family" })}
+            onCopy={can("settings", "create") ? () => setCopyModal({ open: true, type: "family" }) : undefined}
             t={t}
           />
         </TabsContent>
@@ -373,6 +385,7 @@ export default function ProductSettings() {
             icon={Tag}
             items={brands}
             isLoading={loadingBrands}
+            canAdd={can("settings", "create")}
             onAdd={() => openAdd("brand")}
             onEdit={(item) => openEdit("brand", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "brand" })}
@@ -388,6 +401,7 @@ export default function ProductSettings() {
             icon={Palette}
             items={colors}
             isLoading={loadingColors}
+            canAdd={can("settings", "create")}
             onAdd={() => openAdd("color")}
             onEdit={(item) => openEdit("color", item)}
             onDelete={(item) => setDeleteTarget({ item, type: "color" })}

@@ -1418,13 +1418,13 @@ export default function Products() {
             <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span>{t("Détails", "تفاصيل المنتج")}</span>
           </button>
-          <button
+          {can("products", "view_history") && <button
             className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-muted/60 transition-colors text-right"
             onClick={() => { setOpenMenuId(null); setMenuPos(null); setMenuProduct(null); setHistoryProduct(menuProduct); }}
           >
             <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span>{t("Historique", "سجل الحركات")}</span>
-          </button>
+          </button>}
           <div className="my-1 border-t" />
           <button
             className={`flex w-full items-center gap-2.5 px-3 py-2 transition-colors text-right ${menuProduct.barcode ? "hover:bg-muted/60" : "opacity-40 cursor-not-allowed"}`}

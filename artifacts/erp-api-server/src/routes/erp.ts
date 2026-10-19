@@ -791,7 +791,7 @@ router.put("/erp/permissions/:userId", authenticate, requireTenantAdmin, require
       // inventory
       "count",
       // settings
-      "edit_store_name", "edit_default_customer", "manage_permissions", "manage_stores",
+      "edit_store_name", "edit_default_customer", "manage_permissions", "manage_stores", "create_family",
       // customers (granular)
       "view_balance",
       // web_store
@@ -2651,7 +2651,7 @@ router.delete("/erp/purchase-annexe-charges/:id", authenticate, requireStaff, re
 });
 
 // ─── Product History ───────────────────────────────────────────────
-router.get("/erp/products/:productId/history", authenticate, requireAdmin, requireStore, async (req: AuthRequest, res) => {
+router.get("/erp/products/:productId/history", authenticate, requireStaff, requireStore, requirePermission("products", "view_history"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const productId = pid(req, "productId");

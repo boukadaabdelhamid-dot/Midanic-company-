@@ -66,7 +66,7 @@ router.get("/erp/settings/products/families", authenticate, requireStaff, requir
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/erp/settings/products/families", authenticate, requireStaff, requireStore, requirePermission("settings", "create"), async (req: AuthRequest, res) => {
+router.post("/erp/settings/products/families", authenticate, requireStaff, requireStore, requirePermission("settings", "create_family"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const parsed = attributeSchema.safeParse(req.body);

@@ -630,7 +630,7 @@ router.get("/erp/products/:id/barcodes", authenticate, requireStaff, requireStor
 });
 
 // POST /erp/products/:id/barcodes — add a barcode
-router.post("/erp/products/:id/barcodes", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
+router.post("/erp/products/:id/barcodes", authenticate, requireStaff, requireStore, requirePermission("products", "manage_barcodes"), async (req: AuthRequest, res) => {
   try {
     const productId = pid(req, "id");
     const [product] = await db.select({ storeId: schema.productsTable.storeId })
@@ -1319,7 +1319,7 @@ router.post(
 );
 
 // DELETE /erp/products/:id/barcodes/:barcodeId — remove a barcode
-router.delete("/erp/products/:id/barcodes/:barcodeId", authenticate, requireStaff, requireStore, requirePermission("products", "delete"), async (req: AuthRequest, res) => {
+router.delete("/erp/products/:id/barcodes/:barcodeId", authenticate, requireStaff, requireStore, requirePermission("products", "manage_barcodes"), async (req: AuthRequest, res) => {
   try {
     const productId = pid(req, "id");
     const barcodeId = pid(req, "barcodeId");

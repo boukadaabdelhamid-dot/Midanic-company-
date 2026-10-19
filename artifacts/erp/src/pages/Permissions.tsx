@@ -5,7 +5,7 @@ import {
   Eye, PenLine, Plus, Trash2, Lock, Unlock,
   Printer, CreditCard, Tag, TrendingUp, Globe, Package,
   Image as ImageIcon, Copy, Send, Upload, QrCode, History,
-  LayoutGrid, Check, Cloud, Columns3, Store, User, Building2, Receipt,
+  LayoutGrid, Check, Cloud, Columns3, Store, User, Building2, Receipt, Layers,
   ShoppingCart, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,7 @@ const SECTION_ACTIONS: Record<string, ActionDef[]> = {
   ],
   settings: [
     { key: "view",                  labelFr: "Voir les paramètres",                     labelAr: "عرض الإعدادات",                  icon: Eye      },
+    { key: "create_family",         labelFr: "Créer une famille de produits",           labelAr: "إنشاء عائلة منتجات",              icon: Layers   },
     { key: "edit_store_name",       labelFr: "Modifier le nom du magasin",              labelAr: "تعديل اسم المتجر",               icon: Store    },
     { key: "edit_default_customer", labelFr: "Modifier le client comptoir par défaut",  labelAr: "تغيير عميل الكاونتر الافتراضي", icon: User     },
     { key: "manage_permissions",    labelFr: "Accéder à la gestion des permissions",    labelAr: "الوصول لإدارة الصلاحيات",       icon: Shield   },
