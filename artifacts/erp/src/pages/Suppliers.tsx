@@ -2,11 +2,11 @@ import { getApiBase } from "../lib/api-base";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   useCreateSupplier, useUpdateSupplier,
-  useGetSupplierOperations, useCreateSupplierOperation,
+  useCreateSupplierOperation,
   useGetErpStoresAll,
   getGetSupplierOperationsQueryKey, getGetErpCustomersQueryKey,
 } from "@workspace/erp-api-client-react";
-import type { Supplier, SupplierOperation } from "@workspace/erp-api-client-react";
+import type { Supplier, SupplierOperation, SupplierStatementResponse } from "@workspace/erp-api-client-react";
 import { useQueryClient, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLang } from "@/hooks/use-lang";
 import { useStoreContext } from "@/hooks/use-store";
@@ -334,8 +334,35 @@ function StatementSheet({
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const qc = useQueryClient();
   const linked = !!(supplier as GlobalSupplier | null)?.globalSupplierId;
-  const { data, isLoading } = useGetSupplierOperations(supplier?.id ?? 0, {
-    query: { enabled: open && !!supplier, queryKey: getGetSupplierOperationsQueryKey(supplier?.id ?? 0) },
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const invalidDateRange = !!startDate && !!endDate && startDate > endDate;
+
+  useEffect(() => {
+    setStartDate("");
+    setEndDate("");
+  }, [supplier?.id, open]);
+
+  const supplierId = supplier?.id ?? 0;
+  const statementQueryKey = [...getGetSupplierOperationsQueryKey(supplierId), startDate, endDate];
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: statementQueryKey,
+    enabled: open && !!supplier && !invalidDateRange,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams();
+      if (startDate) params.set("startDate", startDate);
+      if (endDate) params.set("endDate", endDate);
+      const query = params.toString();
+      const token = localStorage.getItem("midanic_token") ?? "";
+      const response = await fetch(
+        `${getApiBase()}/api/erp/suppliers/${supplierId}/operations${query ? `?${query}` : ""}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal },
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch supplier statement (${response.status})`);
+      }
+      return response.json() as Promise<SupplierStatementResponse>;
+    },
   });
 
   // contactBalance is the unified contacts.current_balance returned by the API for
@@ -479,11 +506,53 @@ function StatementSheet({
         )}
 
         <div className="p-4" dir={lang === "ar" ? "rtl" : "ltr"}>
-          {isLoading ? (
+          <div className="mb-4 grid grid-cols-1 gap-3 rounded-lg border bg-slate-50 p-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="supplier-statement-start-date" className="text-xs">
+                {t("Date de début", "تاريخ البداية")}
+              </Label>
+              <Input
+                id="supplier-statement-start-date"
+                data-testid="input-supplier-statement-start-date"
+                type="date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="h-9 bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="supplier-statement-end-date" className="text-xs">
+                {t("Date de fin", "تاريخ النهاية")}
+              </Label>
+              <Input
+                id="supplier-statement-end-date"
+                data-testid="input-supplier-statement-end-date"
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="h-9 bg-white"
+              />
+            </div>
+            {invalidDateRange && (
+              <p className="text-xs text-rose-600 sm:col-span-2">
+                {t("La date de début ne peut pas être après la date de fin.", "لا يمكن أن يكون تاريخ البداية بعد تاريخ النهاية.")}
+              </p>
+            )}
+          </div>
+          {invalidDateRange ? null : isLoading ? (
             <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : isError ? (
+            <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 py-6 text-center text-sm text-rose-700">
+              {t("Impossible de charger le relevé.", "تعذر تحميل كشف الحساب.")}
+              <span className="sr-only"> {(error as Error).message}</span>
+            </div>
           ) : !data?.operations?.length ? (
             <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground italic">
-              {t("Aucune opération", "لا توجد عمليات")}
+              {startDate || endDate
+                ? t("Aucune opération sur cette période", "لا توجد عمليات خلال هذه الفترة")
+                : t("Aucune opération", "لا توجد عمليات")}
             </div>
           ) : (
             <>

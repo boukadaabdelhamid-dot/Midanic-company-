@@ -30,3 +30,4 @@
 - [Tenant multipart context](tenant-multipart-context.md) — Multer callbacks can outlive AsyncLocalStorage; re-enter the authenticated tenant database before upload handlers query or write
 - [Composite workflow restarts](composite-workflow-restarts.md) — stop child artifact workflows before restarting the Run composite or old listeners can cause port conflicts
 - [Guest order identity](guest-order-identity.md) — registration stays optional; phone/name search aids CRM, but an unverified phone must never grant account or order-history access
+- [Supplier statement date filters](supplier-statement-date-filters.md) — filter displayed operations only after computing full-history balances; current account balance stays period-independent

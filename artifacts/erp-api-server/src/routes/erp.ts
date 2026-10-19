@@ -1614,6 +1614,30 @@ router.put("/erp/suppliers/:id", authenticate, requireStaff, requireStore, requi
 // display the canonical unified balance in the header.
 router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireStore, requirePermission("suppliers", "view"), async (req: AuthRequest, res) => {
   try {
+    const rawStartDate = req.query.startDate;
+    const rawEndDate = req.query.endDate;
+    if ((rawStartDate !== undefined && typeof rawStartDate !== "string")
+      || (rawEndDate !== undefined && typeof rawEndDate !== "string")) {
+      res.status(400).json({ error: "Dates must use YYYY-MM-DD format" });
+      return;
+    }
+    const startDate = rawStartDate as string | undefined;
+    const endDate = rawEndDate as string | undefined;
+    const isValidDate = (value: string) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+      && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
+    if ((startDate && !isValidDate(startDate)) || (endDate && !isValidDate(endDate))) {
+      res.status(400).json({ error: "Dates must use YYYY-MM-DD format" });
+      return;
+    }
+    if (startDate && endDate && startDate > endDate) {
+      res.status(400).json({ error: "Start date must not be after end date" });
+      return;
+    }
+    const isInDateRange = (date: string) =>
+      (!startDate || date >= startDate) && (!endDate || date <= endDate);
+
     const storeId = req.currentStoreId!;
     const supplierId = pid(req, "id");
     const [supplier] = await db.select().from(schema.suppliersTable)
@@ -1718,7 +1742,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
           return { ...op, runningBalance: running.toFixed(2) };
         });
 
-        res.json({ supplier, operations: opsWithBalance, contactBalance });
+        res.json({ supplier, operations: opsWithBalance.filter((op) => isInDateRange(op.date)), contactBalance });
         return;
       }
     }
@@ -1732,7 +1756,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
       else running -= amt;
       return { ...op, storeNameAr, storeNameEn, runningBalance: running.toFixed(2), source: "supplier" as const };
     });
-    res.json({ supplier, operations: opsWithBalance, contactBalance: null });
+    res.json({ supplier, operations: opsWithBalance.filter((op) => isInDateRange(op.date)), contactBalance: null });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 

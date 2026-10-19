@@ -1936,6 +1936,8 @@ export const UpdateSupplierResponse = zod.object({
  */
 export const GetSupplierOperationsParams = zod.object({
   id: zod.coerce.number(),
+  startDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export const GetSupplierOperationsResponse = zod.object({
