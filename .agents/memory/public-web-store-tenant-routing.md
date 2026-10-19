@@ -14,3 +14,9 @@ One company domain represents one ERP and one store. Company Web Store requests 
 **Why:** Legacy query parameters or local-storage slugs can redirect a company hostname to stale internal store rows and recreate the mismatch.
 
 **How to apply:** Use the same canonical resolver for config, products, product types, categories, and the public store listing. Never select a company store by product count.
+
+ERP product exposure is the authority for the public catalog; do not introduce a separate publication state or automatically expose existing products.
+
+**Why:** The user expects displaying or hiding a product in ERP to control the company's Web Store, while preserving existing product data.
+
+**How to apply:** Keep catalog visibility tied to the ERP state for existing companies as well as new ones. Catalog navigation must allow access to all exposed products, not just a fixed first batch.

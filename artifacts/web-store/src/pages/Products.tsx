@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useGetProducts } from "@workspace/erp-api-client-react";
+import React, { useEffect, useState } from "react";
+import { getGetProductsQueryKey, useGetProducts } from "@workspace/erp-api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +21,8 @@ export default function Products() {
 
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<string | undefined>(initialType);
+  const [page, setPage] = useState(1);
+  const pageSize = 24;
 
   const { data: productTypes } = useQuery<ProductType[]>({
     queryKey: ["/api/product-types"],
@@ -34,12 +36,29 @@ export default function Products() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: productsRes, isLoading, isError } = useGetProducts({
+  const productParams = {
     search: search || undefined,
     filterCatalogueType: activeType,
-    limit: 24,
-  });
+    filterExposed: "true",
+    page,
+    limit: pageSize,
+  };
+  const { data: productsRes, isLoading, isError, isFetching } = useGetProducts(
+    productParams,
+    { query: {
+      queryKey: getGetProductsQueryKey(productParams),
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: "always",
+    } },
+  );
   const products = productsRes?.products ?? [];
+  const total = productsRes?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Hiding the last product on a page must not strand visitors on an empty page.
+  useEffect(() => {
+    if (productsRes && page > totalPages) setPage(totalPages);
+  }, [productsRes, page, totalPages]);
 
   return (
     <div className="container mx-auto px-4 py-12 md:py-20">
@@ -61,7 +80,7 @@ export default function Products() {
               placeholder={lang === 'ar' ? "بحث..." : "Search..."}
               className="pl-10 h-12 bg-background border-border/60 focus-visible:border-primary"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               data-testid="input-search"
             />
           </div>
@@ -77,7 +96,7 @@ export default function Products() {
               <Button
                 variant={activeType === undefined ? "secondary" : "ghost"}
                 className={`justify-start font-medium ${activeType === undefined ? 'bg-secondary/50' : ''}`}
-                onClick={() => setActiveType(undefined)}
+                onClick={() => { setActiveType(undefined); setPage(1); }}
                 data-testid="btn-category-all"
               >
                 {lang === 'ar' ? 'جميع المنتجات' : 'All Products'}
@@ -87,7 +106,7 @@ export default function Products() {
                   key={type.id}
                   variant={activeType === type.nameFr ? "secondary" : "ghost"}
                   className={`justify-start font-medium text-left ${activeType === type.nameFr ? 'bg-secondary/50 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                  onClick={() => setActiveType(type.nameFr)}
+                  onClick={() => { setActiveType(type.nameFr); setPage(1); }}
                   data-testid={`btn-category-${type.id}`}
                 >
                   <span dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -122,7 +141,7 @@ export default function Products() {
                 variant="outline"
                 size="lg"
                 className="rounded-full px-8"
-                onClick={() => { setSearch(""); setActiveType(undefined); }}
+                onClick={() => { setSearch(""); setActiveType(undefined); setPage(1); }}
               >
                 {lang === 'ar' ? 'مسح الفلاتر' : 'Clear Filters'}
               </Button>
@@ -133,6 +152,35 @@ export default function Products() {
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
+          )}
+          {!isLoading && !isError && total > 0 && (
+            <nav
+              className="mt-10 flex flex-wrap items-center justify-center gap-4"
+              aria-label={lang === "ar" ? "صفحات المنتجات" : "Product pages"}
+              dir={lang === "ar" ? "rtl" : "ltr"}
+            >
+              <Button
+                variant="outline"
+                disabled={page <= 1 || isFetching}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                data-testid="products-previous-page"
+              >
+                {lang === "ar" ? "السابق" : "Previous"}
+              </Button>
+              <span className="text-sm text-muted-foreground" aria-live="polite" data-testid="products-page-status">
+                {lang === "ar"
+                  ? `الصفحة ${page} من ${totalPages} — ${total} منتجًا`
+                  : `Page ${page} of ${totalPages} — ${total} products`}
+              </span>
+              <Button
+                variant="outline"
+                disabled={page >= totalPages || isFetching}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                data-testid="products-next-page"
+              >
+                {lang === "ar" ? "التالي" : "Next"}
+              </Button>
+            </nav>
           )}
         </div>
       </div>

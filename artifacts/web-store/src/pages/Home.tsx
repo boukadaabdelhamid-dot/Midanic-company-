@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "wouter";
-import { useGetProducts } from "@workspace/erp-api-client-react";
+import { getGetProductsQueryKey, useGetProducts } from "@workspace/erp-api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { resolveImg } from "@/lib/utils";
 import { ProductCard } from "@/components/product/ProductCard";
@@ -19,7 +19,15 @@ type ProductType = { id: number; nameFr: string; nameAr: string; imageUrl: strin
 
 export default function Home() {
   const { lang } = useLang();
-  const { data: productsRes, isLoading: isLoadingProducts } = useGetProducts({ limit: 8 });
+  const productParams = { limit: 8, filterExposed: "true" };
+  const { data: productsRes, isLoading: isLoadingProducts } = useGetProducts(
+    productParams,
+    { query: {
+      queryKey: getGetProductsQueryKey(productParams),
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: "always",
+    } },
+  );
   const { bannerUrl, acceptOrders, featuredProductIds, description } = useStoreConfig();
 
   const { data: productTypes, isLoading: isLoadingTypes } = useQuery<ProductType[]>({

@@ -16,6 +16,7 @@ import {
   type AuthRequest,
 } from "../lib/auth";
 import { resolvePublicStore } from "../lib/store-context";
+import { getProductExposureFilter, isProductStaffRole } from "../lib/product-visibility";
 
 const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
@@ -93,6 +94,10 @@ router.get(
     const pageLimit = Math.max(1, parseInt(limit, 10) || 50);
     const offset = (pageNumber - 1) * pageLimit;
     const conditions = [eq(schema.productsTable.storeId, storeId)];
+    const exposedOnly = getProductExposureFilter(req.user?.role, filterExposed);
+    if (exposedOnly !== undefined) {
+      conditions.push(eq(schema.productsTable.isExposed, exposedOnly));
+    }
     if (search) {
       conditions.push(or(
         ilike(schema.productsTable.nameEn, `%${search}%`),
@@ -181,14 +186,6 @@ router.get(
     if (filterCreatedAt) {
       conditions.push(sql`${schema.productsTable.createdAt}::text ILIKE ${`%${filterCreatedAt}%`}`);
     }
-    if (filterExposed) {
-      const v = filterExposed.toLowerCase();
-      if (["oui", "true", "1", "yes"].includes(v)) {
-        conditions.push(eq(schema.productsTable.isExposed, true));
-      } else if (["non", "false", "0", "no"].includes(v)) {
-        conditions.push(eq(schema.productsTable.isExposed, false));
-      }
-    }
     if (filterActive) {
       const v = filterActive.toLowerCase();
       if (["actif", "true", "1", "yes"].includes(v)) {
@@ -245,11 +242,13 @@ router.get("/products/:id", optionalTenantAuth, async (req: AuthRequest, res) =>
   if (req.currentStoreId) {
     return requireStore(req, res, () => void handleGetProduct(req, res));
   }
-  return resolvePublicStore(req, res, () => handleGetProduct(req, res, true));
+  return resolvePublicStore(req, res, () => handleGetProduct(req, res));
 });
 
-async function handleGetProduct(req: AuthRequest, res: import("express").Response, publicOnly = false) {
+async function handleGetProduct(req: AuthRequest, res: import("express").Response) {
   try {
+    res.set("Cache-Control", "no-store");
+    const publicOnly = !isProductStaffRole(req.user?.role);
     const storeId = req.currentStoreId!;
     const id = parseInt(req.params["id"] as string);
     const [product] = await db.select().from(schema.productsTable)

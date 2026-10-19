@@ -32,10 +32,13 @@ export default function ProductDetail() {
   const [reviewComment, setReviewComment] = useState("");
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
-  const { data: product, isLoading } = useGetProduct(productId, {
+  const { data: product, isLoading, isError } = useGetProduct(productId, {
     query: {
       enabled: !!productId,
-      queryKey: getGetProductQueryKey(productId)
+      queryKey: getGetProductQueryKey(productId),
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: "always",
+      retry: false,
     }
   });
 
@@ -98,7 +101,11 @@ export default function ProductDetail() {
     );
   }
 
-  if (!product) return <div className="text-center py-32 text-xl font-serif text-muted-foreground">Product not found</div>;
+  if (!product || isError || product.isExposed === false) return (
+    <div className="text-center py-32 text-xl font-serif text-muted-foreground">
+      {lang === "ar" ? "المنتج غير متاح حاليًا" : "Product is currently unavailable"}
+    </div>
+  );
 
   const isOutOfStock = product.stock === 0;
 
