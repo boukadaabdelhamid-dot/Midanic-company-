@@ -31,6 +31,7 @@ import type {
   DesktopLicenseInput,
   DesktopLicenseListResponse,
   DownloadFile,
+  ErpOwnerPasswordInput,
   ErpTenantAdminRecord,
   ErpTenantBackupImportResponse,
   ErpTenantCreateInput,
@@ -2718,6 +2719,78 @@ export const useCreateErpTenantAdmin = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateErpTenantAdminMutationOptions(options));
+    }
+
+export const getChangeErpTenantOwnerPasswordAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/erp/tenants/${id}/owner-password`
+}
+
+/**
+ * @summary Change the Platform password of an ERP company owner
+ */
+export const changeErpTenantOwnerPasswordAdmin = async (id: number,
+    erpOwnerPasswordInput: ErpOwnerPasswordInput, options?: Parameters<typeof customFetch>[1]): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getChangeErpTenantOwnerPasswordAdminUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erpOwnerPasswordInput)
+  }
+);}
+
+
+
+
+
+export const getChangeErpTenantOwnerPasswordAdminMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>, TError,{id: number;data: BodyType<ErpOwnerPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>, TError,{id: number;data: BodyType<ErpOwnerPasswordInput>}, TContext> => {
+
+const mutationKey = ['changeErpTenantOwnerPasswordAdmin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>, {id: number;data: BodyType<ErpOwnerPasswordInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changeErpTenantOwnerPasswordAdmin(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeErpTenantOwnerPasswordAdminMutationResult = NonNullable<Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>>
+    export type ChangeErpTenantOwnerPasswordAdminMutationBody = BodyType<ErpOwnerPasswordInput>
+    export type ChangeErpTenantOwnerPasswordAdminMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Change the Platform password of an ERP company owner
+ */
+export const useChangeErpTenantOwnerPasswordAdmin = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>, TError,{id: number;data: BodyType<ErpOwnerPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeErpTenantOwnerPasswordAdmin>>,
+        TError,
+        {id: number;data: BodyType<ErpOwnerPasswordInput>},
+        TContext
+      > => {
+      return useMutation(getChangeErpTenantOwnerPasswordAdminMutationOptions(options));
     }
 
 export const getImportErpTenantBackupAdminUrl = (id: number,) => {

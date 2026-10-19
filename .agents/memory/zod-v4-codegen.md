@@ -25,3 +25,10 @@ When the Zod 3 Midanic web app needs generated API types, import them from `@wor
 **Why:** TypeScript follows the root barrel into Zod 4 syntax, where the web app's Zod 3 dependency lacks methods such as `int()` and `email()`.
 
 **How to apply:** Keep web imports type-only and use the types subpath for contracts; use the root package only in consumers configured for the Zod 4 shim.
+
+## Direct API integration tests
+Tests that load the Platform API from TypeScript cannot rely on a plain `tsx --test` invocation: it resolves generated validators against Zod 3 and fails at runtime. Use the same exact-import Zod 4 resolution as the production API bundle. When bundling Node tests with esbuild, CJS dependencies may also need a `createRequire` banner; the pino transport plugin adds multiple entry points, so keep distinct output names.
+
+**Why:** Typechecking can pass while direct test execution fails before any assertion, and a naive single-file ESM bundle then fails on CJS dynamic requires.
+
+**How to apply:** For new API integration tests that import generated validators, run them through a Node-compatible test bundle with the exact-import resolution; do not weaken or alter the runtime API just to make the test runner work.

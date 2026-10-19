@@ -158,6 +158,11 @@ export const adminApi = {
       currentStores: number | null;
       storeCountStatus: "ready" | "not_ready" | "unavailable";
     }>(`/admin/erp/tenants/${id}/store-count`),
+  changeErpTenantOwnerPassword: (id: number, newPassword: string) =>
+    request<{ message: string }>(`/admin/erp/tenants/${id}/owner-password`, {
+      method: "PUT",
+      body: JSON.stringify({ newPassword }),
+    }),
   createErpTenant: (body: ErpTenantCreateInput) =>
     request<ErpTenant>("/admin/erp/tenants", {
       method: "POST",

@@ -21,6 +21,7 @@ export * from './downloadFile';
 export * from './downloadFilePlatform';
 export * from './erpDataImportSummary';
 export * from './erpDataImportSummaryRecordCounts';
+export * from './erpOwnerPasswordInput';
 export * from './erpTenantAdminRecord';
 export * from './erpTenantAdminRecordContractPeriod';
 export * from './erpTenantAdminRecordDatabaseStatus';

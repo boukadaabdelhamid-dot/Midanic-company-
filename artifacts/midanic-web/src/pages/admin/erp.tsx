@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminText } from "@/lib/admin-i18n";
-import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, Plus, RefreshCw, Settings2, ShoppingBag, Trash2, Upload } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, KeyRound, Plus, RefreshCw, Settings2, ShoppingBag, Trash2, Upload } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 const ACCOUNT_GROUP_OPTIONS = [
@@ -146,6 +146,10 @@ export default function AdminErp() {
   const [importExistingData, setImportExistingData] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [passwordTenant, setPasswordTenant] = useState<ErpTenant | null>(null);
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [confirmOwnerPassword, setConfirmOwnerPassword] = useState("");
+  const [savingOwnerPassword, setSavingOwnerPassword] = useState(false);
   const [importTenant, setImportTenant] = useState<ErpTenant | null>(null);
   const [backupFile, setBackupFile] = useState<File | null>(null);
   const [confirmBackup, setConfirmBackup] = useState(false);
@@ -177,6 +181,34 @@ export default function AdminErp() {
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const { toast } = useToast();
   const { tAdmin } = useAdminText();
+
+  function closePasswordDialog() {
+    setPasswordTenant(null);
+    setOwnerPassword("");
+    setConfirmOwnerPassword("");
+  }
+
+  async function changeOwnerPassword() {
+    if (!passwordTenant || savingOwnerPassword) return;
+    if (ownerPassword.length < 8 || ownerPassword.length > 128) {
+      toast({ title: tAdmin("Password must be 8–128 characters"), variant: "destructive" });
+      return;
+    }
+    if (ownerPassword !== confirmOwnerPassword) {
+      toast({ title: tAdmin("Passwords do not match"), variant: "destructive" });
+      return;
+    }
+    setSavingOwnerPassword(true);
+    try {
+      await adminApi.changeErpTenantOwnerPassword(passwordTenant.id, ownerPassword);
+      closePasswordDialog();
+      toast({ title: tAdmin("Owner password changed") });
+    } catch (error) {
+      toast({ title: tAdmin("Password change failed"), description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setSavingOwnerPassword(false);
+    }
+  }
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -726,6 +758,16 @@ export default function AdminErp() {
                 <TableCell>
                    <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
                    <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `${tAdmin("User")} #${tenant.ownerUserId}`}</div>
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     className="mt-2"
+                     onClick={() => { setOwnerPassword(""); setConfirmOwnerPassword(""); setPasswordTenant(tenant); }}
+                     data-testid={`button-owner-password-${tenant.id}`}
+                   >
+                     <KeyRound className="mr-2 h-4 w-4" />
+                     {tAdmin("Change owner password")}
+                   </Button>
                 </TableCell>
                  <TableCell>
                    <div className="flex flex-col items-start gap-1">
@@ -810,6 +852,41 @@ export default function AdminErp() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={Boolean(passwordTenant)}
+        onOpenChange={(open) => { if (!open && !savingOwnerPassword) closePasswordDialog(); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tAdmin("Change owner password")}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {passwordTenant?.companyName} · {passwordTenant?.ownerEmail}
+            </p>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => { event.preventDefault(); void changeOwnerPassword(); }}
+          >
+            <p className="text-sm text-muted-foreground">
+              {tAdmin("This changes the owner's Platform and ERP login password. Their Platform refresh sessions and old reset links will be invalidated.")}
+            </p>
+            <div className="space-y-2">
+              <label htmlFor="erp-owner-new-password" className="text-sm font-medium">{tAdmin("New password")}</label>
+              <Input id="erp-owner-new-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={ownerPassword} onChange={(event) => setOwnerPassword(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="erp-owner-confirm-password" className="text-sm font-medium">{tAdmin("Confirm new password")}</label>
+              <Input id="erp-owner-confirm-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirmOwnerPassword} onChange={(event) => setConfirmOwnerPassword(event.target.value)} />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={savingOwnerPassword}>
+                {savingOwnerPassword ? tAdmin("Saving...") : tAdmin("Change password")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(importTenant)}

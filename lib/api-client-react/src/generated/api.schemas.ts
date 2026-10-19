@@ -395,6 +395,14 @@ export interface ErpTenantCreateInput {
   importExistingData?: boolean;
 }
 
+export interface ErpOwnerPasswordInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  newPassword: string;
+}
+
 /**
  * Raw bytes of a PostgreSQL custom-format archive.
  */

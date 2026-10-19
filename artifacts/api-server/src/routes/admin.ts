@@ -4,6 +4,8 @@ import { Readable } from "node:stream";
 import { db } from "@workspace/db";
 import {
   usersTable,
+  refreshTokensTable,
+  passwordResetTokensTable,
   productsTable,
   productVersionsTable,
   downloadFilesTable,
@@ -33,7 +35,8 @@ import {
 } from "@workspace/db";
 import { eq, ne, desc, count, ilike, or, sql, and, gte, lte, lt, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { generateErpSsoToken } from "../lib/auth";
+import { generateErpSsoToken, hashPassword } from "../lib/auth";
+import { ChangeErpTenantOwnerPasswordAdminBody } from "@workspace/api-zod";
 import {
   buildErpTenantHostname,
   buildErpTenantLaunchUrl,
@@ -371,6 +374,41 @@ router.get("/admin/erp/tenants/:id/store-count", async (req, res): Promise<void>
     return;
   }
   res.json({ tenantId: id, ...(await fetchTenantStoreSummary(id)) });
+});
+
+router.put("/admin/erp/tenants/:id/owner-password", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const parsed = ChangeErpTenantOwnerPasswordAdminBody.safeParse(req.body);
+  if (!Number.isSafeInteger(id) || id <= 0 || !parsed.success) {
+    res.status(400).json({ error: "Invalid company ID or password (8–128 characters required)" });
+    return;
+  }
+
+  const [tenant] = await db.select({ ownerUserId: erpTenantsTable.ownerUserId })
+    .from(erpTenantsTable).where(eq(erpTenantsTable.id, id)).limit(1);
+  if (!tenant) {
+    res.status(404).json({ error: "ERP company not found" });
+    return;
+  }
+  const [owner] = await db.select({ id: usersTable.id, role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, tenant.ownerUserId)).limit(1);
+  if (!owner) {
+    res.status(404).json({ error: "Company owner not found" });
+    return;
+  }
+  if (owner.role !== "customer") {
+    res.status(409).json({ error: "Company owner is not a customer account" });
+    return;
+  }
+
+  const passwordHash = await hashPassword(parsed.data.newPassword);
+  await db.transaction(async (tx) => {
+    await tx.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, owner.id));
+    await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.userId, owner.id));
+    await tx.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.userId, owner.id));
+  });
+  req.log.info({ tenantId: id, ownerUserId: owner.id, actorId: req.user!.userId }, "ERP owner password changed by super admin");
+  res.json({ message: "Password changed" });
 });
 
 router.post("/admin/erp/tenants", async (req, res): Promise<void> => {

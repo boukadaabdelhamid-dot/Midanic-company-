@@ -866,6 +866,30 @@ export const CreateErpTenantAdminResponse = zod.object({
 
 
 /**
+ * @summary Change the Platform password of an ERP company owner
+ */
+
+
+
+export const ChangeErpTenantOwnerPasswordAdminParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const changeErpTenantOwnerPasswordAdminBodyNewPasswordMin = 8;
+export const changeErpTenantOwnerPasswordAdminBodyNewPasswordMax = 128;
+
+
+
+export const ChangeErpTenantOwnerPasswordAdminBody = zod.object({
+  "newPassword": zod.string().min(changeErpTenantOwnerPasswordAdminBodyNewPasswordMin).max(changeErpTenantOwnerPasswordAdminBodyNewPasswordMax)
+})
+
+export const ChangeErpTenantOwnerPasswordAdminResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * Imports only the ERP tables and required types into the new tenant. The source database is not contacted or changed.
  * @summary Stream a PostgreSQL custom archive into an unpublished ERP tenant
  */

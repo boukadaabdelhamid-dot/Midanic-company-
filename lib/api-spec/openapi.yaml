@@ -960,6 +960,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/erp/tenants/{id}/owner-password:
+    put:
+      tags: [admin]
+      operationId: changeErpTenantOwnerPasswordAdmin
+      summary: Change the Platform password of an ERP company owner
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpOwnerPasswordInput"
+      responses:
+        "200":
+          description: Password updated and Platform refresh sessions invalidated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid password or tenant ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Super administrator role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Company or owner not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Owner is not a customer account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/erp/tenants/{id}/import-backup:
     post:
       tags: [admin]
@@ -1620,6 +1678,15 @@ components:
         importExistingData:
           type: boolean
           default: false
+
+    ErpOwnerPasswordInput:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
 
     ErpTenantBackupUpload:
       type: string
