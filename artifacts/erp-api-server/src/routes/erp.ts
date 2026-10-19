@@ -5466,7 +5466,7 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
 router.get("/erp/purchases/filter-options", authenticate, requireStaff, requireStore, requirePermission("purchases", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
-    const [families, brands, citiesRaw] = await Promise.all([
+    const [families, brands, citiesRaw, suppliers] = await Promise.all([
       db.select({ id: schema.productFamiliesTable.id, nameFr: schema.productFamiliesTable.nameFr, nameAr: schema.productFamiliesTable.nameAr })
         .from(schema.productFamiliesTable)
         .where(eq(schema.productFamiliesTable.storeId, storeId))
@@ -5482,9 +5482,13 @@ router.get("/erp/purchases/filter-options", authenticate, requireStaff, requireS
           sql`${schema.suppliersTable.address} IS NOT NULL AND TRIM(${schema.suppliersTable.address}) <> ''`,
         ))
         .orderBy(schema.suppliersTable.address),
+      db.select({ id: schema.suppliersTable.id, name: schema.suppliersTable.name })
+        .from(schema.suppliersTable)
+        .where(eq(schema.suppliersTable.storeId, storeId))
+        .orderBy(schema.suppliersTable.name),
     ]);
     const supplierCities = citiesRaw.map(r => r.city).filter((c): c is string => !!c);
-    res.json({ families, brands, supplierCities });
+    res.json({ families, brands, supplierCities, suppliers });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 

@@ -4,11 +4,11 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tansta
 import { useLang } from "@/hooks/use-lang";
 import { useCurrentStore } from "@/hooks/use-current-store";
 import { useMe } from "@/hooks/use-me";
-import { useGetSuppliers } from "@workspace/erp-api-client-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose,
 } from "@/components/ui/drawer";
@@ -149,7 +149,12 @@ type FilterOptions = {
   families: Array<{ id: number; nameFr: string; nameAr: string }>;
   brands: Array<{ id: number; nameFr: string; nameAr: string }>;
   supplierCities: string[];
+  suppliers: Array<{ id: number; name: string }>;
 };
+
+function supplierSelectOptions(suppliers: Array<{ id: number; name: string }>): SearchableSelectOption[] {
+  return suppliers.map((supplier) => ({ value: String(supplier.id), labelFr: supplier.name }));
+}
 
 async function fetchFilterOptions(): Promise<FilterOptions> {
   const res = await fetch(`${API_BASE}/api/erp/purchases/filter-options`, { headers: authHeaders() });
@@ -639,6 +644,7 @@ function QuickOrderDrawer({
   const [error, setError] = useState<string | null>(null);
   // Track whether user has manually edited the price so we don't override their input
   const priceEditedRef = React.useRef(false);
+  const supplierOptions = useMemo(() => supplierSelectOptions(suppliers), [suppliers]);
 
   // Fetch purchase history to get last real unit_cost
   const { data: historyData } = useQuery<HistoryRow[]>({
@@ -825,16 +831,16 @@ function QuickOrderDrawer({
               {mode === "new" ? (
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">{t("Fournisseur", "المورد")} *</label>
-                  <select
-                    className="w-full h-12 rounded-xl border bg-white px-3 text-sm appearance-none"
+                  <SearchableSelect
                     value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
-                  >
-                    <option value="">{t("Sélectionner…", "اختر موردًا…")}</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={String(s.id)}>{s.name}</option>
-                    ))}
-                  </select>
+                    onValueChange={setSupplierId}
+                    options={supplierOptions}
+                    placeholder={t("Sélectionner…", "اختر موردًا…")}
+                    searchPlaceholder={t("Rechercher un fournisseur…", "ابحث عن مورد…")}
+                    emptyText={t("Aucun fournisseur trouvé", "لم يتم العثور على مورد")}
+                    noneLabel={t("Sélectionner…", "اختر موردًا…")}
+                    className="w-full h-12 rounded-xl"
+                  />
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -1371,15 +1377,16 @@ export default function SmartPurchase() {
 
   // Attribute lists for filter selects — uses purchases:view, not settings:view
   const { data: filterOpts } = useQuery<FilterOptions>({
-    queryKey: ["purchase-filter-options"],
+    queryKey: ["purchase-filter-options", store?.id],
     queryFn: fetchFilterOptions,
     staleTime: 60_000,
+    enabled: !!store?.id,
   });
-  const { data: suppliersData } = useGetSuppliers();
 
   const families = useMemo(() => filterOpts?.families ?? [], [filterOpts]);
   const brands   = useMemo(() => filterOpts?.brands   ?? [], [filterOpts]);
-  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData]);
+  const suppliers = useMemo(() => filterOpts?.suppliers ?? [], [filterOpts]);
+  const supplierOptions = useMemo(() => supplierSelectOptions(suppliers), [suppliers]);
 
   // Build query params — stockFilter included so tab changes reset pagination
   const queryParams = useMemo(() => {
@@ -1715,14 +1722,16 @@ export default function SmartPurchase() {
           {/* Inline filter bar — list mode only */}
           {viewMode === "list" && (
             <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
-              <select
-                className="shrink-0 h-9 rounded-lg border bg-white px-2 text-xs appearance-none min-w-[120px]"
+              <SearchableSelect
                 value={filterSupplierId}
-                onChange={(e) => setFilterSupplierId(e.target.value)}
-              >
-                <option value="">{t("Fournisseur", "المورد")}</option>
-                {suppliers.map((s) => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-              </select>
+                onValueChange={setFilterSupplierId}
+                options={supplierOptions}
+                placeholder={t("Fournisseur", "المورد")}
+                searchPlaceholder={t("Rechercher un fournisseur…", "ابحث عن مورد…")}
+                emptyText={t("Aucun fournisseur trouvé", "لم يتم العثور على مورد")}
+                noneLabel={t("Fournisseur", "المورد")}
+                className="h-9 shrink-0 min-w-[160px] rounded-lg px-2 text-xs"
+              />
               <select
                 className="shrink-0 h-9 rounded-lg border bg-white px-2 text-xs appearance-none min-w-[100px]"
                 value={filterFamilyId}
@@ -2226,16 +2235,16 @@ export default function SmartPurchase() {
             {/* Supplier */}
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("Fournisseur", "المورد")}</label>
-              <select
-                className="w-full h-12 rounded-xl border bg-white px-3 text-sm appearance-none"
+              <SearchableSelect
                 value={filterSupplierId}
-                onChange={(e) => setFilterSupplierId(e.target.value)}
-              >
-                <option value="">{t("Tous les fournisseurs", "كل الموردين")}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={String(s.id)}>{s.name}</option>
-                ))}
-              </select>
+                onValueChange={setFilterSupplierId}
+                options={supplierOptions}
+                placeholder={t("Tous les fournisseurs", "كل الموردين")}
+                searchPlaceholder={t("Rechercher un fournisseur…", "ابحث عن مورد…")}
+                emptyText={t("Aucun fournisseur trouvé", "لم يتم العثور على مورد")}
+                noneLabel={t("Tous les fournisseurs", "كل الموردين")}
+                className="w-full h-12 rounded-xl"
+              />
             </div>
 
             {/* Family */}

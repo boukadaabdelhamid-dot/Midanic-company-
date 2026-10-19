@@ -9,7 +9,8 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:supplier-statement-layout": "node --test tests/supplier-statement-responsive.test.cjs",
-    "test:sale-source-separation": "node --test tests/sale-source-separation.test.cjs"
+    "test:sale-source-separation": "node --test tests/sale-source-separation.test.cjs",
+    "test:smart-purchase-suppliers": "node --test tests/smart-purchase-suppliers.test.cjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
