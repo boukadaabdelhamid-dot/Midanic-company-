@@ -71,3 +71,4 @@ GOOGLE_CLIENT_ID = "947595034469-rkfsk64set3jrektlno2763p2q1klo1m.apps.googleuse
 ERP_API_URL = "http://127.0.0.1:8082"
 ERP_PUBLIC_URL = "/erp/"
 PLATFORM_API_URL = "http://127.0.0.1:8080"
+REPLIT_DEV_ADMIN_EMAIL = "admin@midanic.com"

@@ -1,6 +1,6 @@
 import { db, schema } from "./lib/db";
 import bcrypt from "bcryptjs";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, sql } from "drizzle-orm";
 import { getTenantDatabaseContext } from "./lib/db";
 import { planTenantStoreBootstrap } from "./lib/tenant-store-mapping";
 
@@ -79,6 +79,32 @@ export async function bootstrap() {
         role: "admin",
         preferredLang: "ar",
       }).onConflictDoNothing();
+    }
+
+    // Explicitly rotate only the local Replit preview's seeded global admin.
+    // Tenant databases and production never consume these dedicated variables.
+    const previewPassword = process.env["REPLIT_DEV_ERP_ADMIN_PASSWORD"];
+    if (process.env["NODE_ENV"] === "development" && previewPassword) {
+      const email = process.env["REPLIT_DEV_ADMIN_EMAIL"]?.trim().toLowerCase();
+      if (!email) throw new Error("REPLIT_DEV_ADMIN_EMAIL is required for preview ERP admin password sync");
+      if (previewPassword.length < 12) {
+        throw new Error("Preview ERP admin password must be at least 12 characters");
+      }
+      const [previewAdmin] = await db.select().from(schema.usersTable)
+        .where(sql`lower(trim(${schema.usersTable.email})) = ${email}`)
+        .limit(1);
+      if (
+        !previewAdmin ||
+        previewAdmin.role !== "admin" ||
+        previewAdmin.platformUserId !== null ||
+        !previewAdmin.isActive
+      ) {
+        throw new Error("Preview ERP admin password sync refused: target is not an active standalone admin");
+      }
+      await db.update(schema.usersTable).set({
+        passwordHash: await bcrypt.hash(previewPassword, 10),
+        sessionVersion: sql`${schema.usersTable.sessionVersion} + 1`,
+      }).where(eq(schema.usersTable.id, previewAdmin.id));
     }
   }
 

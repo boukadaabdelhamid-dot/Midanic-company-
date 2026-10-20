@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { configureR2CorsFromEnvironment } from "./lib/objectStorage";
-import { ensureCoreCatalog, ensureProductionAdmin, seedDatabase } from "./lib/seed";
+import { ensureCoreCatalog, ensureProductionAdmin, seedDatabase, syncReplitDevelopmentAdminPassword } from "./lib/seed";
 import { reconcileUnprovisionedErpTenants } from "./lib/erp-tenant-reconciliation";
 import { startErpContractLifecycleScheduler } from "./lib/erp-contract-lifecycle";
 import { runMigrations } from "@workspace/db";
@@ -47,7 +47,9 @@ runMigrations()
       // Auto-seed only in development — never run in production to avoid
       // inserting predictable credentials into a live environment.
       if (process.env.NODE_ENV === "development") {
-        seedDatabase().catch((err) => {
+        seedDatabase()
+          .then(syncReplitDevelopmentAdminPassword)
+          .catch((err) => {
           logger.error({ err }, "Seed failed");
         });
       } else if (process.env.NODE_ENV === "production") {

@@ -1,5 +1,5 @@
-import { db, usersTable, productsTable, productVersionsTable, downloadFilesTable, blogPostsTable, newsItemsTable, defaultErpRequestFormFields } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, productsTable, productVersionsTable, downloadFilesTable, blogPostsTable, newsItemsTable, defaultErpRequestFormFields, refreshTokensTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
@@ -65,6 +65,36 @@ export async function ensureProductionAdmin(): Promise<void> {
   });
 
   logger.info({ email }, "Production administrator created successfully");
+}
+
+/**
+ * Replit-preview-only password rotation for the seeded development superadmin.
+ * The dedicated variable names and NODE_ENV guard keep this separate from the
+ * production bootstrap credentials above.
+ */
+export async function syncReplitDevelopmentAdminPassword(): Promise<void> {
+  if (process.env.NODE_ENV !== "development") return;
+  const password = process.env["REPLIT_DEV_PLATFORM_ADMIN_PASSWORD"];
+  if (!password) return;
+  const email = process.env["REPLIT_DEV_ADMIN_EMAIL"]?.trim().toLowerCase();
+  if (!email) throw new Error("REPLIT_DEV_ADMIN_EMAIL is required for preview admin password sync");
+  if (password.length < 12) throw new Error("Preview platform admin password must be at least 12 characters");
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user || user.role !== "super_admin" || !user.isActive) {
+    throw new Error("Preview admin password sync refused: target is not an active super administrator");
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db.transaction(async (tx) => {
+    await tx.update(usersTable).set({
+      passwordHash,
+      erpSessionVersion: sql`${usersTable.erpSessionVersion} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, user.id));
+    await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.userId, user.id));
+  });
+  logger.info("Replit development platform admin password synchronized");
 }
 
 /**
