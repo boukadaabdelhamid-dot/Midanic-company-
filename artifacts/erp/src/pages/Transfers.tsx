@@ -6,8 +6,6 @@ import {
   useCreateErpTransfer,
   useApproveErpTransfer,
   useRejectErpTransfer,
-  usePrepareErpTransfer,
-  useShipErpTransfer,
   useReceiveErpTransfer,
   useCancelErpTransfer,
   useGetProducts,
@@ -18,7 +16,7 @@ import {
   type StockTransferSummary,
   type StockTransferDetail,
 } from "@workspace/erp-api-client-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useMe } from "@/hooks/use-me";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useStoreContext } from "@/hooks/use-store";
@@ -38,7 +36,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeftRight, Plus, Send, CheckCircle2, XCircle, PackageCheck, Truck, Inbox, Ban, Trash2, ScanLine, AlertTriangle } from "lucide-react";
+import { ArrowLeftRight, Plus, Send, CheckCircle2, XCircle, Truck, Inbox, Ban, Trash2, ScanLine, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 
 type TrFn = (fr: string, ar: string) => string;
@@ -773,8 +771,20 @@ function TransferDetailDialog({
   const { data: detail, isLoading } = useGetErpTransfer(id);
   const approve = useApproveErpTransfer();
   const reject = useRejectErpTransfer();
-  const prepare = usePrepareErpTransfer();
-  const ship = useShipErpTransfer();
+  const dispatch = useMutation({
+    mutationFn: async ({ id: transferId }: { id: number }) => {
+      const token = localStorage.getItem("midanic_token") ?? "";
+      const response = await fetch(`${API_BASE}/api/erp/transfers/${transferId}/dispatch`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? tr("Échec de l'expédition.", "تعذر شحن التحويل."));
+      return data;
+    },
+    onSuccess: () => onChanged(),
+  });
   const receive = useReceiveErpTransfer();
   const cancel = useCancelErpTransfer();
 
@@ -890,14 +900,17 @@ function TransferDetailDialog({
                   </Button>
                 </>
               )}
-              {((td.status === "approved") || (td.status === "requested" && isAdmin)) && isSource && (
-                <Button size="sm" onClick={() => act(prepare)} disabled={prepare.isPending} data-testid="button-prepare">
-                  <PackageCheck className="h-4 w-4 mr-1" /> {tr("Préparer", "تجهيز")}
-                </Button>
-              )}
-              {td.status === "prepared" && isSource && (
-                <Button size="sm" onClick={() => act(ship)} disabled={ship.isPending} data-testid="button-ship">
-                  <Truck className="h-4 w-4 mr-1" /> {tr("Expédier", "إرسال")}
+              {(td.status === "approved" || td.status === "prepared" || (td.status === "requested" && isAdmin)) && isSource && (
+                <Button
+                  size="sm"
+                  onClick={() => dispatch.mutate({ id })}
+                  disabled={dispatch.isPending}
+                  data-testid="button-dispatch-transfer"
+                >
+                  <Truck className="h-4 w-4 mr-1" />
+                  {td.status === "prepared"
+                    ? tr("Expédier", "شحن")
+                    : tr("Préparer et expédier", "تجهيز وشحن")}
                 </Button>
               )}
               {td.status === "in_transit" && isDest && (
@@ -912,9 +925,9 @@ function TransferDetailDialog({
                 </Button>
               )}
             </div>}
-            {(approve.error || reject.error || prepare.error || ship.error || receive.error || cancel.error) && (
+            {(approve.error || reject.error || dispatch.error || receive.error || cancel.error) && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-                {((approve.error || reject.error || prepare.error || ship.error || receive.error || cancel.error) as { error?: string })?.error ?? tr("Action échouée", "فشل الإجراء")}
+                {((approve.error || reject.error || dispatch.error || receive.error || cancel.error) as { error?: string })?.message ?? tr("Action échouée", "فشل الإجراء")}
               </div>
             )}
           </div>
