@@ -445,19 +445,35 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
 
   // Fetch past purchase items only when a real named customer is selected
   const hasRealCustomer = !!(selectedCustomer && selectedCustomer.id !== 0);
-  const { data: customerSaleItems = [], isLoading: saleItemsLoading } = useQuery<CustomerSaleItem[]>({
+  const {
+    data: customerSaleItemsData,
+    isLoading: saleItemsLoading,
+    isError: saleItemsError,
+    isFetching: saleItemsFetching,
+    refetch: retryCustomerSaleItems,
+  } = useQuery<CustomerSaleItem[]>({
     queryKey: ["customer-sale-items", selectedCustomer?.id],
     queryFn: async () => {
       const token = localStorage.getItem("midanic_token");
       const r = await fetch(`${apiBase}/api/erp/customers/${selectedCustomer!.id}/sale-items`, {
         headers: { Authorization: `Bearer ${token ?? ""}` },
       });
-      if (!r.ok) return [];
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json() as Promise<CustomerSaleItem[]>;
     },
     enabled: hasRealCustomer,
     staleTime: 30_000,
   });
+  const customerSaleItems = customerSaleItemsData ?? [];
+  const customerSaleItemsUnavailable = hasRealCustomer && (saleItemsLoading || saleItemsError);
+
+  const preventAddWithoutCustomerPurchases = () => {
+    if (!customerSaleItemsUnavailable) return false;
+    setError(saleItemsError
+      ? t("Impossible de charger les achats du client. Réessayez avant d'ajouter un article.", "تعذر تحميل مشتريات الزبون. أعد المحاولة قبل إضافة أي منتج.")
+      : t("Chargement des achats du client. Réessayez dans un instant.", "جارٍ تحميل مشتريات الزبون. أعد المحاولة بعد لحظة."));
+    return true;
+  };
 
   const filteredSaleItems = useMemo(() => {
     const q = saleItemSearch.trim().toLowerCase();
@@ -509,6 +525,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   }, [clientComboOpen]);
 
   const addProduct = (p: Product) => {
+    if (preventAddWithoutCustomerPurchases()) return;
     setLines((prev) => {
       const idx = prev.findIndex((l) => l.productId === p.id);
       if (idx >= 0) {
@@ -530,6 +547,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   };
 
   const addFromSaleItem = (item: CustomerSaleItem, requestedQty?: number) => {
+    if (preventAddWithoutCustomerPurchases()) return;
     const returnableQty = Math.max(0, item.quantity - (item.returnedQty ?? 0));
     const alreadySelectedQty = lines.find((line) => line.productId === item.productId)?.qty ?? 0;
     const remainingQty = Math.max(0, returnableQty - alreadySelectedQty);
@@ -564,10 +582,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   const addProductByCode = async () => {
     const code = productCode.trim();
     if (!code || codeLookupPending) return;
-    if (hasRealCustomer && saleItemsLoading) {
-      setError(t("Chargement des achats du client. Réessayez dans un instant.", "جارٍ تحميل مشتريات الزبون. أعد المحاولة بعد لحظة."));
-      return;
-    }
+    if (preventAddWithoutCustomerPurchases()) return;
 
     setError(null);
     setCodeLookupPending(true);
@@ -757,7 +772,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                   data-testid="input-return-product-code"
                 />
                 </div>
-                <Button type="button" variant="outline" onClick={() => void addProductByCode()} disabled={codeLookupPending || !productCode.trim()} data-testid="button-return-product-code">
+                <Button type="button" variant="outline" onClick={() => void addProductByCode()} disabled={codeLookupPending || customerSaleItemsUnavailable || !productCode.trim()} data-testid="button-return-product-code">
                   {codeLookupPending ? t("Recherche...", "جارٍ البحث...") : t("Rechercher", "بحث")}
                 </Button>
               </div>
@@ -775,10 +790,32 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                     )}
                   </span>
                   <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
-                    onClick={() => setPickerOpen(true)}>
+                    onClick={() => setPickerOpen(true)}
+                    disabled={customerSaleItemsUnavailable}>
                     <Plus className="h-3 w-3 mr-1" /> {t("Autre article", "منتج آخر")}
                   </Button>
                 </div>
+
+                {saleItemsError && (
+                  <div role="alert" className="flex items-center justify-between gap-3 px-3 py-2 border-b bg-red-50 text-red-700">
+                    <span className="text-xs">
+                      {t("Impossible de charger les achats du client. Vérifiez la connexion et vos droits.", "تعذر تحميل مشتريات الزبون. تحقق من الاتصال والصلاحيات.")}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+                      onClick={() => void retryCustomerSaleItems()}
+                      disabled={saleItemsFetching}
+                    >
+                      <RotateCcw className={`h-3 w-3 mr-1 ${saleItemsFetching ? "animate-spin" : ""}`} />
+                      {saleItemsFetching
+                        ? t("Chargement...", "جارٍ التحميل...")
+                        : t("Réessayer", "إعادة المحاولة")}
+                    </Button>
+                  </div>
+                )}
 
                 {/* Search */}
                 <div className="px-3 py-2 border-b bg-white">
@@ -798,6 +835,10 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                   {saleItemsLoading ? (
                     <div className="p-3 space-y-2">
                       {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+                    </div>
+                  ) : saleItemsError && customerSaleItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-red-700">
+                      {t("Les achats ne sont pas disponibles. Réessayez avant d'ajouter des articles.", "المشتريات غير متاحة. أعد المحاولة قبل إضافة المنتجات.")}
                     </div>
                   ) : filteredSaleItems.length === 0 ? (
                     <div className="py-6 text-center text-xs text-muted-foreground">
@@ -851,7 +892,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                               <td className="px-2 py-2 text-right">
                                 <button
                                   type="button"
-                                  disabled={exhausted}
+                                  disabled={exhausted || customerSaleItemsUnavailable}
                                   onClick={() => !exhausted && addFromSaleItem(item)}
                                   className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
                                     exhausted
