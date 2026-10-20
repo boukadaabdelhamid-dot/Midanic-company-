@@ -63,6 +63,14 @@ import { RetourPrintDialog } from "@/pages/Retours";
 
 type TFn = (fr: string, ar: string) => string;
 
+function getLinkedSaleOrderId(operation: CustomerOperation): number | null {
+  if (operation.type !== "vente_a_terme") return null;
+  const referenceMatch = operation.reference?.match(/^ORDER[-:#\s]*(\d+)$/i);
+  const noteMatch = operation.note?.match(/(?:commande|order)\s*#?\s*(\d+)/i);
+  const orderId = Number(referenceMatch?.[1] ?? noteMatch?.[1]);
+  return Number.isSafeInteger(orderId) && orderId > 0 ? orderId : null;
+}
+
 function ClassifBadge({ c }: { c?: CustomerClassification | null }) {
   if (!c) return null;
   return (
@@ -608,6 +616,9 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
   // Sale order view dialog
   const [viewOpen, setViewOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<SaleOrderDetail | null>(null);
+  const [selectedBalanceOperation, setSelectedBalanceOperation] = useState<CustomerOperation | null>(null);
+  const [openingBalanceOrder, setOpeningBalanceOrder] = useState(false);
+  const [balanceOrderError, setBalanceOrderError] = useState<string | null>(null);
 
   // Retours state
   const [bonRetours, setBonRetours] = useState<{ id: number; createdAt: string | null; totalAmount: number; retourType: string | null }[]>([]);
@@ -628,18 +639,21 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       .catch(() => setBonRetours([]));
   }, [customerId]);
 
-  const openOrderView = async (orderId: number) => {
+  const openOrderView = async (orderId: number): Promise<boolean> => {
     try {
       const token = localStorage.getItem("midanic_token") ?? "";
       const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/api/erp/sale-orders/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const detail: SaleOrderDetail = await res.json();
       setViewingOrder(detail);
       setViewOpen(true);
-    } catch { /* silent */ }
+      return true;
+    } catch {
+      return false;
+    }
   };
   const updateCustomerPwd = useUpdateErpCustomer();
 
