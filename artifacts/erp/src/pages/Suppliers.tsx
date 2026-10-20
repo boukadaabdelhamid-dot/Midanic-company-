@@ -25,6 +25,10 @@ import {
 import { Plus, Pencil, CreditCard, TrendingDown, TrendingUp, FileText, RefreshCw, SlidersHorizontal, MoreVertical, Link2, Store, UserPlus, Maximize2, Minimize2, Download, Printer } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ContactFormDialog, emptyContactForm, type ContactFormState } from "@/components/ContactFormDialog";
+import SupplierBalanceOperationDialog, { type SupplierBalanceRow } from "@/components/SupplierBalanceOperationDialog";
+import SupplierPurchaseOrderDialog from "@/components/SupplierPurchaseOrderDialog";
+import { getLinkedPurchaseOrderId } from "@/lib/supplier-operation-order";
+import { usePermissions } from "@/hooks/use-permissions";
 
 // The generated Supplier type predates the global-account feature; extend locally.
 type GlobalSupplier = Supplier & { globalSupplierId?: string | null };
@@ -333,9 +337,12 @@ function StatementSheet({
   const { lang } = useLang();
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const qc = useQueryClient();
+  const { can } = usePermissions();
   const linked = !!(supplier as GlobalSupplier | null)?.globalSupplierId;
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [selectedOperation, setSelectedOperation] = useState<SupplierBalanceRow | null>(null);
+  const [purchaseOrderId, setPurchaseOrderId] = useState<number | null>(null);
   const invalidDateRange = !!startDate && !!endDate && startDate > endDate;
 
   useEffect(() => {
@@ -422,6 +429,37 @@ function StatementSheet({
         <TrendingDown className="h-3 w-3" />{t("Règlement", "تسديد")}
       </span>
     );
+  };
+
+  const opTypeLabel = (op: UnifiedOp) => {
+    const src = op.source ?? "supplier";
+    const opType = op.type as string;
+    if (src === "customer") {
+      if (opType === "vente_a_terme") return t("Vente à terme", "بيع بالدين");
+      if (opType === "versement") return t("Versement", "دفعة");
+      if (opType === "avoir_retour") return t("Avoir retour", "أفوار");
+      return op.type;
+    }
+    if (opType === "purchase" || opType === "purchase_comptant") return t("Achat", "شراء");
+    if (opType === "ajustement") return t("Ajustement", "تعديل");
+    if (opType === "payment") return t("Règlement", "تسديد");
+    return op.type;
+  };
+
+  const openStatementOperation = (op: UnifiedOp) => {
+    setSelectedOperation({
+      op,
+      label: opTypeLabel(op),
+      dateLabel: op.date,
+      debit: opDebit(op) == null ? null : Number(opDebit(op)),
+      credit: opCredit(op) == null ? null : Number(opCredit(op)),
+    });
+  };
+
+  const openLinkedPurchaseOrder = () => {
+    if (!selectedOperation || !can("purchases", "view")) return;
+    const id = getLinkedPurchaseOrderId(selectedOperation.op);
+    if (id) setPurchaseOrderId(id);
   };
 
   const opDebit = (op: UnifiedOp): string | null => {
@@ -557,7 +595,17 @@ function StatementSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <>
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        onOpenChange(nextOpen);
+        if (!nextOpen) {
+          setSelectedOperation(null);
+          setPurchaseOrderId(null);
+        }
+      }}
+    >
       <SheetContent
         side="right"
         className={`w-full p-0 overflow-y-auto transition-[width,max-width] duration-200 ${expanded ? "w-[96vw] max-w-[96vw]" : "max-w-2xl"}`}
@@ -668,15 +716,29 @@ function StatementSheet({
             </div>
           ) : (
             <>
+              <p className="mb-3 text-xs text-muted-foreground">
+                {t("Cliquez sur une opération pour voir ses détails et ouvrir le bon d'achat associé.", "اضغط على العملية لعرض تفاصيلها وفتح سند الشراء المرتبط بها.")}
+              </p>
               <div className="space-y-3 md:hidden" data-testid="supplier-statement-cards">
                 {(data.operations as UnifiedOp[]).map((op) => {
                   const debit = opDebit(op);
                   const credit = opCredit(op);
+                  const label = opTypeLabel(op);
                   return (
                     <article
                       key={`${op.source ?? "s"}-${op.id}`}
                       data-testid={`card-supplier-statement-operation-${op.id}`}
-                      className="min-w-0 rounded-lg border bg-card p-3 space-y-3"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t(`Détails de l'opération ${label} du ${op.date}`, `تفاصيل عملية ${label} بتاريخ ${op.date}`)}
+                      onClick={() => openStatementOperation(op)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openStatementOperation(op);
+                        }
+                      }}
+                      className="min-w-0 cursor-pointer rounded-lg border bg-card p-3 space-y-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="min-w-0 space-y-1">
@@ -749,7 +811,20 @@ function StatementSheet({
                       const debit = opDebit(op);
                       const credit = opCredit(op);
                       return (
-                        <TableRow key={`${op.source ?? "s"}-${op.id}`}>
+                        <TableRow
+                          key={`${op.source ?? "s"}-${op.id}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={t(`Détails de l'opération ${opTypeLabel(op)} du ${op.date}`, `تفاصيل عملية ${opTypeLabel(op)} بتاريخ ${op.date}`)}
+                          onClick={() => openStatementOperation(op)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openStatementOperation(op);
+                            }
+                          }}
+                          className="cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           <TableCell className="text-sm tabular-nums">{op.date}</TableCell>
                           {(linked || isUnified) && (
                             <TableCell className="text-xs text-muted-foreground">
@@ -787,6 +862,20 @@ function StatementSheet({
         </div>
       </SheetContent>
     </Sheet>
+    <SupplierBalanceOperationDialog
+      row={selectedOperation}
+      loading={false}
+      canOpenPurchase={can("purchases", "view")}
+      onClose={() => setSelectedOperation(null)}
+      onOpenPurchase={openLinkedPurchaseOrder}
+    />
+    <SupplierPurchaseOrderDialog
+      supplier={supplier}
+      orderId={purchaseOrderId}
+      open={purchaseOrderId != null}
+      onOpenChange={(nextOpen) => { if (!nextOpen) setPurchaseOrderId(null); }}
+    />
+    </>
   );
 }
 

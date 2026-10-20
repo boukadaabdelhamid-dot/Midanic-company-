@@ -2260,6 +2260,21 @@ router.get("/erp/purchase-orders", authenticate, requireStaff, requireStore, req
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
+router.get("/erp/purchase-orders/:id", authenticate, requireStaff, requireStore, requirePermission("purchases", "view"), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.currentStoreId!;
+    const poId = pid(req, "id");
+    const [po] = await db.select().from(schema.purchaseOrdersTable)
+      .where(and(
+        eq(schema.purchaseOrdersTable.id, poId),
+        eq(schema.purchaseOrdersTable.storeId, storeId),
+      ))
+      .limit(1);
+    if (!po) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(po);
+  } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
+});
+
 router.post("/erp/purchase-orders", authenticate, requireStaff, requireStore, requirePermission("purchases", "create"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
