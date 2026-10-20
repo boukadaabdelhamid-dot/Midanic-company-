@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { ProductPickerDialog } from "@/components/pos/ProductPickerDialog";
 import InvoiceDialog from "@/components/InvoiceDialog";
 import type { InvoiceData } from "@/components/InvoiceTemplate";
+import SalePaymentBadge from "@/components/SalePaymentBadge";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,29 @@ export type SaleOrderItem = {
 };
 
 export type SaleOrderDetail = SaleOrder & { items: SaleOrderItem[] };
+
+function buildSaleInvoice(order: SaleOrderDetail, store: InvoiceData["store"], showTva: boolean): InvoiceData {
+  return {
+    kind: "sale",
+    number: `BV-${String(order.id).padStart(6, "0")}`,
+    date: order.created_at ? new Date(order.created_at) : new Date(),
+    store,
+    party: { name: order.customer_name, address: "", phone: order.customer_phone },
+    lines: (order.items ?? []).map((it) => ({
+      designation: (it.product_name_en || it.product_name_ar || "—").toUpperCase(),
+      reference: it.product_reference ?? null,
+      qty: it.quantity,
+      unitPrice: parseFloat(it.unit_price),
+    })),
+    showTva,
+    tvaRate: parseFloat(store?.tvaRate ?? "19"),
+    notes: order.payment_method === "a_terme"
+      ? "Paiement : À terme / الدفع: آجل"
+      : order.payment_method === "comptant"
+        ? "Paiement : Comptant / الدفع: نقدًا"
+        : undefined,
+  };
+}
 
 type EditLine = {
   productId: number;
@@ -242,25 +266,7 @@ export default function SaleOrders() {
 
   const invoiceData: InvoiceData | null = React.useMemo(() => {
     if (!invoiceOrder) return null;
-    return {
-      kind: "sale",
-      number: `BV-${String(invoiceOrder.id).padStart(6, "0")}`,
-      date: invoiceOrder.created_at ? new Date(invoiceOrder.created_at) : new Date(),
-      store,
-      party: {
-        name: invoiceOrder.customer_name,
-        address: "",
-        phone: invoiceOrder.customer_phone,
-      },
-      lines: (invoiceOrder.items ?? []).map((it) => ({
-        designation: (it.product_name_en || it.product_name_ar || "—").toUpperCase(),
-        reference: it.product_reference ?? null,
-        qty: it.quantity,
-        unitPrice: parseFloat(it.unit_price),
-      })),
-      showTva,
-      tvaRate: parseFloat(store?.tvaRate ?? "19"),
-    };
+    return buildSaleInvoice(invoiceOrder, store, showTva);
   }, [invoiceOrder, store, showTva]);
 
   const statusLabels: Record<string, string> = {
@@ -1136,6 +1142,16 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
 }) {
   const { lang } = useLang();
   const { can } = usePermissions();
+  const store = useCurrentStore();
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [showTva, setShowTva] = useState(false);
+  React.useEffect(() => {
+    setInvoiceOpen(false);
+  }, [open, order?.id]);
+  const invoiceData = useMemo(
+    () => order ? buildSaleInvoice(order, store, showTva) : null,
+    [order, store, showTva],
+  );
   const canViewProfit = can("orders", "view_profit");
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const currency = lang === "ar" ? "دج" : "DA";
@@ -1145,12 +1161,14 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
   const benefice = parseFloat(order.benefice ?? "0");
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex flex-wrap items-center gap-2 pr-5">
             <Receipt className="h-5 w-5 text-[#1B3057]" />
             {t("Bon de vente", "بون بيع")} BV-{String(order.id).padStart(5, "0")}
+            <SalePaymentBadge method={order.payment_method} />
           </DialogTitle>
         </DialogHeader>
 
@@ -1222,10 +1240,27 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
         </div>
 
         <DialogFooter className="shrink-0">
+          <Button
+            onClick={() => {
+              setShowTva(!!store?.showTvaByDefault);
+              setInvoiceOpen(true);
+            }}
+            data-testid="button-print-customer-sale"
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            {t("Imprimer", "طباعة")}
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Fermer", "إغلاق")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <InvoiceDialog
+      open={invoiceOpen}
+      onOpenChange={setInvoiceOpen}
+      data={invoiceData}
+      onShowTvaChange={setShowTva}
+    />
+    </>
   );
 }
 

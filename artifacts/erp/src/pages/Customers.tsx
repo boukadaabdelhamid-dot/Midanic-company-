@@ -58,6 +58,7 @@ import { ShippingLabelModal } from "@/components/ShippingLabelModal";
 import { useCurrentStore } from "@/hooks/use-current-store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { SaleOrderViewDialog, type SaleOrderDetail } from "@/pages/SaleOrders";
+import SalePaymentBadge from "@/components/SalePaymentBadge";
 import { RetourPrintDialog } from "@/pages/Retours";
 
 type TFn = (fr: string, ar: string) => string;
@@ -1080,7 +1081,10 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
                   className="flex items-center justify-between py-2.5 border-b border-muted last:border-0 gap-3 cursor-pointer hover:bg-accent/40 rounded-md px-2 -mx-2 transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">#{o.id}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">#{o.id}</p>
+                      <SalePaymentBadge method={"paymentMethod" in o ? o.paymentMethod : null} />
+                    </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       {fmtDt(o.createdAt)}
                     </p>
