@@ -111,6 +111,9 @@ function renderStatement(lang) {
     ...components,
     Button,
     useLang: () => ({ lang }),
+    usePermissions: () => ({ can: () => true }),
+    SupplierBalanceOperationDialog: () => null,
+    SupplierPurchaseOrderDialog: () => null,
     useQueryClient: () => ({ invalidateQueries() {} }),
     getGetSupplierOperationsQueryKey: (id) => ["supplier-operations", id],
     fmt: (value) => String(value),
@@ -203,7 +206,13 @@ for (const lang of ["fr", "ar"]) {
     const cards = findElementByTestId(html, "supplier-statement-cards");
     assert.match(cards, /class="space-y-3 md:hidden"/);
     assert.doesNotMatch(cards, /overflow-x-(?:auto|scroll)|overflow-auto|whitespace-nowrap/);
-    assert.match(cards, /class="min-w-0 rounded-lg border bg-card p-3 space-y-3"/);
+    const card = findElementByTestId(html, "card-supplier-statement-operation-41");
+    const className = card.match(/class="([^"]+)"/)?.[1]?.split(/\s+/) ?? [];
+    for (const token of ["min-w-0", "rounded-lg", "border", "bg-card", "p-3", "space-y-3"]) {
+      assert.ok(className.includes(token), `card should retain ${token}`);
+    }
+    assert.match(card, /role="button"/);
+    assert.match(card, /tabindex="0"/);
     assert.match(cards, /break-words/);
     assert.ok(html.includes(`dir="${lang === "ar" ? "rtl" : "ltr"}"`));
     assert.ok(cards.includes("2026-10-18"));
@@ -219,6 +228,7 @@ for (const lang of ["fr", "ar"]) {
     assert.ok(table.includes("<table"));
     assert.ok(table.includes("2026-10-18"));
     assert.ok(table.includes(operationNote));
+    assert.match(table, /<tr role="button" tabindex="0"/);
     assert.ok(!/min-w-\[/.test(table), "the desktop table should not force a minimum-width horizontal scroll");
     for (const label of expected.slice(0, 6)) assert.ok(table.includes(label), label);
   });

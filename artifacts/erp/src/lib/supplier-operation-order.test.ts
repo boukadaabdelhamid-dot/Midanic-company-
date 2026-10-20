@@ -6,10 +6,12 @@ test("uses an explicit purchase-order ID or PO reference", () => {
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase", poId: 13 }), 13);
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase", reference: "PO-13" }), 13);
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase_comptant", reference: "PO #42" }), 42);
+  assert.equal(getLinkedPurchaseOrderId({ type: "payment", poId: 13 }), 13);
+  assert.equal(getLinkedPurchaseOrderId({ type: "payment", reference: "PO-13" }), 13);
 });
 
 test("does not infer purchase orders from unrelated operations or references", () => {
-  assert.equal(getLinkedPurchaseOrderId({ type: "payment", reference: "PO-13" }), null);
+  assert.equal(getLinkedPurchaseOrderId({ type: "ajustement", reference: "PO-13" }), null);
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase", source: "customer", reference: "PO-13" }), null);
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase", reference: "invoice 13" }), null);
   assert.equal(getLinkedPurchaseOrderId({ type: "purchase", reference: "PO-0" }), null);

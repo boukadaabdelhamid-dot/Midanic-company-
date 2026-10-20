@@ -9,7 +9,7 @@ export function getLinkedPurchaseOrderId(
   operation: SupplierPurchaseOperation,
 ): number | null {
   if (operation.source === "customer") return null;
-  if (operation.type !== "purchase" && operation.type !== "purchase_comptant") return null;
+  if (!["purchase", "purchase_comptant", "payment"].includes(operation.type)) return null;
 
   const explicitId = Number(operation.poId);
   if (Number.isSafeInteger(explicitId) && explicitId > 0) return explicitId;

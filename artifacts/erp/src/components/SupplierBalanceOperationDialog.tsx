@@ -32,6 +32,8 @@ export default function SupplierBalanceOperationDialog({
   const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
   const op = row?.op;
   const purchaseOrderId = op ? getLinkedPurchaseOrderId(op) : null;
+  const isPurchaseOperation = op && op.source !== "customer"
+    && ["purchase", "purchase_comptant", "payment"].includes(op.type);
   const money = (value: string | number | null | undefined) =>
     value == null ? t("Non enregistré", "غير مسجل") : `${Number(value).toFixed(2)} ${t("DA", "دج")}`;
 
@@ -79,7 +81,7 @@ export default function SupplierBalanceOperationDialog({
                 </div>
               )}
             </div>
-            {op.source !== "customer" && op.type === "purchase" && (
+            {isPurchaseOperation && (
               purchaseOrderId ? (
                 <div className="space-y-2">
                   <Button
@@ -98,19 +100,6 @@ export default function SupplierBalanceOperationDialog({
                     </p>
                   )}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {t("Aucun bon d'achat associé n'est référencé pour cette opération.", "لا يوجد سند شراء مرتبط مسجل لهذه العملية.")}
-                </p>
-              )
-            )}
-            {op.source !== "customer" && op.type === "purchase_comptant" && (
-              purchaseOrderId ? (
-                <Button className="w-full" onClick={onOpenPurchase} disabled={loading || !canOpenPurchase}>
-                  {loading
-                    ? t("Ouverture…", "جارٍ الفتح…")
-                    : t(`Ouvrir le bon d'achat #${purchaseOrderId}`, `فتح سند الشراء رقم ${purchaseOrderId}`)}
-                </Button>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   {t("Aucun bon d'achat associé n'est référencé pour cette opération.", "لا يوجد سند شراء مرتبط مسجل لهذه العملية.")}

@@ -1666,6 +1666,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
     type MergedEntry = {
       id: number; date: string; type: string; amount: string | null;
       reference: string | null; note: string | null;
+      poId: number | null;
       storeNameAr: string | null; storeNameEn: string | null;
       source: "supplier" | "customer"; createdAt: Date | string | null;
       // Real per-role balance snapshot captured at write time (via mutateSupplierBalance/
@@ -1704,6 +1705,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
         for (const { op, storeNameAr, storeNameEn } of supplierRows) {
           allRaw.push({ id: op.id, date: op.date, type: op.type, amount: op.amount,
             reference: op.reference ?? null, note: op.note ?? null,
+            poId: op.poId ?? null,
             storeNameAr: storeNameAr ?? null, storeNameEn: storeNameEn ?? null,
             source: "supplier", createdAt: op.createdAt,
             balanceBefore: op.balanceBefore ?? null, balanceAfter: op.balanceAfter ?? null });
@@ -1722,6 +1724,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
           for (const { op, storeNameAr, storeNameEn } of custOpRows) {
             allRaw.push({ id: op.id, date: op.date, type: op.type, amount: op.amount,
               reference: op.reference ?? null, note: op.note ?? null,
+              poId: null,
               storeNameAr: storeNameAr ?? null, storeNameEn: storeNameEn ?? null,
               source: "customer", createdAt: op.createdAt,
               balanceBefore: op.balanceBefore ?? null, balanceAfter: op.balanceAfter ?? null });

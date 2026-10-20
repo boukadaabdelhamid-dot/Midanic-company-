@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Supplier } from "@workspace/erp-api-client-react";
 import { getApiBase } from "@/lib/api-base";
@@ -51,9 +51,14 @@ export default function SupplierPurchaseOrderDialog({
   const token = localStorage.getItem("midanic_token") ?? "";
   const headers = { Authorization: `Bearer ${token}` };
 
+  useEffect(() => {
+    setInvoiceOpen(false);
+  }, [open, orderId, supplier?.id, store?.id]);
+
   const orderQuery = useQuery({
     queryKey: ["supplier-statement-purchase-order", store?.id ?? null, supplier?.id ?? null, orderId],
     enabled: open && !!store?.id && !!supplier && !!orderId,
+    retry: false,
     queryFn: async ({ signal }) => {
       const response = await fetch(`${API_BASE}/api/erp/purchase-orders/${orderId}`, { headers, signal });
       if (!response.ok) throw new Error(`Purchase order could not be loaded (${response.status})`);
@@ -66,6 +71,7 @@ export default function SupplierPurchaseOrderDialog({
   const itemsQuery = useQuery({
     queryKey: ["supplier-statement-purchase-order-items", store?.id ?? null, orderId],
     enabled: open && !!orderQuery.data && !!orderId,
+    retry: false,
     queryFn: async ({ signal }) => {
       const response = await fetch(`${API_BASE}/api/erp/purchase-orders/${orderId}/items`, { headers, signal });
       if (!response.ok) throw new Error(`Purchase order items could not be loaded (${response.status})`);
@@ -124,6 +130,18 @@ export default function SupplierPurchaseOrderDialog({
           ) : error ? (
             <div role="alert" className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               {t("Impossible de charger ce bon d'achat. Vérifiez vos droits ou réessayez.", "تعذر تحميل سند الشراء. تحقق من صلاحياتك أو أعد المحاولة.")}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 block"
+                disabled={orderQuery.isFetching || itemsQuery.isFetching}
+                onClick={() => {
+                  if (orderQuery.isError) void orderQuery.refetch();
+                  else void itemsQuery.refetch();
+                }}
+              >
+                {t("Réessayer", "إعادة المحاولة")}
+              </Button>
             </div>
           ) : order ? (
             <div className="space-y-4">

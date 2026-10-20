@@ -348,6 +348,8 @@ function StatementSheet({
   useEffect(() => {
     setStartDate("");
     setEndDate("");
+    setSelectedOperation(null);
+    setPurchaseOrderId(null);
   }, [supplier?.id, open]);
 
   const supplierId = supplier?.id ?? 0;
