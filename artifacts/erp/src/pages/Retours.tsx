@@ -24,6 +24,7 @@ import type { InvoiceData } from "@/components/InvoiceTemplate";
 import { useCurrentStore } from "@/hooks/use-current-store";
 import { ProductPickerDialog } from "@/components/pos/ProductPickerDialog";
 import { findReturnProductByCode } from "@/lib/return-product-lookup";
+import { formatReturnQuantityInput, parseReturnQuantityInput } from "@/lib/return-quantity";
 
 type CustomerSaleItem = {
   productId: number;
@@ -430,6 +431,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   }, [extraBarcodesData]);
 
   const [lines, setLines] = useState<RetourLine[]>([]);
+  const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
@@ -502,6 +504,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   React.useEffect(() => {
     if (open) {
       setLines([]);
+      setQtyDrafts({});
       setSelectedCustomer(null);
       setClientSearch("");
       setClientComboOpen(false);
@@ -543,6 +546,11 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
         },
       ];
     });
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[p.id];
+      return next;
+    });
     setPickerOpen(false);
   };
 
@@ -576,6 +584,11 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
           pu: parseFloat(item.unitPrice),
         },
       ];
+    });
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[item.productId];
+      return next;
     });
   };
 
@@ -615,10 +628,22 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     }
   };
 
-  const removeLine = (productId: number) => setLines((prev) => prev.filter((l) => l.productId !== productId));
+  const removeLine = (productId: number) => {
+    setLines((prev) => prev.filter((l) => l.productId !== productId));
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
   const setQty = (productId: number, qty: number) => {
     if (qty < 1) return;
     setLines((prev) => prev.map((l) => l.productId === productId ? { ...l, qty } : l));
+  };
+  const updateQtyInput = (productId: number, value: string) => {
+    setQtyDrafts((prev) => ({ ...prev, [productId]: value }));
+    const quantity = parseReturnQuantityInput(value);
+    if (quantity !== null) setQty(productId, quantity);
   };
   const setPu = (productId: number, pu: number) => {
     if (pu < 0) return;
@@ -633,6 +658,20 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
       setError(t("Ajoutez au moins un article.", "أضف منتجاً واحداً على الأقل."));
       return;
     }
+    const parsedQuantities = new Map(
+      lines.map((line) => [
+        line.productId,
+        parseReturnQuantityInput(qtyDrafts[line.productId] ?? String(line.qty)),
+      ]),
+    );
+    if ([...parsedQuantities.values()].some((quantity) => quantity === null)) {
+      setError(t("Saisissez une quantité décimale valide, supérieure à zéro.", "أدخل كمية عشرية صحيحة أكبر من الصفر."));
+      return;
+    }
+    setLines((prev) => prev.map((line) => ({
+      ...line,
+      qty: parsedQuantities.get(line.productId) ?? line.qty,
+    })));
     setClotureOpen(true);
   };
 
@@ -950,10 +989,18 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                             <TableCell className="text-sm font-medium">{line.designation}</TableCell>
                             <TableCell className="text-center">
                               <Input
-                                type="number"
-                                min={1}
-                                value={line.qty}
-                                onChange={(e) => setQty(line.productId, parseInt(e.target.value) || 1)}
+                                type="text"
+                                inputMode="decimal"
+                                value={qtyDrafts[line.productId] ?? formatReturnQuantityInput(line.qty)}
+                                onChange={(e) => updateQtyInput(line.productId, e.target.value)}
+                                onBlur={() => {
+                                  const quantity = parseReturnQuantityInput(qtyDrafts[line.productId] ?? String(line.qty));
+                                  if (quantity !== null) {
+                                    setQty(line.productId, quantity);
+                                    setQtyDrafts((prev) => ({ ...prev, [line.productId]: formatReturnQuantityInput(quantity) }));
+                                  }
+                                }}
+                                aria-label={t(`Quantité à retourner pour ${line.designation}`, `كمية الإرجاع للمنتج ${line.designation}`)}
                                 className="h-7 w-16 text-center text-sm mx-auto"
                               />
                             </TableCell>
