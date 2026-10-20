@@ -1146,15 +1146,15 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-h-[90vh] max-w-2xl flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-[#1B3057]" />
             {t("Bon de vente", "بون بيع")} BV-{String(order.id).padStart(5, "0")}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain space-y-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">{t("Client : ", "العميل: ")}</span>
@@ -1221,7 +1221,7 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Fermer", "إغلاق")}</Button>
         </DialogFooter>
       </DialogContent>

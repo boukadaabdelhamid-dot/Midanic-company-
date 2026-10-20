@@ -735,7 +735,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-3">
@@ -773,7 +773,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <div className="px-4 pt-3 border-b shrink-0">
           <TabsList className="h-9 text-xs">
             <TabsTrigger value="detail"  className="text-xs px-3">DÉTAIL</TabsTrigger>
@@ -784,7 +784,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
         </div>
 
         {/* ── DÉTAIL ── */}
-        <TabsContent value="detail" className="flex-1 overflow-y-auto p-6 mt-0 space-y-5">
+        <TabsContent value="detail" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-6 mt-0 space-y-5">
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("Informations générales", "المعلومات العامة")}</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -895,7 +895,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
         </TabsContent>
 
         {/* ── BALANCE ── */}
-        <TabsContent value="balance" className="flex-1 overflow-y-auto p-6 mt-0 space-y-4">
+        <TabsContent value="balance" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-6 mt-0 space-y-4">
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-2">
             <div className={`col-span-2 rounded-lg border p-3 flex items-center justify-between ${currentBalance > 0 ? "bg-red-50 border-red-200" : currentBalance < 0 ? "bg-green-50 border-green-200" : "bg-muted/40 border-border"}`}>
@@ -1065,7 +1065,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
         </TabsContent>
 
         {/* ── VENTES ── */}
-        <TabsContent value="ventes" className="flex-1 overflow-y-auto p-6 mt-0 space-y-3">
+        <TabsContent value="ventes" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-6 mt-0 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             {t("Factures de vente", "فواتير البيع")} ({ventes.length})
           </p>
@@ -1102,7 +1102,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
         </TabsContent>
 
         {/* ── RETOURS ── */}
-        <TabsContent value="retours" className="flex-1 overflow-y-auto p-6 mt-0 space-y-3">
+        <TabsContent value="retours" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-6 mt-0 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             {t("Retours", "المرتجعات")} ({bonRetours.length})
           </p>
@@ -2412,7 +2412,7 @@ export default function Customers() {
       <Sheet open={!!detailId} onOpenChange={(v) => { if (!v) { setDetailId(null); setDetailExpanded(false); } }}>
         <SheetContent
           side="right"
-          className={`p-0 flex flex-col transition-[width,max-width] duration-200 ${detailExpanded ? "w-[96vw] max-w-[96vw] sm:max-w-[96vw]" : "w-full sm:max-w-xl"}`}
+          className={`p-0 flex min-h-0 flex-col transition-[width,max-width] duration-200 ${detailExpanded ? "w-[96vw] max-w-[96vw] sm:max-w-[96vw]" : "w-full sm:max-w-xl"}`}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{t("Détail client", "تفاصيل العميل")}</SheetTitle>
