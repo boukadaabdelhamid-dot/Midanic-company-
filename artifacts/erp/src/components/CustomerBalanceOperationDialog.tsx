@@ -26,7 +26,7 @@ export default function CustomerBalanceOperationDialog({
   onOpenOrder: () => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const op = row?.op;
   const orderId = op ? getLinkedSaleOrderId(op) : null;
   const money = (value: string | number | null | undefined) =>

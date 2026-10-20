@@ -50,7 +50,7 @@ const fmt = (v: string | number | undefined | null): string => {
 
 const fmtDT = (iso: string | undefined | null) => {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("fr-DZ");
+  return new Date(iso).toLocaleString(useLang.locale());
 };
 
 const personLabel = (r: CaisseReportRow): string =>
@@ -546,7 +546,7 @@ export default function CaisseReports() {
   const [to, setTo] = useState<string>(todayISO());
   const [activeTab, setActiveTab] = useState<"report" | "zreport">("report");
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -675,7 +675,7 @@ export default function CaisseReports() {
               </CardTitle>
               {data && (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(data.from).toLocaleString("fr-DZ")} → {new Date(data.to).toLocaleString("fr-DZ")}
+                  {new Date(data.from).toLocaleString(useLang.locale(lang))} → {new Date(data.to).toLocaleString(useLang.locale(lang))}
                 </span>
               )}
             </CardHeader>

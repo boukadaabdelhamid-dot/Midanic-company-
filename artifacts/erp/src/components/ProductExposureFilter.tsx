@@ -13,7 +13,7 @@ export default function ProductExposureFilter({
   compact = false,
 }: ProductExposureFilterProps) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const id = compact ? "product-column-exposure-filter" : "product-exposure-filter";
 
   return (

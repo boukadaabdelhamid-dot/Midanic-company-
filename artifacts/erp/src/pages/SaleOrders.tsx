@@ -157,7 +157,7 @@ const statusColor = (s: string) => {
 
 export default function SaleOrders() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const { can } = usePermissions();
   const canViewProfit = can("orders", "view_profit");
@@ -671,7 +671,7 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
   isSaving: boolean;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   const { data: productsResp } = useGetProducts({ limit: 9999 });
@@ -1053,7 +1053,7 @@ function AddLineBvDialog({
   isEdit?: boolean;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [qty, setQty] = useState("1");
   const [pu, setPu] = useState("0");
@@ -1153,7 +1153,7 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
     [order, store, showTva],
   );
   const canViewProfit = can("orders", "view_profit");
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   if (!order) return null;
 
@@ -1274,7 +1274,7 @@ function ClotureDialog({ open, onOpenChange, order, onConfirm, isPending }: {
   isPending: boolean;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   const isOnline = order?.order_source === "online";
@@ -1354,7 +1354,7 @@ function CancelOrderDialog({ open, onOpenChange, order, onConfirm, isPending }: 
   isPending: boolean;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const ref = order ? `WS-${String(order.id).padStart(5, "0")}` : "";
 
   return (

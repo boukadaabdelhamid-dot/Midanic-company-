@@ -180,7 +180,7 @@ function mapToRows(m: Map<string, boolean>): PermRow[] {
 export default function Permissions() {
   const { lang } = useLang();
   const { token } = useAuth();
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [empLoading, setEmpLoading] = useState(true);

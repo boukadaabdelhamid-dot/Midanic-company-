@@ -29,11 +29,11 @@ import type { Product } from "@workspace/erp-api-client-react";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const fmtAmt = (n: number) =>
-  n.toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString(useLang.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("fr-DZ", {
+  return new Date(d).toLocaleDateString(useLang.locale(), {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 };
@@ -70,7 +70,7 @@ function Chip({ text, color }: { text: string; color: string }) {
 // ── row components ─────────────────────────────────────────────────────────────
 
 function PurchaseRow({ p, lang, canViewPurchasePrice }: { p: ProductHistoryPurchase; lang: string; canViewPurchasePrice: boolean }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const storeName = lang === "ar" ? (p.storeNameAr ?? p.storeNameEn) : (p.storeNameEn ?? p.storeNameAr);
   const statusLabel = p.status === "received" ? t("Reçu", "مستلم") : t("En attente", "معلق");
   const statusColor = STATUS_COLORS[p.status] ?? "bg-gray-100 text-gray-600";
@@ -99,7 +99,7 @@ function PurchaseRow({ p, lang, canViewPurchasePrice }: { p: ProductHistoryPurch
 }
 
 function SaleRow({ s, lang }: { s: ProductHistorySale; lang: string }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const storeName = lang === "ar" ? (s.storeNameAr ?? s.storeNameEn) : (s.storeNameEn ?? s.storeNameAr);
   const statusColor = STATUS_COLORS[s.status] ?? "bg-gray-100 text-gray-600";
   return (
@@ -129,9 +129,9 @@ function SaleRow({ s, lang }: { s: ProductHistorySale; lang: string }) {
 }
 
 function MovementRow({ m, lang }: { m: ProductHistoryMovementEntry; lang: string }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const def = MOVE_LABELS[m.movementType] ?? { fr: m.movementType, ar: m.movementType, color: "bg-gray-100 text-gray-600" };
-  const label = lang === "ar" ? def.ar : def.fr;
+  const label = useLang.translate(lang, def.fr, def.ar);
   const storeName = lang === "ar" ? (m.storeNameAr ?? m.storeNameEn) : (m.storeNameEn ?? m.storeNameAr);
   const isIn = m.quantity > 0;
   return (
@@ -162,7 +162,7 @@ function MovementRow({ m, lang }: { m: ProductHistoryMovementEntry; lang: string
 }
 
 function SupplierReturnRow({ r, lang, canViewPurchasePrice }: { r: ProductHistorySupplierReturn; lang: string; canViewPurchasePrice: boolean }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   return (
     <div className="flex items-start gap-3 py-3 border-b last:border-0">
       <div className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center">
@@ -192,7 +192,7 @@ function SupplierReturnRow({ r, lang, canViewPurchasePrice }: { r: ProductHistor
 }
 
 function ReturnRow({ r, lang, onOrderClick }: { r: ProductHistoryReturn; lang: string; onOrderClick?: (orderId: number) => void }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const typeLabel = r.retourType === "sans_remboursement"
     ? t("Avoir", "أفوار")
     : t("Remboursement", "استرداد");
@@ -230,7 +230,7 @@ function ReturnRow({ r, lang, onOrderClick }: { r: ProductHistoryReturn; lang: s
 }
 
 function TransferRow({ tr, lang }: { tr: ProductHistoryTransferEntry; lang: string }) {
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const statusColor = STATUS_COLORS[tr.status] ?? "bg-gray-100 text-gray-600";
   const srcName = lang === "ar"
     ? (tr.sourceStoreNameAr ?? tr.sourceStoreNameEn)
@@ -296,7 +296,7 @@ export default function ProductHistorySheet({ product, onClose }: Props) {
   const { lang } = useLang();
   const { can } = usePermissions();
   const canViewPurchasePrice = can("products", "view_purchase_price");
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [, navigate] = useLocation();
 
   const handleOrderClick = (orderId: number) => {

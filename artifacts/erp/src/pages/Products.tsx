@@ -282,7 +282,7 @@ function expiryColor(daysLeft: number): { card: string; badge: string; label: st
 function ExpiryBatchesPanel({ productId }: { productId: number }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [form, setForm] = useState({ quantity: "1", expiryDate: "", lotNumber: "", notes: "" });
   const [saving, setSaving] = useState(false);
@@ -367,7 +367,7 @@ function ExpiryBatchesPanel({ productId }: { productId: number }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold">
-                      {new Date(b.expiry_date).toLocaleDateString("fr-DZ", { day: "2-digit", month: "short", year: "numeric" })}
+                      {new Date(b.expiry_date).toLocaleDateString(useLang.locale(lang), { day: "2-digit", month: "short", year: "numeric" })}
                     </span>
                     <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${col.badge}`}>{col.label}</span>
                     {b.lot_number && (
@@ -465,7 +465,7 @@ export default function Products() {
   const { lang } = useLang();
   const { can } = usePermissions();
   const canViewPurchasePrice = can("products", "view_purchase_price");
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -1060,66 +1060,66 @@ export default function Products() {
                     </TableHead>
                     {col("id")           && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-16">Id #</TableHead>}
                     {col("image")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-14">Image</TableHead>}
-                    {col("reference")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Réf.</TableHead>}
-                    {col("catalogueType")&& <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Catalogue</TableHead>}
-                    {col("designation")  && <TableHead className="text-xs font-semibold uppercase text-muted-foreground">Désignation</TableHead>}
+                    {col("reference")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Réf.", "المرجع")}</TableHead>}
+                    {col("catalogueType")&& <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Catalogue", "الفهرس")}</TableHead>}
+                    {col("designation")  && <TableHead className="text-xs font-semibold uppercase text-muted-foreground">{t("Désignation", "التسمية")}</TableHead>}
                     {col("description")  && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-40">Description</TableHead>}
                     {col("barcode")      && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-36">Code</TableHead>}
-                    {col("brand")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Marque</TableHead>}
-                    {col("model")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Modèle</TableHead>}
-                    {col("color")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Couleur</TableHead>}
-                    {col("categoryId")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Famille</TableHead>}
-                    {col("colisage")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">Colisage</TableHead>}
-                    {col("weight")       && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">Poids</TableHead>}
+                    {col("brand")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Marque", "الماركة")}</TableHead>}
+                    {col("model")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Modèle", "الموديل")}</TableHead>}
+                    {col("color")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">{t("Couleur", "اللون")}</TableHead>}
+                    {col("categoryId")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Famille", "العائلة")}</TableHead>}
+                    {col("colisage")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">{t("Colisage", "التعبئة")}</TableHead>}
+                    {col("weight")       && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">{t("Poids", "الوزن")}</TableHead>}
                     {col("catalogue1")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.1</TableHead>}
                     {col("catalogue2")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.2</TableHead>}
                     {col("catalogue3")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.3</TableHead>}
                     {col("catalogue4")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.4</TableHead>}
                     {col("catalogue5")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.5</TableHead>}
                     {col("catalogue6")   && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-24">Cat.6</TableHead>}
-                    {col("createdAt")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">Création</TableHead>}
-                    {col("isExposed")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">Exposé</TableHead>}
-                    {col("isActive")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">Etat</TableHead>}
-                    {col("price")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-28">PU Détail</TableHead>}
-                    {col("priceGros")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">PU Gros</TableHead>}
-                    {col("priceSemiGros")&& <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">PU S.Gros</TableHead>}
-                    {col("priceMin")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">Prix Min</TableHead>}
-                    {col("costPrice") && canViewPurchasePrice && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-28">Coût</TableHead>}
+                    {col("createdAt")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-28">{t("Création", "تاريخ الإنشاء")}</TableHead>}
+                    {col("isExposed")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">{t("Exposé", "معروض")}</TableHead>}
+                    {col("isActive")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">{t("État", "الحالة")}</TableHead>}
+                    {col("price")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-28">{t("PU Détail", "سعر البيع")}</TableHead>}
+                    {col("priceGros")    && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">{t("PU Gros", "سعر الجملة")}</TableHead>}
+                    {col("priceSemiGros")&& <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">{t("PU S.Gros", "سعر نصف الجملة")}</TableHead>}
+                    {col("priceMin")     && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-24">{t("Prix Min", "السعر الأدنى")}</TableHead>}
+                    {col("costPrice") && canViewPurchasePrice && <TableHead className="text-xs font-semibold uppercase text-muted-foreground text-right w-28">{t("Coût", "التكلفة")}</TableHead>}
                     {col("stock")        && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20">Stock</TableHead>}
-                    {col("vitrine")      && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20 text-center">Vitrine</TableHead>}
+                    {col("vitrine")      && <TableHead className="text-xs font-semibold uppercase text-muted-foreground w-20 text-center">{t("Vitrine", "المتجر الإلكتروني")}</TableHead>}
                     {col("actions")      && <TableHead className="w-20" />}
                   </TableRow>
                   {/* ── Filter row ── */}
                   <TableRow className="border-b bg-card h-8">
                     <TableHead className="w-10 px-3" />
-                    {col("id")           && <TableHead className="w-16 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.id} onChange={(e) => setColumnFilter("id", e.target.value)} /></div></TableHead>}
+                    {col("id")           && <TableHead className="w-16 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.id} onChange={(e) => setColumnFilter("id", e.target.value)} /></div></TableHead>}
                     {col("image")        && <TableHead className="w-14 px-2 py-1" />}
-                    {col("reference")    && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.ref} onChange={(e) => setColumnFilter("ref", e.target.value)} /></div></TableHead>}
-                    {col("catalogueType")&& <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogueType} onChange={(e) => setColumnFilter("catalogueType", e.target.value)} /></div></TableHead>}
-                    {col("designation")  && <TableHead className="px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.name} onChange={(e) => setColumnFilter("name", e.target.value)} /></div></TableHead>}
-                    {col("description")  && <TableHead className="w-40 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.description} onChange={(e) => setColumnFilter("description", e.target.value)} /></div></TableHead>}
-                    {col("barcode")      && <TableHead className="w-36 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.code} onChange={(e) => setColumnFilter("code", e.target.value)} /></div></TableHead>}
-                    {col("brand")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.brand} onChange={(e) => setColumnFilter("brand", e.target.value)} /></div></TableHead>}
-                    {col("model")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.model} onChange={(e) => setColumnFilter("model", e.target.value)} /></div></TableHead>}
-                    {col("color")        && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.color} onChange={(e) => setColumnFilter("color", e.target.value)} /></div></TableHead>}
-                    {col("categoryId")   && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.family} onChange={(e) => setColumnFilter("family", e.target.value)} /></div></TableHead>}
-                    {col("colisage")     && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.colisage} onChange={(e) => setColumnFilter("colisage", e.target.value)} /></div></TableHead>}
-                    {col("weight")       && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.weight} onChange={(e) => setColumnFilter("weight", e.target.value)} /></div></TableHead>}
-                    {col("catalogue1")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue1} onChange={(e) => setColumnFilter("catalogue1", e.target.value)} /></div></TableHead>}
-                    {col("catalogue2")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue2} onChange={(e) => setColumnFilter("catalogue2", e.target.value)} /></div></TableHead>}
-                    {col("catalogue3")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue3} onChange={(e) => setColumnFilter("catalogue3", e.target.value)} /></div></TableHead>}
-                    {col("catalogue4")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue4} onChange={(e) => setColumnFilter("catalogue4", e.target.value)} /></div></TableHead>}
-                    {col("catalogue5")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue5} onChange={(e) => setColumnFilter("catalogue5", e.target.value)} /></div></TableHead>}
-                    {col("catalogue6")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.catalogue6} onChange={(e) => setColumnFilter("catalogue6", e.target.value)} /></div></TableHead>}
-                    {col("createdAt")    && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.createdAt} onChange={(e) => setColumnFilter("createdAt", e.target.value)} /></div></TableHead>}
+                    {col("reference")    && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.ref} onChange={(e) => setColumnFilter("ref", e.target.value)} /></div></TableHead>}
+                    {col("catalogueType")&& <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogueType} onChange={(e) => setColumnFilter("catalogueType", e.target.value)} /></div></TableHead>}
+                    {col("designation")  && <TableHead className="px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.name} onChange={(e) => setColumnFilter("name", e.target.value)} /></div></TableHead>}
+                    {col("description")  && <TableHead className="w-40 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.description} onChange={(e) => setColumnFilter("description", e.target.value)} /></div></TableHead>}
+                    {col("barcode")      && <TableHead className="w-36 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.code} onChange={(e) => setColumnFilter("code", e.target.value)} /></div></TableHead>}
+                    {col("brand")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.brand} onChange={(e) => setColumnFilter("brand", e.target.value)} /></div></TableHead>}
+                    {col("model")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.model} onChange={(e) => setColumnFilter("model", e.target.value)} /></div></TableHead>}
+                    {col("color")        && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.color} onChange={(e) => setColumnFilter("color", e.target.value)} /></div></TableHead>}
+                    {col("categoryId")   && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.family} onChange={(e) => setColumnFilter("family", e.target.value)} /></div></TableHead>}
+                    {col("colisage")     && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.colisage} onChange={(e) => setColumnFilter("colisage", e.target.value)} /></div></TableHead>}
+                    {col("weight")       && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.weight} onChange={(e) => setColumnFilter("weight", e.target.value)} /></div></TableHead>}
+                    {col("catalogue1")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue1} onChange={(e) => setColumnFilter("catalogue1", e.target.value)} /></div></TableHead>}
+                    {col("catalogue2")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue2} onChange={(e) => setColumnFilter("catalogue2", e.target.value)} /></div></TableHead>}
+                    {col("catalogue3")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue3} onChange={(e) => setColumnFilter("catalogue3", e.target.value)} /></div></TableHead>}
+                    {col("catalogue4")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue4} onChange={(e) => setColumnFilter("catalogue4", e.target.value)} /></div></TableHead>}
+                    {col("catalogue5")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue5} onChange={(e) => setColumnFilter("catalogue5", e.target.value)} /></div></TableHead>}
+                    {col("catalogue6")   && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.catalogue6} onChange={(e) => setColumnFilter("catalogue6", e.target.value)} /></div></TableHead>}
+                    {col("createdAt")    && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.createdAt} onChange={(e) => setColumnFilter("createdAt", e.target.value)} /></div></TableHead>}
                     {col("isExposed")    && <TableHead className="w-20 px-2 py-1"><ProductExposureFilter compact value={columnFilters.exposed} onChange={(value) => setColumnFilter("exposed", value)} /></TableHead>}
-                    {col("isActive")     && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="actif…" value={columnFilters.active} onChange={(e) => setColumnFilter("active", e.target.value)} /></div></TableHead>}
-                    {col("price")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.price} onChange={(e) => setColumnFilter("price", e.target.value)} /></div></TableHead>}
-                    {col("priceGros")    && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.priceGros} onChange={(e) => setColumnFilter("priceGros", e.target.value)} /></div></TableHead>}
-                    {col("priceSemiGros")&& <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.priceSemiGros} onChange={(e) => setColumnFilter("priceSemiGros", e.target.value)} /></div></TableHead>}
-                    {col("priceMin")     && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.priceMin} onChange={(e) => setColumnFilter("priceMin", e.target.value)} /></div></TableHead>}
-                    {col("costPrice") && canViewPurchasePrice && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.costPrice} onChange={(e) => setColumnFilter("costPrice", e.target.value)} /></div></TableHead>}
-                    {col("stock")        && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder="Filtre …" value={columnFilters.stock} onChange={(e) => setColumnFilter("stock", e.target.value)} /></div></TableHead>}
+                    {col("isActive")     && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("actif…", "نشط...")} value={columnFilters.active} onChange={(e) => setColumnFilter("active", e.target.value)} /></div></TableHead>}
+                    {col("price")        && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.price} onChange={(e) => setColumnFilter("price", e.target.value)} /></div></TableHead>}
+                    {col("priceGros")    && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.priceGros} onChange={(e) => setColumnFilter("priceGros", e.target.value)} /></div></TableHead>}
+                    {col("priceSemiGros")&& <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.priceSemiGros} onChange={(e) => setColumnFilter("priceSemiGros", e.target.value)} /></div></TableHead>}
+                    {col("priceMin")     && <TableHead className="w-24 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.priceMin} onChange={(e) => setColumnFilter("priceMin", e.target.value)} /></div></TableHead>}
+                    {col("costPrice") && canViewPurchasePrice && <TableHead className="w-28 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px text-right placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.costPrice} onChange={(e) => setColumnFilter("costPrice", e.target.value)} /></div></TableHead>}
+                    {col("stock")        && <TableHead className="w-20 px-2 py-1"><div className="flex items-center gap-1"><span className="text-[9px] font-medium text-muted-foreground/60 shrink-0">abc</span><input type="text" className="min-w-0 flex-1 bg-transparent border-0 border-b border-muted-foreground/25 rounded-none text-[11px] px-0 pb-px placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 transition-colors" placeholder={t("Filtre …", "تصفية...")} value={columnFilters.stock} onChange={(e) => setColumnFilter("stock", e.target.value)} /></div></TableHead>}
                     {col("vitrine")      && <TableHead className="w-20 px-2 py-1" />}
                     {col("actions")      && <TableHead className="w-20 px-2 py-1" />}
                   </TableRow>
@@ -1202,7 +1202,7 @@ export default function Products() {
                       {col("catalogue6")   && <TableCell className="text-xs">{p.catalogue6 ?? "—"}</TableCell>}
                       {col("createdAt")    && (
                         <TableCell className="text-xs text-muted-foreground">
-                          {p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-DZ") : "—"}
+                          {p.createdAt ? new Date(p.createdAt).toLocaleDateString(useLang.locale(lang)) : "—"}
                         </TableCell>
                       )}
                       {col("isExposed")    && (
@@ -1313,12 +1313,14 @@ export default function Products() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <span className="text-sm text-muted-foreground">
           {total === 0
-            ? "Aucun article trouvé"
-            : `Affichage ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} sur ${total} article(s)`}
+            ? t("Aucun article trouvé", "لم يتم العثور على منتجات")
+            : lang === "en"
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total} item(s)`
+              : `Affichage ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} sur ${total} article(s)`}
         </span>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Lignes :</span>
+            <span className="text-xs text-muted-foreground">{t("Lignes :", "الصفوف:")}</span>
             <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
               <SelectTrigger className="h-8 w-20 text-xs">
                 <SelectValue />
@@ -1336,7 +1338,7 @@ export default function Products() {
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
-              ← Préc.
+              {t("← Préc.", "← السابق")}
             </Button>
             {(() => {
               const pages: (number | "...")[] = [];
@@ -1370,7 +1372,7 @@ export default function Products() {
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
-              Suiv. →
+              {t("Suiv. →", "التالي →")}
             </Button>
           </div>
         </div>
@@ -1531,16 +1533,16 @@ export default function Products() {
             <div className="px-6 border-b bg-muted/30">
               <TabsList className="h-10 bg-transparent gap-1 p-0">
                 <TabsTrigger value="general" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-[#1B3057] rounded-none h-10 text-xs px-3">
-                  <Smartphone className="h-3.5 w-3.5" /> GÉNÉRAL
+                  <Smartphone className="h-3.5 w-3.5" /> {t("Général", "عام")}
                 </TabsTrigger>
                 <TabsTrigger value="pricing" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-[#1B3057] rounded-none h-10 text-xs px-3">
-                  <DollarSign className="h-3.5 w-3.5" /> PRICING
+                  <DollarSign className="h-3.5 w-3.5" /> {t("Tarification", "الأسعار")}
                 </TabsTrigger>
                 <TabsTrigger value="catalogues" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-[#1B3057] rounded-none h-10 text-xs px-3">
-                  <LayoutGrid className="h-3.5 w-3.5" /> CATALOGUES
+                  <LayoutGrid className="h-3.5 w-3.5" /> {t("Catalogues", "الفهارس")}
                 </TabsTrigger>
                 <TabsTrigger value="images" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-[#1B3057] rounded-none h-10 text-xs px-3">
-                  <ImageIcon className="h-3.5 w-3.5" /> IMAGES
+                  <ImageIcon className="h-3.5 w-3.5" /> {t("Images", "الصور")}
                 </TabsTrigger>
                 {dialog.editing && (
                   <TabsTrigger value="expiry" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-[#1B3057] rounded-none h-10 text-xs px-3">
@@ -1645,11 +1647,11 @@ export default function Products() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 mt-3">
                     <div>
-                      <Label className="text-xs mb-1 block">Désignation (FR/EN) *</Label>
-                      <Input value={form.nameEn} onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))} placeholder="Nom du produit" className="h-8 text-sm" />
+                      <Label className="text-xs mb-1 block">{t("Désignation (FR/EN) *", "الاسم (AR) *")}</Label>
+                      <Input value={form.nameEn} onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))} placeholder={t("Nom du produit", "اسم المنتج")} className="h-8 text-sm" />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1 block">الاسم (AR) *</Label>
+                      <Label className="text-xs mb-1 block">{t("Nom (AR) *", "الاسم (AR) *")}</Label>
                       <Input value={form.nameAr} onChange={(e) => setForm((f) => ({ ...f, nameAr: e.target.value }))} dir="rtl" placeholder="اسم المنتج" className="h-8 text-sm" />
                     </div>
                   </div>
@@ -1670,13 +1672,13 @@ export default function Products() {
                           emptyText={t("Aucun résultat", "لا توجد نتائج")}
                         />
                       ) : (
-                        <Input value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} placeholder="Ex: L'Oréal" className="h-8 text-sm" />
+                        <Input value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} placeholder={t("Ex: L'Oréal", "مثال: لوريال")} className="h-8 text-sm" />
                       )}
                       {refBrands.length > 0 && (
                         <Input
                           value={form.brand}
                           onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value, brandId: "" }))}
-                          placeholder="Ou saisir librement…"
+                          placeholder={t("Ou saisir librement…", "أو أدخل قيمة يدوياً...")}
                           className="h-7 text-xs mt-1 text-muted-foreground"
                         />
                       )}
@@ -1701,13 +1703,13 @@ export default function Products() {
                           emptyText={t("Aucun résultat", "لا توجد نتائج")}
                         />
                       ) : (
-                        <Input value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} placeholder="Ex: Noir" className="h-8 text-sm" />
+                        <Input value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} placeholder={t("Ex: Noir", "مثال: أسود")} className="h-8 text-sm" />
                       )}
                       {refColors.length > 0 && (
                         <Input
                           value={form.color}
                           onChange={(e) => setForm((f) => ({ ...f, color: e.target.value, colorId: "" }))}
-                          placeholder="Ou saisir librement…"
+                          placeholder={t("Ou saisir librement…", "أو أدخل قيمة يدوياً...")}
                           className="h-7 text-xs mt-1 text-muted-foreground"
                         />
                       )}
@@ -1727,7 +1729,7 @@ export default function Products() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1 block">Stock</Label>
+                       <Label className="text-xs mb-1 block">{t("Stock", "المخزون")}</Label>
                       <Input type="number" min="0" value={form.stock} onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))} className="h-8 text-sm" />
                     </div>
                     <div>
@@ -1735,11 +1737,11 @@ export default function Products() {
                       <Input type="number" min="0" step="1" placeholder={t("Facultatif", "اختياري")} value={form.minStock} onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))} className="h-8 text-sm" />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1 block">Colisage</Label>
+                       <Label className="text-xs mb-1 block">{t("Colisage", "التعبئة")}</Label>
                       <Input type="number" min="1" value={form.colisage} onChange={(e) => setForm((f) => ({ ...f, colisage: e.target.value }))} className="h-8 text-sm" />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1 block">Poids (kg)</Label>
+                       <Label className="text-xs mb-1 block">{t("Poids (kg)", "الوزن (كغ)")}</Label>
                       <Input type="number" min="0" step="0.001" value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))} className="h-8 text-sm" />
                     </div>
                   </div>
@@ -1747,11 +1749,11 @@ export default function Products() {
 
                 <div>
                   <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-[#1B3057]">
-                    <Pencil className="h-4 w-4" /> Description e-commerce
+                     <Pencil className="h-4 w-4" /> {t("Description e-commerce", "وصف المتجر الإلكتروني")}
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs mb-1 block">Description (FR/EN)</Label>
+                       <Label className="text-xs mb-1 block">{t("Description (FR/EN)", "الوصف (AR)")}</Label>
                       <textarea
                         value={form.descriptionEn}
                         onChange={(e) => setForm((f) => ({ ...f, descriptionEn: e.target.value }))}
@@ -1760,7 +1762,7 @@ export default function Products() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1 block">الوصف (AR)</Label>
+                       <Label className="text-xs mb-1 block">{t("Description (AR)", "الوصف (AR)")}</Label>
                       <textarea
                         value={form.descriptionAr}
                         onChange={(e) => setForm((f) => ({ ...f, descriptionAr: e.target.value }))}
@@ -1817,12 +1819,12 @@ export default function Products() {
                     </div>
                     {canViewPurchasePrice && form.costPrice && form.price && (
                       <p className="text-xs text-muted-foreground">
-                        Marge: {(((parseFloat(form.price) - parseFloat(form.costPrice)) / parseFloat(form.costPrice)) * 100).toFixed(1)}%
+                         {t("Marge :", "الهامش:")} {(((parseFloat(form.price) - parseFloat(form.costPrice)) / parseFloat(form.costPrice)) * 100).toFixed(1)}%
                       </p>
                     )}
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">PU Gros</Label>
+                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("PU Gros", "سعر الجملة")}</Label>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number" min="0" step="0.01"
@@ -1835,7 +1837,7 @@ export default function Products() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">PU Semi-Gros</Label>
+                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("PU Semi-Gros", "سعر نصف الجملة")}</Label>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number" min="0" step="0.01"
@@ -1848,7 +1850,7 @@ export default function Products() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prix Min.</Label>
+                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("Prix Min.", "السعر الأدنى")}</Label>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number" min="0" step="0.01"
@@ -1869,7 +1871,7 @@ export default function Products() {
                   <LayoutGrid className="h-4 w-4" /> {t("Configuration de l'article", "تصنيفات المنتج")}
                 </h3>
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Catégories</p>
+                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t("Catégories", "التصنيفات")}</p>
                   <div className="grid grid-cols-2 gap-3">
                     {([
                       { key: "catalogue1", label: "Catalogue 1" },
@@ -1891,7 +1893,7 @@ export default function Products() {
                           <SelectContent>
                             <SelectItem value={NONE_VAL}>
                               <span className="flex items-center gap-1.5 text-muted-foreground">
-                                <Plus className="h-3 w-3" /> Aucun
+                                 <Plus className="h-3 w-3" /> {t("Aucun", "لا شيء")}
                               </span>
                             </SelectItem>
                             {catalogueTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -2128,7 +2130,7 @@ export default function Products() {
 // ── Extra Barcodes Manager Panel (inline — no nested Dialog) ──────────
 function BarcodeManagerPanel({ productId }: { productId: number }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [input, setInput] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const apiBase = getApiBase();
@@ -2263,7 +2265,7 @@ function PrintLabelsDialog({
   items, onClose,
 }: { items: LabelTarget[]; onClose: () => void }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { toast } = useToast();
   const currency = lang === "ar" ? "دج" : "DA";
   const [size, setSize] = useState<LabelSize>("medium");

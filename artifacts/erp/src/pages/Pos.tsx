@@ -75,7 +75,7 @@ export default function Pos() {
   const store = useCurrentStore();
   const { currentStoreId } = useStoreContext();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const apiBase = getApiBase();
   const posStorageKey = `${POS_LS_KEY}:${window.location.hostname}:${currentStoreId ?? "none"}`;

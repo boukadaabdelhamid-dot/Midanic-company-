@@ -42,7 +42,7 @@ export default function Caisse() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const caisseLabel = makeCaisseLabel(t);
   const transferStatusBadge = makeTransferStatusBadge(t);
@@ -179,7 +179,7 @@ export default function Caisse() {
               </TabsTrigger>
               {isAdmin && (
                 <TabsTrigger value="admin" data-testid="tab-admin">
-                  <Settings className="h-4 w-4 mr-1.5" /> Admin
+                  <Settings className="h-4 w-4 mr-1.5" /> {t("Admin", "المشرف")}
                 </TabsTrigger>
               )}
             </TabsList>
@@ -229,7 +229,7 @@ export default function Caisse() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Type</TableHead>
+                          <TableHead>{t("Type", "النوع")}</TableHead>
                           <TableHead>{t("Propriétaire", "المالك")}</TableHead>
                           <TableHead className="text-right">{t("Solde", "الرصيد")}</TableHead>
                           <TableHead className="text-right">{t("Actions", "الإجراءات")}</TableHead>
@@ -241,7 +241,7 @@ export default function Caisse() {
                             <TableCell>
                               {c.kind === "main"
                                 ? <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-700">{t("Principale", "رئيسي")}</span>
-                                : <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-100 text-amber-700">Staff</span>}
+                                 : <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-100 text-amber-700">{t("Staff", "الموظف")}</span>}
                             </TableCell>
                             <TableCell>{caisseLabel(c)}</TableCell>
                             <TableCell className="text-right font-bold">{fmtAmount(c.balance)} {currency}</TableCell>
@@ -431,7 +431,7 @@ function CaisseDetailDialog({ id, onClose, t, caisseLabel }: {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
+                  <TableHead>{t("Date", "التاريخ")}</TableHead>
                   <TableHead>{t("Raison", "السبب")}</TableHead>
                   <TableHead>{t("Contrepartie", "الطرف المقابل")}</TableHead>
                   <TableHead>{t("Acteur", "المنفِّذ")}</TableHead>

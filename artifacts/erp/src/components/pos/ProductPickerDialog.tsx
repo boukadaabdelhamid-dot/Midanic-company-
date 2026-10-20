@@ -16,7 +16,7 @@ export function ProductPickerDialog({
   extraBarcodesMap?: Map<string, number>;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [q, setQ] = useState("");
   useEffect(() => { if (open) setQ(""); }, [open]);
   const filtered = useMemo(() => {

@@ -58,7 +58,7 @@ function StatusBadge({ status }: { status: string }) {
   const s = STATUS_LABELS[status] ?? { fr: status, ar: status, cls: "bg-gray-100" };
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${s.cls}`}>
-      {lang === "ar" ? s.ar : s.fr}
+      {useLang.translate(lang, s.fr, s.ar)}
     </span>
   );
 }
@@ -94,7 +94,7 @@ export default function Transfers() {
   const { can } = usePermissions();
   const { currentStoreId } = useStoreContext();
   const { lang } = useLang();
-  const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [direction, setDirection] = useState<"in" | "out" | "all">("all");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const queryParams = statusFilter
@@ -150,7 +150,7 @@ export default function Transfers() {
               <SelectContent>
                 <SelectItem value="__all">{tr("Tous", "الكل")}</SelectItem>
                 {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{lang === "ar" ? v.ar : v.fr}</SelectItem>
+                  <SelectItem key={k} value={k}>{useLang.translate(lang, v.fr, v.ar)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -433,7 +433,7 @@ export function CreateTransferDialog({
   const { lang } = useLang();
   const { can } = usePermissions();
   const canCreate = can("transfers", "create");
-  const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [direction, setDirection] = useState<"out" | "in">(initialDirection ?? "out");
   const [otherStoreId, setOtherStoreId] = useState(initialStoreId ?? "");
   const [mode, setMode] = useState<"request" | "send">("request");
@@ -767,7 +767,7 @@ function TransferDetailDialog({
   const { lang } = useLang();
   const { can } = usePermissions();
   const canEdit = can("transfers", "edit");
-  const tr: TrFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const { data: detail, isLoading } = useGetErpTransfer(id);
   const approve = useApproveErpTransfer();
   const reject = useRejectErpTransfer();

@@ -29,7 +29,7 @@ const emptyForm: TxForm = { type: "income", category: "", amount: "", descriptio
 export default function Accounting() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   // ── Remote data ──────────────────────────────────────────────────────────
@@ -355,7 +355,7 @@ export default function Accounting() {
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
                     >
-                      ← Préc.
+                      {t("← Préc.", "← السابق")}
                     </Button>
                     {buildPages(page, totalPages).map((pg, i) =>
                       pg === "..." ? (
@@ -377,7 +377,7 @@ export default function Accounting() {
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
                     >
-                      Suiv. →
+                      {t("Suiv. →", "التالي →")}
                     </Button>
                   </div>
                 </div>

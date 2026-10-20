@@ -44,7 +44,7 @@ export default function InventoryPhysicalCount() {
   const qc = useQueryClient();
   const { lang } = useLang();
   const { can } = usePermissions();
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const canCount = can("inventory", "count");
 
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
@@ -326,7 +326,7 @@ function CountSessionDialog({
 }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [familyFilter, setFamilyFilter] = useState("");
@@ -474,16 +474,16 @@ function CountSessionDialog({
       return `<tr><td>${name}</td><td style="text-align:right">${item.systemQuantity}</td><td style="text-align:right">${counted}</td><td style="text-align:right;font-weight:600;${diffStyle}">${diff}</td></tr>`;
     }).join("");
     pw.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>${lang === "ar" ? "جرد المخزون" : "Inventaire physique"}</title>
+<title>${useLang.translate(lang, "Inventaire physique", "جرد المخزون")}</title>
 <style>body{font-family:sans-serif;font-size:13px;padding:20px}h2{margin-bottom:4px}p{margin:0 0 12px;color:#666}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px 10px}th{background:#f3f4f6;font-weight:600}</style>
 </head><body>
-<h2>${lang === "ar" ? "جرد المخزون" : "Inventaire physique"}${note}</h2>
-<p>${dateStr} — ${countedTotal}/${items.length} ${lang === "ar" ? "معدود" : "comptés"}</p>
+<h2>${useLang.translate(lang, "Inventaire physique", "جرد المخزون")}${note}</h2>
+<p>${dateStr} — ${countedTotal}/${items.length} ${useLang.translate(lang, "comptés", "معدود")}</p>
 <table><thead><tr>
-<th>${lang === "ar" ? "المنتج" : "Produit"}</th>
-<th style="text-align:right">${lang === "ar" ? "النظام" : "Système"}</th>
-<th style="text-align:right">${lang === "ar" ? "المعدود" : "Compté"}</th>
-<th style="text-align:right">${lang === "ar" ? "الفرق" : "Écart"}</th>
+<th>${useLang.translate(lang, "Produit", "المنتج")}</th>
+<th style="text-align:right">${useLang.translate(lang, "Système", "النظام")}</th>
+<th style="text-align:right">${useLang.translate(lang, "Compté", "المعدود")}</th>
+<th style="text-align:right">${useLang.translate(lang, "Écart", "الفرق")}</th>
 </tr></thead><tbody>${rows}</tbody></table>
 </body></html>`);
     pw.document.close();
@@ -731,7 +731,7 @@ const CountItemRow = memo(function CountItemRow({
       data-testid={`row-count-item-${item.id}`}
     >
       <span className="min-w-0 font-medium text-sm truncate" title={name || undefined}>
-        {name || <span className="italic text-muted-foreground">{lang === "ar" ? "منتج بدون اسم" : "Produit sans nom"}</span>}
+        {name || <span className="italic text-muted-foreground">{useLang.translate(lang, "Produit sans nom", "منتج بدون اسم")}</span>}
       </span>
       <span className="text-right tabular-nums text-muted-foreground text-sm">{item.systemQuantity}</span>
       <Input

@@ -93,7 +93,7 @@ function OrderItemsRow({ orderId, colSpan, t, currency }: { orderId: number; col
 export default function OnlineOrders() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const params = { channel: GetAdminOrdersChannel.online };
   const { data: rawOrders, isLoading } = useGetAdminOrders(params, {

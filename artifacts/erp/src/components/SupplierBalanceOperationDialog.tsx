@@ -29,7 +29,7 @@ export default function SupplierBalanceOperationDialog({
   onOpenPurchase: () => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const op = row?.op;
   const purchaseOrderId = op ? getLinkedPurchaseOrderId(op) : null;
   const isPurchaseOperation = op && op.source !== "customer"

@@ -81,7 +81,7 @@ function TierBadge({ pt, lang }: { pt?: PriceTier | null; lang: string }) {
   if (!pt) return null;
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-      {lang === "ar" ? pt.labelAr : pt.labelFr}
+      {useLang.translate(lang, pt.labelFr, pt.labelAr)}
     </span>
   );
 }
@@ -404,7 +404,7 @@ function CustomerSheet({ customerId, onClose, t, lang, currency, initialTab = "b
                         <SelectItem key={c.id} value={String(c.id)}>
                           <div className="flex items-center gap-2">
                             {c.color && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />}
-                            {lang === "ar" ? c.labelAr : c.labelFr}
+                            {useLang.translate(lang, c.labelFr, c.labelAr)}
                           </div>
                         </SelectItem>
                       ))}
@@ -421,7 +421,7 @@ function CustomerSheet({ customerId, onClose, t, lang, currency, initialTab = "b
                       <SelectItem value="none">{t("Standard", "قياسي")}</SelectItem>
                       {(tiers as PriceTier[]).map((tier) => (
                         <SelectItem key={tier.id} value={String(tier.id)}>
-                          {lang === "ar" ? tier.labelAr : tier.labelFr}
+                          {useLang.translate(lang, tier.labelFr, tier.labelAr)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -820,10 +820,10 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <div className="px-4 pt-3 border-b shrink-0">
           <TabsList className="h-9 text-xs">
-            <TabsTrigger value="detail"  className="text-xs px-3">DÉTAIL</TabsTrigger>
-            {canViewBalance  && <TabsTrigger value="balance" className="text-xs px-3">BALANCE</TabsTrigger>}
-            {canViewHistory  && <TabsTrigger value="ventes"  className="text-xs px-3">VENTES</TabsTrigger>}
-            {canViewHistory  && <TabsTrigger value="retours" className="text-xs px-3">RETOURS</TabsTrigger>}
+            <TabsTrigger value="detail"  className="text-xs px-3">{t("DÉTAIL", "التفاصيل")}</TabsTrigger>
+            {canViewBalance  && <TabsTrigger value="balance" className="text-xs px-3">{t("BALANCE", "الرصيد")}</TabsTrigger>}
+            {canViewHistory  && <TabsTrigger value="ventes"  className="text-xs px-3">{t("VENTES", "المبيعات")}</TabsTrigger>}
+            {canViewHistory  && <TabsTrigger value="retours" className="text-xs px-3">{t("RETOURS", "المرتجعات")}</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -1887,7 +1887,7 @@ function normalizeCustomersPage(value: unknown): CustomersPage {
 }
 
 function exportXLSX(customers: ExtCustomer[], currency: string, lang: string) {
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const rows = customers.map((c) => ({
     "ID": c.id,
     [t("Nom", "الاسم")]: c.name,
@@ -1896,10 +1896,10 @@ function exportXLSX(customers: ExtCustomer[], currency: string, lang: string) {
     [t("Wilaya", "الولاية")]: c.wilaya ?? "",
     [t("Type contact", "نوع الاتصال")]: c.contact_type ?? "",
     [t("Classification", "التصنيف")]: c.classification
-      ? (lang === "ar" ? c.classification.labelAr : c.classification.labelFr)
+      ? useLang.translate(lang, c.classification.labelFr, c.classification.labelAr)
       : "",
     [t("Grille de prix", "شريحة السعر")]: c.priceTier
-      ? (lang === "ar" ? c.priceTier.labelAr : c.priceTier.labelFr)
+      ? useLang.translate(lang, c.priceTier.labelFr, c.priceTier.labelAr)
       : "",
     [t("N° Compte", "رقم الحساب")]: c.account_number ?? "",
     [`${t("Solde", "الرصيد")} (${currency})`]: c.current_balance != null ? Number(c.current_balance) : "",
@@ -1926,7 +1926,7 @@ function ImportCustomerDialog({
 }: { customer: { id: number; name: string } | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currentStore = useCurrentStore();
   const { data: allStores } = useGetErpStoresAll();
 
@@ -2028,7 +2028,7 @@ function AjustementDialog({
 }: { customer: ExtCustomer | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [newBalance, setNewBalance] = React.useState("");
   const [date, setDate] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -2134,7 +2134,7 @@ export default function Customers() {
   const { can } = usePermissions();
   const canViewBalance = can("customers", "view_balance");
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const { data: rawClassifs } = useGetErpCustomerClassifications();
   const { data: rawTiers } = useGetErpPriceTiers();
@@ -2313,7 +2313,7 @@ export default function Customers() {
             <SelectItem value="all">{t("Toutes classif.", "كل التصنيفات")}</SelectItem>
             <SelectItem value="none">{t("Sans classif.", "بدون تصنيف")}</SelectItem>
             {(classifs as CustomerClassification[]).map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>{lang === "ar" ? c.labelAr : c.labelFr}</SelectItem>
+              <SelectItem key={c.id} value={String(c.id)}>{useLang.translate(lang, c.labelFr, c.labelAr)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -2326,7 +2326,7 @@ export default function Customers() {
             <SelectItem value="all">{t("Toutes grilles", "كل الشرائح")}</SelectItem>
             <SelectItem value="none">{t("Sans grille", "بدون شريحة")}</SelectItem>
             {(tiers as PriceTier[]).map((tier) => (
-              <SelectItem key={tier.id} value={String(tier.id)}>{lang === "ar" ? tier.labelAr : tier.labelFr}</SelectItem>
+              <SelectItem key={tier.id} value={String(tier.id)}>{useLang.translate(lang, tier.labelFr, tier.labelAr)}</SelectItem>
             ))}
           </SelectContent>
         </Select>

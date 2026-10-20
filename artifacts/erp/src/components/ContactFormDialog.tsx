@@ -11,6 +11,7 @@ import { Info, CreditCard, Briefcase, FileText, User, MapPin, Tag, Building2 } f
 import { WILAYAS, getCommunesByWilaya } from "@/data/algeria-geo";
 import { CommuneCombobox } from "@/components/ui/commune-combobox";
 import type { CustomerClassification, PriceTier } from "@workspace/erp-api-client-react";
+import { useLang } from "@/hooks/use-lang";
 
 export type ContactFormState = {
   name: string;
@@ -206,7 +207,7 @@ export function ContactFormDialog({
                       <SelectItem key={c.id} value={String(c.id)}>
                         <div className="flex items-center gap-2">
                           {c.color && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />}
-                          {lang === "ar" ? c.labelAr : c.labelFr}
+                          {useLang.translate(lang, c.labelFr, c.labelAr)}
                         </div>
                       </SelectItem>
                     ))}
@@ -221,7 +222,7 @@ export function ContactFormDialog({
                     <SelectItem value="none">{t("Standard", "قياسي")}</SelectItem>
                     {tiers.map((tier) => (
                       <SelectItem key={tier.id} value={String(tier.id)}>
-                        {lang === "ar" ? tier.labelAr : tier.labelFr}
+                        {useLang.translate(lang, tier.labelFr, tier.labelAr)}
                       </SelectItem>
                     ))}
                   </SelectContent>

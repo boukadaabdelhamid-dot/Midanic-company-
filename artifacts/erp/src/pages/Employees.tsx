@@ -48,7 +48,7 @@ function SortIndicator({ active, dir }: { active: boolean; dir: "asc" | "desc" }
 export default function Employees() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   const { data: rawEmployees, isLoading } = useGetEmployees();

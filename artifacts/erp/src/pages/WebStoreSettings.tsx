@@ -68,7 +68,7 @@ const tok = () => localStorage.getItem("midanic_token") ?? "";
 
 export default function WebStoreSettings() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const currentStore = useCurrentStore();

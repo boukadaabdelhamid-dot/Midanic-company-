@@ -23,7 +23,7 @@ const API_BASE = getApiBase();
 export default function Staff() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { data: staff, isLoading } = useGetErpStaff();
   const { data: stores } = useGetErpStores();
   const create = useCreateErpStaff();

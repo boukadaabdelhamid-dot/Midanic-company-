@@ -64,7 +64,7 @@ export default function Home() {
   const { lang } = useLang();
   const { isAdmin } = useMe();
   const { can } = usePermissions();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const canViewAlerts = isAdmin || can("inventory", "view");
   const { data: alertsData } = useAlertsCount(canViewAlerts);

@@ -150,7 +150,7 @@ export function useRealtimeWS(): void {
   const { currentStoreId } = useStoreContext();
   const { toast } = useToast();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const qc = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
@@ -197,7 +197,7 @@ export function useRealtimeWS(): void {
             invalidatePrefix("/api/erp/transfers");
             // A transfer moves stock between two stores — refresh product views.
             invalidatePrefix("/api/erp/products");
-            const t = transferToast(msg as unknown as TransferEvent, storeIdRef.current, (fr, ar) => lang === "ar" ? ar : fr);
+            const t = transferToast(msg as unknown as TransferEvent, storeIdRef.current, (fr, ar) => useLang.translate(lang, fr, ar));
             if (t) toastRef.current(t);
             break;
           }
@@ -250,7 +250,7 @@ export function useRealtimeWS(): void {
               msg as unknown as CaisseTransferEvent,
               userIdRef.current,
               isAdminRef.current,
-              (fr, ar) => lang === "ar" ? ar : fr,
+              (fr, ar) => useLang.translate(lang, fr, ar),
             );
             if (ct) toastRef.current(ct);
             break;

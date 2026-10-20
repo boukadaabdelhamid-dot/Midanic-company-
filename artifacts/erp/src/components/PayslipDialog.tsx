@@ -16,14 +16,14 @@ export default function PayslipDialog({
 }) {
   const printRef = useRef<HTMLDivElement>(null);
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   function handlePrint() {
     const node = printRef.current;
     if (!node) { window.print(); return; }
     const w = window.open("", "_blank", "width=900,height=1000");
     if (!w) { window.print(); return; }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Bulletin de paie</title></head><body>${node.innerHTML}</body></html>`);
+    w.document.write(`<!doctype html><html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${t("Bulletin de paie", "قسيمة الراتب")}</title></head><body>${node.innerHTML}</body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => { try { w.print(); w.close(); } catch { /* noop */ } }, 300);

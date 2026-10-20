@@ -26,7 +26,7 @@ function loadSettings(): ExpirySettings {
 
 export default function SettingsNotifications() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { toast } = useToast();
 
   const [settings, setSettings] = useState<ExpirySettings>(loadSettings);

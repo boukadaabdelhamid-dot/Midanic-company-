@@ -5,28 +5,31 @@ import { cn } from "@/lib/utils";
 const LANGS: { value: ErpLang; label: string; sublabel: string; flag: string; dir: "ltr" | "rtl" }[] = [
   { value: "fr", label: "Français", sublabel: "Interface en français", flag: "🇫🇷", dir: "ltr" },
   { value: "ar", label: "العربية", sublabel: "الواجهة بالعربية", flag: "🇩🇿", dir: "rtl" },
+  { value: "en", label: "English", sublabel: "Interface in English", flag: "🇬🇧", dir: "ltr" },
 ];
 
 export default function SettingsLanguages() {
   const { lang, setLang } = useLang();
 
   return (
-    <div className="p-6 max-w-2xl">
+      <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <Languages className="h-6 w-6 text-primary" />
         <div>
           <h1 className="text-xl font-bold">
-            {lang === "ar" ? "اللغات" : "Langues"}
+            {lang === "ar" ? "اللغات" : lang === "en" ? "Languages" : "Langues"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {lang === "ar"
               ? "اختر لغة الواجهة"
-              : "Choisissez la langue de l'interface"}
+              : lang === "en"
+                ? "Choose the interface language"
+                : "Choisissez la langue de l'interface"}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {LANGS.map(({ value, label, sublabel, flag, dir }) => {
           const active = lang === value;
           return (
@@ -59,7 +62,9 @@ export default function SettingsLanguages() {
       <p className="mt-6 text-xs text-muted-foreground">
         {lang === "ar"
           ? "يتم حفظ اللغة المختارة تلقائياً وتطبيقها على كامل الواجهة."
-          : "La langue choisie est sauvegardée automatiquement et appliquée à toute l'interface."}
+          : lang === "en"
+            ? "Your language choice is saved automatically and applied across the interface."
+            : "La langue choisie est sauvegardée automatiquement et appliquée à toute l'interface."}
       </p>
     </div>
   );

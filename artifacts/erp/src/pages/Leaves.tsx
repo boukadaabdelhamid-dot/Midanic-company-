@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Leaves() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { data: leaves, isLoading } = useGetLeaves();
   const { data: employees } = useGetEmployees();
   const createLeave = useCreateLeave();

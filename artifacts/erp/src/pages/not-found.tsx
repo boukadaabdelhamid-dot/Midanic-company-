@@ -4,7 +4,7 @@ import { useLang } from "@/hooks/use-lang";
 
 export default function NotFound() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">

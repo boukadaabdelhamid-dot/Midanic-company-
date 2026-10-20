@@ -27,7 +27,7 @@ export default function Settings() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [storeName, setStoreNameState] = useState(() => getStoreName());
   const [saved, setSaved] = useState(false);
 

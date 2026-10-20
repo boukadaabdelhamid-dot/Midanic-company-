@@ -25,7 +25,7 @@ export default function InvoiceDialog({
 }) {
   const printRef = useRef<HTMLDivElement>(null);
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function InvoiceDialog({
     if (!node) { window.print(); return; }
     const w = window.open("", "_blank", "width=900,height=1000");
     if (!w) { window.print(); return; }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Facture</title></head><body>${node.innerHTML}</body></html>`);
+    w.document.write(`<!doctype html><html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${t("Facture", "فاتورة")}</title></head><body>${node.innerHTML}</body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => { try { w.print(); w.close(); } catch { /* noop */ } }, 300);
@@ -54,7 +54,7 @@ export default function InvoiceDialog({
             {data && onShowTvaChange && (
               <div className="flex items-center gap-2 px-2 py-1 rounded border bg-slate-50">
                 <Label htmlFor="invoice-tva-toggle" className="text-xs cursor-pointer">
-                  TVA {data.showTva ? `(${data.tvaRate.toFixed(0)}%)` : "off"}
+                  {t("TVA", "الضريبة")} {data.showTva ? `(${data.tvaRate.toFixed(0)}%)` : t("off", "متوقفة")}
                 </Label>
                 <Switch
                   id="invoice-tva-toggle"

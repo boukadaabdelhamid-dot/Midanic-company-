@@ -44,7 +44,7 @@ function PaymentDialog({
 }: { supplier: Supplier | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const createOp = useCreateSupplierOperation();
 
   const [amount, setAmount] = useState("");
@@ -122,7 +122,7 @@ function AjustementDialog({
 }: { supplier: Supplier | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [newBalance, setNewBalance] = React.useState("");
   const [date, setDate] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -227,7 +227,7 @@ function ImportDialog({
 }: { supplier: GlobalSupplier | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { currentStoreId } = useStoreContext();
   const { data: allStores } = useGetErpStoresAll();
 
@@ -335,7 +335,7 @@ function StatementSheet({
   onToggleExpanded: () => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const qc = useQueryClient();
   const { can } = usePermissions();
   const linked = !!(supplier as GlobalSupplier | null)?.globalSupplierId;
@@ -891,7 +891,7 @@ const emptySupplierForm: ContactFormState = { ...emptyContactForm, contactType: 
 export default function Suppliers() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);

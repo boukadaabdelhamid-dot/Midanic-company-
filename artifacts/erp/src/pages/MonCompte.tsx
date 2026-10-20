@@ -28,7 +28,7 @@ export default function MonCompte() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const caisseLabel = makeCaisseLabel(t);
   const transferStatusBadge = makeTransferStatusBadge(t);

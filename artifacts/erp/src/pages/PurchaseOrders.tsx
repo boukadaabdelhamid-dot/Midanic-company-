@@ -99,7 +99,7 @@ const statusClass = (s: string) =>
 export default function PurchaseOrders() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   // Resolve the current store FIRST so we can use its id as part of the
   // React Query cache key. This scopes the cache per-store and prevents
   // data from store A from briefly appearing in store B's list after a
@@ -259,7 +259,7 @@ export default function PurchaseOrders() {
     const w = window.open("", "_blank", "width=900,height=600");
     if (!w) return;
     const rf = (id: number) => `${String(id).padStart(6, "0")}/${new Date().getFullYear()}`;
-    const fd = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString("fr-DZ") : "—";
+    const fd = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString(useLang.locale(lang)) : "—";
     const total = filtered.reduce((s, p) => s + parseFloat(p.totalAmount ?? "0"), 0);
     const rows = filtered.map((po) => {
       const sn = supplierMap[po.supplierId]?.name ?? `#${po.supplierId}`;
@@ -640,10 +640,11 @@ export default function PurchaseOrders() {
 }
 
 function FilterInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { lang } = useLang();
   return (
     <div className="relative">
       <Filter className="h-3 w-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Filtre ..." className="h-7 text-xs pl-7" />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={useLang.translate(lang, "Filtre ...", "تصفية...")} className="h-7 text-xs pl-7" />
     </div>
   );
 }
@@ -668,7 +669,7 @@ function PurchaseEditor({
   columnSettings: ColumnSettings;
 }) {
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [refAchat, setRefAchat] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 16));
@@ -1371,7 +1372,7 @@ function SupplierPickerDialog({
 }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const createSupplier = useCreateSupplier();
   const [nom, setNom] = useState("");
   const [adresse, setAdresse] = useState("");
@@ -1513,7 +1514,7 @@ function ProductPickerDialog({
   onPick: (p: Product) => void;
 }) {
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
 
@@ -1572,7 +1573,7 @@ function AddLineDialog({
   onCancel: () => void;
 }) {
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
 
   const [qty, setQty] = useState("1");
   const [pu, setPu] = useState("0");
@@ -1697,7 +1698,7 @@ function ChargesManagerDialog({
 }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
 
   const { data: charges, isLoading } = useGetPurchaseAnnexeCharges();
   const createCharge = useCreatePurchaseAnnexeCharge();

@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export default function ResetPassword({ token }: { token: string }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { logout } = useAuth();
   const qc = useQueryClient();
   const [password, setPassword] = useState("");

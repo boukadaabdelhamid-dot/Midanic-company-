@@ -170,7 +170,7 @@ export default function ProductSettings() {
   const { lang } = useLang();
   const { can } = usePermissions();
   const { isAdmin } = useMe();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
 
   const { data: familiesData, isLoading: loadingFamilies } = useGetErpSettingsProductsFamilies();
   const { data: brandsData, isLoading: loadingBrands } = useGetErpSettingsProductsBrands();
@@ -446,7 +446,7 @@ export default function ProductSettings() {
               <Input
                 value={form.nameFr}
                 onChange={(e) => setForm((f) => ({ ...f, nameFr: e.target.value }))}
-                placeholder="ex: Parfums, L'Oréal, Rouge..."
+                placeholder={t("ex: Parfums, L'Oréal, Rouge...", "مثال: عطور، لوريال، أحمر...")}
                 className="h-9"
               />
             </div>

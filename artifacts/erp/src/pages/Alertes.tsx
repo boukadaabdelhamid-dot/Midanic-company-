@@ -164,7 +164,7 @@ function expiryCardStyle(daysLeft: number): { card: string; badge: string; label
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("fr-DZ", {
+  return new Date(iso).toLocaleDateString(useLang.locale(), {
     day: "2-digit", month: "short", year: "numeric",
   });
 }
@@ -210,7 +210,7 @@ function slowRowToProductLite(row: SlowMoverRow): ProductLite {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function Alertes() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { isAdmin } = useMe();
   const { can } = usePermissions();
   const canCreateTransfer = can("transfers", "create");
@@ -924,7 +924,7 @@ export default function Alertes() {
                       )}
                       <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                         <span>
-                          📅 {new Date(row.expiry_date).toLocaleDateString("fr-DZ", { day: "2-digit", month: "short", year: "numeric" })}
+                          📅 {new Date(row.expiry_date).toLocaleDateString(useLang.locale(lang), { day: "2-digit", month: "short", year: "numeric" })}
                         </span>
                         <span>
                           {t("Qté", "الكمية")}: <span className="font-semibold text-foreground">{row.quantity}</span>

@@ -48,7 +48,7 @@ type RetourLine = {
 
 export default function Retours() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [showNouveauRetour, setShowNouveauRetour] = useState(false);
   const [printRetourId, setPrintRetourId] = useState<number | null>(null);
   const qc = useQueryClient();
@@ -105,7 +105,7 @@ export function RetourPrintDialog({ retourId, open, onOpenChange }: {
   onOpenChange: (o: boolean) => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const store = useCurrentStore();
   const [showTva, setShowTva] = useState(false);
@@ -153,7 +153,7 @@ function RetoursHistory({ onPrint, onNewRetour }: {
   onNewRetour: () => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const { data: retours, isLoading } = useGetAdminRetours();
   const [filterRetour, setFilterRetour] = useState("");
@@ -319,7 +319,7 @@ function ClotureRetourModal({ open, onOpenChange, onConfirm, isPending }: {
   isPending: boolean;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [selected, setSelected] = useState<"remboursement" | "sans_remboursement" | null>(null);
 
   React.useEffect(() => {
@@ -396,7 +396,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
 }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   const { data: productsResp } = useGetProducts({ limit: 500 });

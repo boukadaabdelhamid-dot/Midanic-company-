@@ -33,7 +33,7 @@ const empty: FormState = {
 export default function Stores() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { currentStoreId, setStores } = useStoreContext();
   const { data: stores, isLoading } = useGetErpStores();
   const create = useCreateErpStore();
@@ -131,10 +131,10 @@ export default function Stores() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Slug</TableHead>
-                    <TableHead>{t("Nom FR", "الاسم FR")}</TableHead>
+                    <TableHead>{t("Nom EN", "الاسم بالإنجليزية")}</TableHead>
                     <TableHead>{t("الاسم", "الاسم")}</TableHead>
                     <TableHead>NIF / RC</TableHead>
-                    <TableHead>TVA</TableHead>
+                    <TableHead>{t("TVA", "الضريبة")}</TableHead>
                     <TableHead>{t("Statut", "الحالة")}</TableHead>
                     <TableHead className="text-right">{t("Actions", "الإجراءات")}</TableHead>
                   </TableRow>
@@ -190,11 +190,11 @@ export default function Stores() {
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>{t("Nom FR *", "الاسم بالفرنسية *")}</Label>
+              <Label>{t("Nom EN *", "اسم المتجر بالإنجليزية *")}</Label>
               <Input value={form.nameEn} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} data-testid="input-store-name-en" autoFocus />
             </div>
             <div>
-              <Label dir="rtl">{t("Nom AR *", "الاسم بالعربية *")}</Label>
+              <Label dir="rtl">{t("Nom AR *", "اسم المتجر بالعربية *")}</Label>
               <Input dir="rtl" value={form.nameAr} onChange={(e) => setForm({ ...form, nameAr: e.target.value })} data-testid="input-store-name-ar" />
             </div>
             {!form.id && (

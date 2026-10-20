@@ -44,7 +44,7 @@ export default function SupplierPurchaseOrderDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const store = useCurrentStore();
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [showTva, setShowTva] = useState(false);
@@ -147,7 +147,7 @@ export default function SupplierPurchaseOrderDialog({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/20 p-3 text-sm sm:grid-cols-4">
                 <div><p className="text-xs text-muted-foreground">{t("Fournisseur", "المورد")}</p><p className="font-medium">{supplier?.name ?? "—"}</p></div>
-                <div><p className="text-xs text-muted-foreground">{t("Date", "التاريخ")}</p><p>{order.createdAt ? new Date(order.createdAt).toLocaleString(lang === "ar" ? "ar-DZ" : "fr-DZ") : "—"}</p></div>
+                <div><p className="text-xs text-muted-foreground">{t("Date", "التاريخ")}</p><p>{order.createdAt ? new Date(order.createdAt).toLocaleString(useLang.locale(lang)) : "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">{t("État", "الحالة")}</p><p>{statusLabel(order.status)}</p></div>
                 <div><p className="text-xs text-muted-foreground">{t("Paiement", "الدفع")}</p><p>{order.paymentMethod === "comptant" ? t("Comptant", "نقدًا") : t("À terme", "بالآجل")}</p></div>
               </div>

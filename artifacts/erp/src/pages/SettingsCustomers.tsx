@@ -175,7 +175,7 @@ export default function SettingsCustomers() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
 
   const { data: classifs = [], isLoading: loadingClassifs } = useGetErpCustomerClassifications();
   const { data: tiers = [], isLoading: loadingTiers } = useGetErpPriceTiers();
@@ -350,7 +350,7 @@ export default function SettingsCustomers() {
             </div>
             <div>
               <Label className="text-xs mb-1.5 block">{t("Label français", "الاسم بالفرنسية")}</Label>
-              <Input value={tierForm.labelFr} onChange={(e) => setTierForm((f) => ({ ...f, labelFr: e.target.value }))} className="h-9" placeholder="ex: Détail, Demi-gros, Gros..." />
+              <Input value={tierForm.labelFr} onChange={(e) => setTierForm((f) => ({ ...f, labelFr: e.target.value }))} className="h-9" placeholder={t("ex: Détail, Demi-gros, Gros...", "مثال: تجزئة، نصف جملة، جملة...")} />
             </div>
             <div>
               <Label className="text-xs mb-1.5 block">{t("Label arabe", "الاسم بالعربية")}</Label>

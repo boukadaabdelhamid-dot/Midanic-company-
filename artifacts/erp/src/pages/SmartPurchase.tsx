@@ -335,7 +335,7 @@ function fmtNum(n: number | string | null | undefined): string {
 }
 
 function fmtDate(d: string): string {
-  try { return new Date(d).toLocaleDateString("fr-DZ"); } catch { return d; }
+  try { return new Date(d).toLocaleDateString(useLang.locale()); } catch { return d; }
 }
 
 /** Format a Date as YYYY-MM-DD using local calendar (not UTC), for date input values. */
@@ -416,14 +416,15 @@ function InlineMinStockEdit({
 
 // Stock bar: shows current vs min_stock visually
 function StockBar({ stock, minStock }: { stock: number; minStock: number | null }) {
+  const { lang } = useLang();
   if (minStock == null || minStock <= 0) {
     return (
       <div className="flex items-center gap-1.5">
         <span className={`text-sm font-bold tabular-nums ${stock === 0 ? "text-red-600" : "text-amber-600"}`}>
           {Number(stock).toLocaleString("fr-DZ")}
         </span>
-        {stock === 0 && (
-          <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">RUPTURE</span>
+          {stock === 0 && (
+          <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{useLang.translate(lang, "RUPTURE", "نفد المخزون")}</span>
         )}
       </div>
     );
@@ -549,7 +550,8 @@ function PurchaseNeedsPrint({
   activeFilterLabels: string[];
   lang: string;
 }) {
-  const today = new Date().toLocaleDateString("fr-DZ");
+  const today = new Date().toLocaleDateString(useLang.locale(lang));
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   return (
     <div id="purchase-needs-print" style={{ visibility: "hidden", position: "absolute", height: 0, overflow: "hidden", pointerEvents: "none" }}>
       <style>{`
@@ -567,29 +569,29 @@ function PurchaseNeedsPrint({
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Besoin d'Achats — {storeName}</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t("Besoin d'Achats —", "احتياجات الشراء —")} {storeName}</h2>
           {activeFilterLabels.length > 0 && (
             <p style={{ margin: "4px 0 0", fontSize: 11, color: "#64748b" }}>
-              Filtres : {activeFilterLabels.join(" · ")}
+              {t("Filtres :", "الفلاتر:")} {activeFilterLabels.join(" · ")}
             </p>
           )}
         </div>
         <div style={{ textAlign: "right", fontSize: 11, color: "#64748b" }}>
           <div>{today}</div>
-          <div>{rows.length} produit(s)</div>
+          <div>{lang === "en" ? `${rows.length} product(s)` : `${rows.length} ${t("produit(s)", "منتج")}`}</div>
         </div>
       </div>
       {/* Table */}
       <table>
         <thead>
           <tr>
-            <th>Produit</th>
-            <th>Référence</th>
-            <th style={{ textAlign: "center" }}>Stock actuel</th>
-            <th style={{ textAlign: "center" }}>Min stock</th>
-            <th style={{ textAlign: "center" }}>Qté à commander</th>
-            <th style={{ textAlign: "right" }}>Prix achat (DA)</th>
-            <th>Fournisseur</th>
+            <th>{t("Produit", "المنتج")}</th>
+            <th>{t("Référence", "المرجع")}</th>
+            <th style={{ textAlign: "center" }}>{t("Stock actuel", "المخزون الحالي")}</th>
+            <th style={{ textAlign: "center" }}>{t("Min stock", "الحد الأدنى للمخزون")}</th>
+            <th style={{ textAlign: "center" }}>{t("Qté à commander", "الكمية المطلوبة")}</th>
+            <th style={{ textAlign: "right" }}>{t("Prix achat (DA)", "سعر الشراء (دج)")}</th>
+            <th>{t("Fournisseur", "المورد")}</th>
           </tr>
         </thead>
         <tbody>
@@ -605,7 +607,7 @@ function PurchaseNeedsPrint({
                 <td style={{ color: "#64748b", fontFamily: "monospace" }}>{row.reference ?? "—"}</td>
                 <td style={{ textAlign: "center" }}>
                   <span className={isRupture ? "rupture" : "low"}>{stock}</span>
-                  {isRupture && <span style={{ fontSize: 9, marginLeft: 4, color: "#dc2626" }}>RUPTURE</span>}
+                  {isRupture && <span style={{ fontSize: 9, marginLeft: 4, color: "#dc2626" }}>{t("RUPTURE", "نفد المخزون")}</span>}
                 </td>
                 <td style={{ textAlign: "center", color: "#64748b" }}>{minStock ?? "—"}</td>
                 <td style={{ textAlign: "center", fontWeight: 700 }}>{needed}</td>
@@ -624,10 +626,11 @@ function PurchaseNeedsPrint({
 
 // ── Filter chip helper ────────────────────────────────────────────────────────
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  const { lang } = useLang();
   return (
     <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-800 border border-blue-200 rounded-full px-2.5 py-1 font-medium">
       {label}
-      <button type="button" onClick={onRemove} className="ml-0.5 hover:text-blue-600" aria-label="Supprimer filtre">
+      <button type="button" onClick={onRemove} className="ml-0.5 hover:text-blue-600" aria-label={useLang.translate(lang, "Supprimer filtre", "إزالة الفلتر")}>
         <X className="h-3 w-3" />
       </button>
     </span>
@@ -1061,7 +1064,7 @@ function NeededListRow({
         {/* Stock */}
         <div className="shrink-0 text-right min-w-[52px]">
           <span className={`text-xs font-bold tabular-nums ${stockColor}`}>{stock.toLocaleString("fr-DZ")}</span>
-          {stock === 0 && <div className="text-[9px] font-semibold text-red-600 leading-tight">RUPTURE</div>}
+          {stock === 0 && <div className="text-[9px] font-semibold text-red-600 leading-tight">{t("RUPTURE", "نفد المخزون")}</div>}
           <div className="flex items-center justify-end gap-0.5">
             <span className="text-[9px] text-muted-foreground">/</span>
             <InlineMinStockEdit productId={row.id} minStock={minStock} t={t} />
@@ -1340,7 +1343,7 @@ function SuggestDrawer({
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function SmartPurchase() {
   const { lang } = useLang();
-  const t = useCallback((fr: string, ar: string) => lang === "ar" ? ar : fr, [lang]);
+  const t = useCallback((fr: string, ar: string) => useLang.translate(lang, fr, ar), [lang]);
   const store = useCurrentStore();
   const qc = useQueryClient();
   const { user: me, isAdmin: isMeAdmin } = useMe();
@@ -1871,7 +1874,7 @@ export default function SmartPurchase() {
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-slate-800 leading-tight line-clamp-2">{s.product_name}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {s.staff_name ?? t("Employé", "موظف")} · {new Date(s.created_at).toLocaleDateString(lang === "ar" ? "ar-DZ" : "fr-DZ")}
+                            {s.staff_name ?? t("Employé", "موظف")} · {new Date(s.created_at).toLocaleDateString(useLang.locale(lang))}
                           </p>
                           {/* Market price badge */}
                           {s.market_price && (

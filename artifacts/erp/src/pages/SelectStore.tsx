@@ -15,7 +15,7 @@ export default function SelectStore() {
   const { token, setToken, logout } = useAuth();
   const { setStores, setCurrentStoreId } = useStoreContext();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const qc = useQueryClient();
   const { data: me, isLoading, isError, refetch } = useGetMe({ query: { queryKey: getGetMeQueryKey(), enabled: !!token } });
   const selectStore = useSelectStore();

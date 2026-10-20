@@ -57,7 +57,7 @@ interface Props {
 
 export default function ImportExcelModal({ open, onClose, onImported }: Props) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => (lang === "ar" ? ar : fr);
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const [step, setStep] = useState<Step>("upload");
   const [dragging, setDragging] = useState(false);
@@ -215,7 +215,7 @@ export default function ImportExcelModal({ open, onClose, onImported }: Props) {
               <div className="rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground space-y-1">
                 <p className="font-medium text-foreground">{t("Format attendu", "الصيغة المتوقعة")}</p>
                 <p>{t("Colonnes détectées automatiquement :", "يتم اكتشاف الأعمدة تلقائياً :")}</p>
-                <p className="font-mono">ID Catégorie · Marque · Famille · Couleur · Code · Modèle · PU Détail · Coût</p>
+                <p className="font-mono">{t("ID Catégorie · Marque · Famille · Couleur · Code · Modèle · PU Détail · Coût", "معرف الفئة · الماركة · العائلة · اللون · الرمز · الموديل · سعر البيع · التكلفة")}</p>
                 <p>{t("La première ligne d'en-tête est détectée automatiquement.", "يتم اكتشاف سطر الرأس تلقائياً.")}</p>
               </div>
             </div>

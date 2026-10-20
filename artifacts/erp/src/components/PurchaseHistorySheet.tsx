@@ -7,15 +7,16 @@ import {
 } from "@/components/ui/sheet";
 import { ShoppingCart } from "lucide-react";
 import type { PurchaseOrder, Supplier } from "@workspace/erp-api-client-react";
+import { useLang, type ErpLang } from "@/hooks/use-lang";
 
 type ExtendedPO = PurchaseOrder & { paymentMethod?: string };
 
 const fmt = (n: number) =>
-  n.toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString(useLang.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("fr-DZ", {
+  return new Date(d).toLocaleDateString(useLang.locale(), {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 };
@@ -26,8 +27,12 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-const statusLabel = (s: string) =>
-  s === "received" ? "Clôturée" : s === "cancelled" ? "Annulée" : "En cours";
+const statusLabel = (s: string, lang: ErpLang) =>
+  s === "received"
+    ? useLang.translate(lang, "Clôturée", "مغلقة")
+    : s === "cancelled"
+      ? useLang.translate(lang, "Annulée", "ملغاة")
+      : useLang.translate(lang, "En cours", "قيد التنفيذ");
 
 const refOf = (id: number) =>
   `${String(id).padStart(6, "0")}/${new Date().getFullYear()}`;
@@ -40,6 +45,7 @@ interface Props {
 }
 
 export default function PurchaseHistorySheet({ open, onClose, pos, supplierMap }: Props) {
+  const { lang } = useLang();
   const sorted = React.useMemo(
     () => [...pos].sort((a, b) => {
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -59,14 +65,19 @@ export default function PurchaseHistorySheet({ open, onClose, pos, supplierMap }
         <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <SheetTitle className="text-base font-semibold flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-[#1B3057]" />
-            Journal des achats
+             {useLang.translate(lang, "Journal des achats", "سجل المشتريات")}
           </SheetTitle>
           <div className="flex gap-4 text-xs pt-0.5">
             <span className="text-muted-foreground">
-              <strong className="text-foreground">{sorted.length}</strong> bon{sorted.length !== 1 ? "s" : ""}
+              <strong className="text-foreground">{sorted.length}</strong>{" "}
+              {lang === "en"
+                ? (sorted.length === 1 ? "purchase order" : "purchase orders")
+                : lang === "ar"
+                  ? `سند${sorted.length !== 1 ? "ات" : ""}`
+                  : `bon${sorted.length !== 1 ? "s" : ""}`}
             </span>
             <span className="text-emerald-700 font-medium">
-              Total : <strong>{fmt(totalAmt)} DA</strong>
+              {useLang.translate(lang, "Total :", "المجموع:")} <strong>{fmt(totalAmt)} DA</strong>
             </span>
           </div>
         </SheetHeader>
@@ -75,7 +86,7 @@ export default function PurchaseHistorySheet({ open, onClose, pos, supplierMap }
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-2">
               <ShoppingCart className="h-8 w-8 opacity-20" />
-              <p className="text-sm">Aucun bon d'achat</p>
+              <p className="text-sm">{useLang.translate(lang, "Aucun bon d'achat", "لا توجد سندات شراء")}</p>
             </div>
           ) : (
             sorted.map((po) => {
@@ -95,18 +106,20 @@ export default function PurchaseHistorySheet({ open, onClose, pos, supplierMap }
                   {/* Supplier + badges */}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm uppercase truncate">
-                      {supplier?.name ?? `Fournisseur #${po.supplierId}`}
+                       {supplier?.name ?? `${useLang.translate(lang, "Fournisseur", "المورد")} #${po.supplierId}`}
                     </p>
                     <div className="flex gap-1 mt-0.5 flex-wrap">
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusCls}`}>
-                        {statusLabel(po.status)}
+                         {statusLabel(po.status, lang)}
                       </span>
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
                         isComptant
                           ? "bg-emerald-100 text-emerald-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>
-                        {isComptant ? "Comptant" : "À terme"}
+                         {isComptant
+                           ? useLang.translate(lang, "Comptant", "نقدي")
+                           : useLang.translate(lang, "À terme", "آجل")}
                       </span>
                     </div>
                   </div>

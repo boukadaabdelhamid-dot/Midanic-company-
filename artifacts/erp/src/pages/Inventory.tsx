@@ -29,7 +29,7 @@ const MOVEMENT_TYPE_COLORS: Record<string, string> = {
 export default function Inventory() {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { data: movements, isLoading: movementsLoading } = useGetInventoryMovements();
   const { data: stockData, isLoading: stockLoading } = useGetInventoryStock();
   const { data: productsRes } = useGetProducts();

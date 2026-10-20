@@ -1245,7 +1245,7 @@ function VentePlusTab({ t, currency, storeId, canViewProfit }: { t: TFn; currenc
                     )}
                     <td className="py-2 px-3 text-center">
                       {!isRetour && (
-                        <button onClick={() => setSelected(row)} className="text-teal-600 hover:text-teal-800 transition-colors" aria-label="Détails">
+                        <button onClick={() => setSelected(row)} className="text-teal-600 hover:text-teal-800 transition-colors" aria-label={t("Détails", "التفاصيل")}>
                           <Eye className="h-4 w-4" />
                         </button>
                       )}
@@ -1360,7 +1360,7 @@ const ALL_TABS = [
 // ─── Dashboard page ───────────────────────────────────────────────
 export default function Dashboard() {
   const { lang } = useLang();
-  const t: TFn = (fr, ar) => (lang === "ar" ? ar : fr);
+  const t: TFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
 
   const { token } = useAuth();

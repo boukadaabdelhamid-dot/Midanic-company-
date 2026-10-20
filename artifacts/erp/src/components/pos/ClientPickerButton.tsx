@@ -17,7 +17,7 @@ export function ClientPickerButton({
   onPick, customers,
 }: { onPick: (c: CustomerSummary | null) => void; customers: CustomerSummary[] }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");

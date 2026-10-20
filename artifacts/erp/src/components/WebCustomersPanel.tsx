@@ -12,7 +12,7 @@ import { Search, ShieldBan, ShieldCheck } from "lucide-react";
 type Target = { phone: string; customerId?: number; name?: string; isBlocked: boolean };
 export function WebCustomersPanel({ canEdit }: { canEdit: boolean }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");

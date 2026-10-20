@@ -48,7 +48,7 @@ function fmt(v: number) {
 
 export default function Reports() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const { can } = usePermissions();
   const canViewProfit = can("products", "view_purchase_price");

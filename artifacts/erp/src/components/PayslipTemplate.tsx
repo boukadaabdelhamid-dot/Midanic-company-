@@ -1,10 +1,13 @@
 import React from "react";
 import type { Payslip } from "@workspace/erp-api-client-react";
+import { useLang } from "@/hooks/use-lang";
 
 const fmt = (n: string | number) =>
-  Number(n).toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  Number(n).toLocaleString(useLang.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function PayslipTemplate({ payslip, currency = "دج" }: { payslip: Payslip; currency?: string }) {
+  const { lang } = useLang();
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const base = Number(payslip.baseSalary);
   const bonus = Number(payslip.bonusAmount);
   const advances = Number(payslip.advancesAmount);
@@ -43,39 +46,39 @@ export default function PayslipTemplate({ payslip, currency = "دج" }: { paysli
         .payslip-row { display: flex; justify-content: space-between; gap: 12px; }
       `}</style>
       <div className="flex items-center justify-between border-b pb-3">
-        <h1 className="text-lg font-bold">Bulletin de paie</h1>
+        <h1 className="text-lg font-bold">{t("Bulletin de paie", "قسيمة الراتب")}</h1>
         <div className="text-right text-xs text-muted-foreground">
-          <div>Période : {payslip.periodStart ?? "—"} → {payslip.periodEnd ?? "—"}</div>
-          <div>N° {String(payslip.id).padStart(5, "0")}</div>
+          <div>{t("Période :", "الفترة:")} {payslip.periodStart ?? "—"} → {payslip.periodEnd ?? "—"}</div>
+          <div>{t("N°", "رقم")} {String(payslip.id).padStart(5, "0")}</div>
         </div>
       </div>
 
       <div className="payslip-meta-grid">
         <div className="payslip-block">
-          <h3>Employé</h3>
-          <div className="payslip-row"><span>Nom</span><strong>{payslip.employeeName ?? "—"}</strong></div>
-          <div className="payslip-row"><span>Poste</span><span>{payslip.position ?? "—"}</span></div>
-          <div className="payslip-row"><span>Matricule</span><span>{payslip.matricule ?? "—"}</span></div>
+          <h3>{t("Employé", "الموظف")}</h3>
+          <div className="payslip-row"><span>{t("Nom", "الاسم")}</span><strong>{payslip.employeeName ?? "—"}</strong></div>
+          <div className="payslip-row"><span>{t("Poste", "المنصب")}</span><span>{payslip.position ?? "—"}</span></div>
+          <div className="payslip-row"><span>{t("Matricule", "رقم الموظف")}</span><span>{payslip.matricule ?? "—"}</span></div>
         </div>
         <div className="payslip-block">
-          <h3>Informations administratives</h3>
+          <h3>{t("Informations administratives", "معلومات إدارية")}</h3>
           <div className="payslip-row"><span>N° CNAS</span><span>{payslip.cnasNumber ?? "—"}</span></div>
-          <div className="payslip-row"><span>Compte bancaire</span><span>{payslip.bankAccount ?? "—"}</span></div>
+          <div className="payslip-row"><span>{t("Compte bancaire", "الحساب البنكي")}</span><span>{payslip.bankAccount ?? "—"}</span></div>
         </div>
       </div>
 
       <table className="payslip-table">
         <thead>
-          <tr><th>Désignation</th><th style={{ textAlign: "right" }}>Montant ({currency})</th></tr>
+          <tr><th>{t("Désignation", "الوصف")}</th><th style={{ textAlign: "right" }}>{t("Montant", "المبلغ")} ({currency})</th></tr>
         </thead>
         <tbody>
-          <tr><td>Salaire de base</td><td style={{ textAlign: "right" }}>{fmt(base)}</td></tr>
-          <tr><td>Prime de rendement</td><td style={{ textAlign: "right" }}>{fmt(bonus)}</td></tr>
-          <tr><td>Avances</td><td style={{ textAlign: "right" }}>-{fmt(advances)}</td></tr>
-          <tr><td>Retenues</td><td style={{ textAlign: "right" }}>-{fmt(deductions)}</td></tr>
+          <tr><td>{t("Salaire de base", "الراتب الأساسي")}</td><td style={{ textAlign: "right" }}>{fmt(base)}</td></tr>
+          <tr><td>{t("Prime de rendement", "منحة الأداء")}</td><td style={{ textAlign: "right" }}>{fmt(bonus)}</td></tr>
+          <tr><td>{t("Avances", "السلف")}</td><td style={{ textAlign: "right" }}>-{fmt(advances)}</td></tr>
+          <tr><td>{t("Retenues", "الخصومات")}</td><td style={{ textAlign: "right" }}>-{fmt(deductions)}</td></tr>
         </tbody>
         <tfoot>
-          <tr><td>Net à payer</td><td style={{ textAlign: "right" }}>{fmt(net)} {currency}</td></tr>
+          <tr><td>{t("Net à payer", "صافي المستحق")}</td><td style={{ textAlign: "right" }}>{fmt(net)} {currency}</td></tr>
         </tfoot>
       </table>
     </div>

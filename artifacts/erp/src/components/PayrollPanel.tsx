@@ -37,7 +37,7 @@ const typeMeta: Record<string, { fr: string; ar: string; sign: 1 | -1; color: st
 export default function PayrollPanel({ employees, currency }: { employees: EmployeeRow[]; currency: string }) {
   const qc = useQueryClient();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const activeEmployees = useMemo(() => employees.filter(e => e.status === "active"), [employees]);
 
   const [adjEmployeeId, setAdjEmployeeId] = useState<string>("");

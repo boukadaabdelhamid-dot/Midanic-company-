@@ -1,6 +1,7 @@
 import React from "react";
 import type { Store } from "@workspace/erp-api-client-react";
 import { resolveImg } from "@/lib/utils";
+import { useLang } from "@/hooks/use-lang";
 
 export type InvoiceLine = {
   designation: string;
@@ -33,14 +34,16 @@ export type InvoiceData = {
 };
 
 const fmt = (n: number) =>
-  n.toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString(useLang.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const dateFmt = (d: Date) =>
-  d.toLocaleDateString("fr-DZ", { year: "numeric", month: "2-digit", day: "2-digit" }) +
+  d.toLocaleDateString(useLang.locale(), { year: "numeric", month: "2-digit", day: "2-digit" }) +
   " " +
-  d.toLocaleTimeString("fr-DZ", { hour: "2-digit", minute: "2-digit" });
+  d.toLocaleTimeString(useLang.locale(), { hour: "2-digit", minute: "2-digit" });
 
 export default function InvoiceTemplate({ data, currency = "دج" }: { data: InvoiceData; currency?: string }) {
+  const { lang } = useLang();
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { store, party, lines, showTva, tvaRate, kind, number, date, notes } = data;
   const subtotalTtc = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   // When TVA is shown we treat unitPrice as TTC and break it down to HT + TVA.
@@ -55,6 +58,7 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
     retour: { fr: "Bon de Retour", ar: "وصل إرجاع" },
   };
   const title = titleByKind[kind];
+  const titleText = t(title.fr, title.ar);
 
   return (
     <div className="invoice-root bg-white text-[#0f172a]">
@@ -156,7 +160,7 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
               </div>
               {store?.address && <div style={{ color: "#475569" }}>{store.address}</div>}
               <div style={{ color: "#475569", fontSize: 11 }}>
-                {store?.phone ? `Tél / هاتف: ${store.phone}` : ""}
+                {store?.phone ? `${t("Téléphone", "الهاتف")}: ${store.phone}` : ""}
               </div>
               <div style={{ color: "#475569", fontSize: 11, display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {store?.nif && <span>NIF: {store.nif}</span>}
@@ -166,19 +170,18 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
             </div>
           </div>
           <div className="text-end">
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#1B3057" }}>{title.fr}</div>
-            <div style={{ fontSize: 14, color: "#1B3057" }} dir="rtl">{title.ar}</div>
-            <div style={{ marginTop: 4 }}>N°: <strong>{number}</strong></div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#1B3057" }}>{titleText}</div>
+            <div style={{ marginTop: 4 }}>{t("N°", "رقم")}: <strong>{number}</strong></div>
             <div style={{ color: "#475569" }}>{dateFmt(date)}</div>
           </div>
         </header>
 
         <section className="invoice-meta-grid" style={{ marginBottom: 14 }}>
           <div className="invoice-block">
-            <h3>{kind === "purchase" ? "Fournisseur / المورد" : "Client / العميل"}</h3>
+            <h3>{kind === "purchase" ? t("Fournisseur", "المورد") : t("Client", "الزبون")}</h3>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{party.name || "—"}</div>
             {party.address && <div>{party.address}</div>}
-            {party.phone && <div>Tél: {party.phone}</div>}
+            {party.phone && <div>{t("Téléphone", "الهاتف")}: {party.phone}</div>}
             <div style={{ fontSize: 11, color: "#475569", display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
               {party.nif && <span>NIF: {party.nif}</span>}
               {party.rc && <span>RC: {party.rc}</span>}
@@ -186,10 +189,10 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
             </div>
           </div>
           <div className="invoice-block">
-            <h3>Détails / تفاصيل</h3>
-            <div className="invoice-row"><span>Type</span><span>{title.fr}</span></div>
-            <div className="invoice-row"><span>Articles</span><span>{lines.length}</span></div>
-            <div className="invoice-row"><span>Régime TVA</span><span>{showTva ? `Assujetti (${tvaRate.toFixed(2)}%)` : "Non assujetti"}</span></div>
+            <h3>{t("Détails", "التفاصيل")}</h3>
+            <div className="invoice-row"><span>{t("Type", "النوع")}</span><span>{titleText}</span></div>
+            <div className="invoice-row"><span>{t("Articles", "المنتجات")}</span><span>{lines.length}</span></div>
+            <div className="invoice-row"><span>{t("Régime TVA", "حالة الضريبة")}</span><span>{showTva ? `${t("Assujetti", "خاضع للضريبة")} (${tvaRate.toFixed(2)}%)` : t("Non assujetti", "غير خاضع للضريبة")}</span></div>
           </div>
         </section>
 
@@ -197,18 +200,18 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
           <thead>
             <tr>
               <th style={{ width: 36 }}>#</th>
-              <th>Désignation / التسمية</th>
-              <th style={{ width: 110 }}>Réf. / المرجع</th>
-              <th className="text-end" style={{ width: 60 }}>Qté</th>
+              <th>{t("Désignation", "الوصف")}</th>
+              <th style={{ width: 110 }}>{t("Réf.", "المرجع")}</th>
+              <th className="text-end" style={{ width: 60 }}>{t("Qté", "الكمية")}</th>
               {showTva ? (
                 <>
-                  <th className="text-end" style={{ width: 90 }}>P.U. HT</th>
-                  <th className="text-end" style={{ width: 90 }}>Montant HT</th>
+                   <th className="text-end" style={{ width: 90 }}>{t("P.U. HT", "سعر الوحدة دون الضريبة")}</th>
+                   <th className="text-end" style={{ width: 90 }}>{t("Montant HT", "المبلغ دون الضريبة")}</th>
                 </>
               ) : (
                 <>
-                  <th className="text-end" style={{ width: 90 }}>P.U.</th>
-                  <th className="text-end" style={{ width: 100 }}>Montant</th>
+                   <th className="text-end" style={{ width: 90 }}>{t("P.U.", "سعر الوحدة")}</th>
+                   <th className="text-end" style={{ width: 100 }}>{t("Montant", "المبلغ")}</th>
                 </>
               )}
             </tr>
@@ -217,7 +220,7 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
             {lines.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", padding: 24, color: "#94a3b8", fontStyle: "italic" }}>
-                  Aucun article / لا توجد مواد
+                  {t("Aucun article", "لا توجد مواد")}
                 </td>
               </tr>
             ) : (
@@ -242,21 +245,21 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
             {showTva ? (
               <>
                 <tr>
-                  <td colSpan={5} className="text-end">Total HT</td>
+                  <td colSpan={5} className="text-end">{t("Total HT", "المجموع دون الضريبة")}</td>
                   <td className="text-end num">{fmt(subtotalHt)} {currency}</td>
                 </tr>
                 <tr>
-                  <td colSpan={5} className="text-end">TVA {tvaRate.toFixed(2)}%</td>
+                  <td colSpan={5} className="text-end">{t("TVA", "الضريبة")} {tvaRate.toFixed(2)}%</td>
                   <td className="text-end num">{fmt(tvaAmount)} {currency}</td>
                 </tr>
                 <tr>
-                  <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>Total TTC</td>
+                  <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>{t("Total TTC", "المجموع مع الضريبة")}</td>
                   <td className="text-end num" style={{ background: "#1B3057", color: "#fff" }}>{fmt(subtotalTtc)} {currency}</td>
                 </tr>
               </>
             ) : (
               <tr>
-                <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>Total / المجموع</td>
+                <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>{t("Total", "المجموع")}</td>
                 <td className="text-end num" style={{ background: "#1B3057", color: "#fff" }}>{fmt(subtotalTtc)} {currency}</td>
               </tr>
             )}
@@ -271,14 +274,13 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
 
         {kind === "proforma" && (
           <div style={{ marginTop: 14, fontSize: 11, color: "#b45309", fontStyle: "italic" }}>
-            Ce document est un devis non comptable. Aucune écriture n'a été générée. /
-            هذه وثيقة غير محاسبية، ولم يتم توليد أي قيد.
+            {t("Ce document est un devis non comptable. Aucune écriture n'a été générée.", "هذه وثيقة غير محاسبية، ولم يتم توليد أي قيد.")}
           </div>
         )}
 
         <footer style={{ marginTop: 30, paddingTop: 12, borderTop: "1px dashed #cbd5e1", fontSize: 10, color: "#64748b", display: "flex", justifyContent: "space-between" }}>
-          <span>Mode de paiement: COD / الدفع عند الاستلام</span>
-          <span>Devise: Dinar Algérien ({currency})</span>
+          <span>{t("Mode de paiement: paiement à la livraison", "طريقة الدفع: الدفع عند الاستلام")}</span>
+          <span>{t("Devise: Dinar Algérien", "العملة: الدينار الجزائري")} ({currency})</span>
         </footer>
       </div>
     </div>

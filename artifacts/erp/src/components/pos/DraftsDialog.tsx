@@ -35,7 +35,7 @@ export function DraftsDialog({
   onLoad: (items: DraftItem[], draftId: number, customerName: string, linkedCustomerId?: number | null) => void;
 }) {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,7 +110,7 @@ export function DraftsDialog({
                   <div className="font-semibold text-sm truncate">{draft.customerName}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                     <Clock className="h-3 w-3 shrink-0" />
-                    {new Date(draft.createdAt).toLocaleString("fr-DZ")}
+                    {new Date(draft.createdAt).toLocaleString(useLang.locale(lang))}
                     <span className="mx-1">·</span>
                     {draft.items.length} {t("article", "مقال")}{draft.items.length > 1 ? "s" : ""}
                   </div>

@@ -98,7 +98,7 @@ type CrossStoreStock = { matchKey: string | null; stores: CrossStoreEntry[] };
 type Translator = (fr: string, ar: string) => string;
 
 function makeFmt(lang: string) {
-  const locale = lang === "ar" ? "ar-DZ" : "fr-DZ";
+  const locale = useLang.locale(lang);
   return (dateStr: string | null | undefined): string => {
     if (!dateStr) return "—";
     return new Date(dateStr).toLocaleDateString(locale, {
@@ -108,7 +108,7 @@ function makeFmt(lang: string) {
 }
 
 function makeFmtDateTime(lang: string) {
-  const locale = lang === "ar" ? "ar-DZ" : "fr-DZ";
+  const locale = useLang.locale(lang);
   return (dateStr: string | null | undefined): string => {
     if (!dateStr) return "—";
     return new Date(dateStr).toLocaleString(locale, {
@@ -119,7 +119,7 @@ function makeFmtDateTime(lang: string) {
 
 function num(v: string | number | null | undefined): string {
   if (v === null || v === undefined) return "—";
-  return Number(v).toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(v).toLocaleString(useLang.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 const STATUS_MAP: Record<string, { fr: string; ar: string; className: string }> = {
@@ -242,7 +242,7 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
   const { lang } = useLang();
   const { can } = usePermissions();
   const canViewPurchasePrice = can("products", "view_purchase_price");
-  const t: Translator = (fr, ar) => lang === "ar" ? ar : fr;
+  const t: Translator = (fr, ar) => useLang.translate(lang, fr, ar);
   const fmt = makeFmt(lang);
   const fmtDateTime = makeFmtDateTime(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";

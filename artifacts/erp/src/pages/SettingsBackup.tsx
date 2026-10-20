@@ -3,7 +3,7 @@ import { useLang } from "@/hooks/use-lang";
 
 export default function SettingsBackup() {
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   return (
     <div className="p-6 max-w-2xl">

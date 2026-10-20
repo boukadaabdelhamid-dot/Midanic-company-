@@ -27,7 +27,7 @@ export default function Login() {
   const { setToken } = useAuth();
   const { setStores, setCurrentStoreId, clear } = useStoreContext();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const loginMutation = useLogin();
   const qc = useQueryClient();
   const selectStore = useSelectStore();

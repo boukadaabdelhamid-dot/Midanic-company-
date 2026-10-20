@@ -114,6 +114,7 @@ const navEntries: NavEntry[] = [
 const COLLAPSE_KEY = "midanic.erp.sidebarCollapsed";
 
 function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { lang } = useLang();
   const { user } = useMe();
   const { currentStoreId, stores: ctxStores, setStores, setCurrentStoreId } = useStoreContext();
   const { setToken } = useAuth();
@@ -182,7 +183,7 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
         <StoreIcon className="h-4 w-4 shrink-0 text-primary" />
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">Magasin</div>
+            <div className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">{useLang.translate(lang, "Magasin", "المتجر")}</div>
             <div className="text-sm font-medium truncate">{current?.nameEn ?? "—"}</div>
           </div>
         )}
@@ -261,7 +262,7 @@ export function Sidebar() {
   const { logout } = useAuth();
   const { isAdmin, user, features } = useMe();
   const { lang } = useLang();
-  const t = (fr: string, ar: string) => lang === "ar" ? ar : fr;
+  const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const userId = (user as { id?: number | string } | null)?.id ?? null;
   const { can } = usePermissions();
   const visibleEntries = navEntries.filter((it) => {

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { enTranslations } from "@/lib/en-translations";
 
-export type ErpLang = "fr" | "ar";
+export type ErpLang = "fr" | "ar" | "en";
 
 type LangContextType = {
   lang: ErpLang;
@@ -14,7 +15,7 @@ const LangContext = createContext<LangContextType | null>(null);
 export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<ErpLang>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return (saved as ErpLang) || "fr";
+    return saved === "fr" || saved === "ar" || saved === "en" ? saved : "fr";
   });
 
   const setLang = (next: ErpLang) => {
@@ -38,4 +39,23 @@ export function useLang(): LangContextType {
   const ctx = useContext(LangContext);
   if (!ctx) throw new Error("useLang must be used within LangProvider");
   return ctx;
+}
+
+export function translateUi(lang: string, fr: string, ar: string): string {
+  if (lang === "ar") return ar;
+  if (lang === "en") return enTranslations[fr] ?? fr;
+  return fr;
+}
+
+export namespace useLang {
+  export const translate = translateUi;
+
+  export function locale(lang?: string): string {
+    const stored = lang ?? (
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem(STORAGE_KEY)
+        : "fr"
+    );
+    return stored === "ar" ? "ar-DZ" : stored === "en" ? "en-DZ" : "fr-DZ";
+  }
 }
