@@ -97,18 +97,49 @@ test("transfer catalogues and actions respect employee grants and company-owner 
           mode, items: [{ sourceProductId, quantity: 2 }],
         }),
       });
-    const act = (id: number, action: string, owner: boolean) =>
-      fetch(`${base}/erp/transfers/${id}/${action}`, { method: "POST", headers: headers(owner), body: "{}" });
+    const act = (id: number, action: string, owner: boolean, currentStoreId = sourceId) =>
+      fetch(`${base}/erp/transfers/${id}/${action}`, { method: "POST", headers: headers(owner, currentStoreId), body: "{}" });
     assert.equal((await create(false, "send")).status, 403, "employee cannot bypass approval");
     const direct = await create(true, "send");
     assert.equal(direct.status, 201, "company owner can send directly");
     const transfer = await direct.json() as { id: number; status: string };
     assert.equal(transfer.status, "prepared");
-    assert.equal((await act(transfer.id, "ship", false)).status, 403, "create does not grant editing");
+    assert.equal((await act(transfer.id, "dispatch", false)).status, 403, "create does not grant dispatching");
     await grant("edit", true);
-    assert.equal((await act(transfer.id, "ship", false)).status, 200);
+    assert.equal((await act(transfer.id, "dispatch", false)).status, 200, "legacy/direct prepared transfers can still ship");
     assert.equal((await act(transfer.id, "cancel", false)).status, 403, "employee cannot cancel after shipping");
     assert.equal((await act(transfer.id, "cancel", true)).status, 200, "company owner can cancel after shipping");
+
+    const regular = await create(false, "request");
+    assert.equal(regular.status, 201);
+    const regularTransfer = await regular.json() as { id: number };
+    assert.equal((await act(regularTransfer.id, "dispatch", false)).status, 409, "dispatch cannot skip destination approval");
+    assert.equal((await act(regularTransfer.id, "dispatch", true)).status, 409, "combined dispatch preserves approval even for an admin request");
+    assert.equal((await act(regularTransfer.id, "receive", false, destinationId)).status, 409, "receipt still requires dispatch");
+    assert.equal((await act(regularTransfer.id, "approve", false, destinationId)).status, 200);
+    assert.equal((await act(regularTransfer.id, "dispatch", false, destinationId)).status, 403, "only the source may dispatch");
+    const dispatched = await act(regularTransfer.id, "dispatch", false);
+    assert.equal(dispatched.status, 200);
+    const dispatchedTransfer = await dispatched.json() as { status: string; preparedAt: string; shippedAt: string };
+    assert.equal(dispatchedTransfer.status, "in_transit", "one action both prepares and ships");
+    assert.ok(dispatchedTransfer.preparedAt && dispatchedTransfer.shippedAt);
+    assert.equal((await act(regularTransfer.id, "dispatch", false)).status, 409, "dispatch cannot be repeated");
+    const events = await db.select({ status: schema.stockTransferEventsTable.status })
+      .from(schema.stockTransferEventsTable)
+      .where(eq(schema.stockTransferEventsTable.transferId, regularTransfer.id))
+      .orderBy(schema.stockTransferEventsTable.createdAt, schema.stockTransferEventsTable.id);
+    assert.deepEqual(events.map((event) => event.status), ["requested", "approved", "prepared", "in_transit"]);
+    const beforeReceipt = await db.select({ storeId: schema.productsTable.storeId, stock: schema.productsTable.stock })
+      .from(schema.productsTable).where(inArray(schema.productsTable.storeId, [sourceId, destinationId]));
+    assert.equal(beforeReceipt.find((product) => product.storeId === sourceId)!.stock, 20);
+    assert.equal(beforeReceipt.find((product) => product.storeId === destinationId)!.stock, 0);
+    assert.equal((await act(regularTransfer.id, "receive", false)).status, 403, "the source cannot confirm receipt");
+    assert.equal((await act(regularTransfer.id, "receive", false, destinationId)).status, 200);
+    assert.equal((await act(regularTransfer.id, "receive", false, destinationId)).status, 409, "receipt cannot move stock twice");
+    const afterReceipt = await db.select({ storeId: schema.productsTable.storeId, stock: schema.productsTable.stock })
+      .from(schema.productsTable).where(inArray(schema.productsTable.storeId, [sourceId, destinationId]));
+    assert.equal(afterReceipt.find((product) => product.storeId === sourceId)!.stock, 18);
+    assert.equal(afterReceipt.find((product) => product.storeId === destinationId)!.stock, 2);
 
     const inbound = await create(false, "request", true);
     assert.equal(inbound.status, 201, "employee can initiate a pull request");
@@ -120,12 +151,13 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal((await create(false, "request")).status, 403);
     const unchanged = await db.select({ stock: schema.productsTable.stock })
       .from(schema.productsTable).where(eq(schema.productsTable.id, sourceProductId));
-    assert.equal(unchanged[0]!.stock, 20, "phase one does not change stock movement timing");
+    assert.equal(unchanged[0]!.stock, 18, "only the received transfer changes stock");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     try {
       if (storeIds.length) {
         await db.delete(schema.stockTransfersTable).where(inArray(schema.stockTransfersTable.sourceStoreId, storeIds));
+        await db.delete(schema.inventoryMovementsTable).where(inArray(schema.inventoryMovementsTable.storeId, storeIds));
         await db.delete(schema.productsTable).where(inArray(schema.productsTable.storeId, storeIds));
         await db.delete(schema.userStoresTable).where(inArray(schema.userStoresTable.storeId, storeIds));
       }

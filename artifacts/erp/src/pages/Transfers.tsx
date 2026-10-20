@@ -638,7 +638,7 @@ export function CreateTransferDialog({
               </Select>
               {mode === "send" && direction === "out" && (
                 <p className="text-[11px] text-amber-700 mt-1">
-                  {tr("Le stock sera déduit immédiatement de la source.", "سيخصم المخزون فوراً من المصدر.")}
+                  {tr("Le stock sera mis à jour à la réception par le magasin destination.", "يتحدث المخزون عند تأكيد الاستلام من المتجر الوجهة.")}
                 </p>
               )}
               {direction === "in" && (
@@ -779,7 +779,7 @@ function TransferDetailDialog({
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: "{}",
       });
-      const data = await response.json().catch(() => ({})) as { error?: string };
+      const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? tr("Échec de l'expédition.", "تعذر شحن التحويل."));
       return data;
     },
@@ -900,7 +900,7 @@ function TransferDetailDialog({
                   </Button>
                 </>
               )}
-              {(td.status === "approved" || td.status === "prepared" || (td.status === "requested" && isAdmin)) && isSource && (
+              {(td.status === "approved" || td.status === "prepared") && isSource && (
                 <Button
                   size="sm"
                   onClick={() => dispatch.mutate({ id })}
@@ -927,7 +927,12 @@ function TransferDetailDialog({
             </div>}
             {(approve.error || reject.error || dispatch.error || receive.error || cancel.error) && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-                {((approve.error || reject.error || dispatch.error || receive.error || cancel.error) as { error?: string })?.message ?? tr("Action échouée", "فشل الإجراء")}
+                {(() => {
+                  const error = approve.error || reject.error || dispatch.error || receive.error || cancel.error;
+                  return (error as { error?: string })?.error
+                    ?? (error as Error)?.message
+                    ?? tr("Action échouée", "فشل الإجراء");
+                })()}
               </div>
             )}
           </div>

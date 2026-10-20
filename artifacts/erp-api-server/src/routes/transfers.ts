@@ -211,7 +211,7 @@ router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requi
 
     const events = await db.select().from(schema.stockTransferEventsTable)
       .where(eq(schema.stockTransferEventsTable.transferId, t.id))
-      .orderBy(schema.stockTransferEventsTable.createdAt);
+      .orderBy(schema.stockTransferEventsTable.createdAt, schema.stockTransferEventsTable.id);
 
     const stores = await db.select({ id: schema.storesTable.id, nameEn: schema.storesTable.nameEn, nameAr: schema.storesTable.nameAr })
       .from(schema.storesTable).where(inArray(schema.storesTable.id, [t.sourceStoreId, t.destinationStoreId]));
@@ -409,8 +409,8 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
 // ─── ACTIONS ───────────────────────────────────────────────────────
 // Allowed transitions:
 // requested → approved (dest)  | rejected (dest)  | cancelled (source)
-// approved  → prepared (source) | cancelled (source)
-// prepared  → in_transit (source/ship) | cancelled (source, admin only)
+// approved  → in_transit (source dispatch) | cancelled (source)
+// prepared  → in_transit (source dispatch, legacy/direct-send) | cancelled (source, admin only)
 // in_transit → received (dest)
 function ensure(req: AuthRequest, ok: boolean, res: import("express").Response, msg = "Forbidden"): boolean {
   if (!ok) { res.status(403).json({ error: msg, code: "STORE_ACCESS_REVOKED" }); return false; }
@@ -539,6 +539,62 @@ router.post("/erp/transfers/:id/ship", authenticate, requireStaff, requireStore,
       await tx.insert(schema.stockTransferEventsTable).values({
         transferId: id, status: "in_transit", actorUserId: req.user!.id,
         actorStoreId: t.sourceStoreId, notes: req.body?.notes ?? null,
+      });
+      return u;
+    });
+    broadcastTransferChanged(updated);
+    res.json(updated);
+  } catch (err) {
+    const e = err as { http?: number; message?: string };
+    if (e.http === 409) { res.status(409).json({ error: e.message }); return; }
+    req.log.error(err); res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// One source-side action, while retaining both audit events and receive-only stock movement.
+router.post("/erp/transfers/:id/dispatch", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
+  try {
+    const id = pid(req, "id");
+    const t = await loadTransferOr404(id, req);
+    if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
+    if (!ensure(req, actorOnSource(req, t), res, "Only source side can dispatch")) return;
+
+    if (!["approved", "prepared"].includes(t.status)) {
+      res.status(409).json({ error: `Cannot dispatch from status ${t.status}` });
+      return;
+    }
+
+    const now = new Date();
+    const needsPrepareEvent = t.status !== "prepared";
+    const updated = await db.transaction(async (tx) => {
+      const [u] = await tx.update(schema.stockTransfersTable)
+        .set({
+          status: "in_transit",
+          preparedAt: t.preparedAt ?? now,
+          shippedAt: now,
+        })
+        .where(and(
+          eq(schema.stockTransfersTable.id, id),
+          eq(schema.stockTransfersTable.status, t.status),
+        ))
+        .returning();
+      if (!u) throw Object.assign(new Error("Status changed by another request"), { http: 409 });
+
+      if (needsPrepareEvent) {
+        await tx.insert(schema.stockTransferEventsTable).values({
+          transferId: id,
+          status: "prepared",
+          actorUserId: req.user!.id,
+          actorStoreId: t.sourceStoreId,
+          notes: null,
+        });
+      }
+      await tx.insert(schema.stockTransferEventsTable).values({
+        transferId: id,
+        status: "in_transit",
+        actorUserId: req.user!.id,
+        actorStoreId: t.sourceStoreId,
+        notes: null,
       });
       return u;
     });
