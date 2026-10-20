@@ -1657,9 +1657,13 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
 
     // Unified delta: positive = contact owes us more (or our debt decreases).
     // Supplier: purchase → −amount (we owe more). payment/ajustement → +amount.
+    // Cash purchases are settled immediately and have no supplier balance impact.
     // Customer: vente_a_terme/remboursement → +amount. versement/avoir_retour → −amount.
     const unifiedDelta = (source: "supplier" | "customer", type: string, amount: number): number => {
-      if (source === "supplier") return type === "purchase" ? -amount : amount;
+      if (source === "supplier") {
+        if (type === "purchase_comptant") return 0;
+        return type === "purchase" ? -amount : amount;
+      }
       return (type === "versement" || type === "avoir_retour") ? -amount : amount;
     };
 
@@ -1756,7 +1760,7 @@ router.get("/erp/suppliers/:id/operations", authenticate, requireStaff, requireS
     const opsWithBalance = supplierRows.map(({ op, storeNameAr, storeNameEn }) => {
       const amt = parseFloat(op.amount ?? "0");
       if (op.type === "purchase") running += amt;
-      else running -= amt;
+      else if (op.type !== "purchase_comptant") running -= amt;
       return { ...op, storeNameAr, storeNameEn, runningBalance: running.toFixed(2), source: "supplier" as const };
     });
     res.json({ supplier, operations: opsWithBalance.filter((op) => isInDateRange(op.date)), contactBalance: null });

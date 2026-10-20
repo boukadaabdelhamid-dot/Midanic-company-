@@ -387,7 +387,10 @@ function StatementSheet({
 
   // Unified delta: same formula as the API. Used to assign Débit/Crédit columns.
   const unifiedDelta = (source: "supplier" | "customer" | undefined, type: string, amount: number): number => {
-    if ((source ?? "supplier") === "supplier") return type === "purchase" ? -amount : amount;
+    if ((source ?? "supplier") === "supplier") {
+      if (type === "purchase_comptant") return 0;
+      return type === "purchase" ? -amount : amount;
+    }
     return (type === "versement" || type === "avoir_retour") ? -amount : amount;
   };
 
@@ -416,6 +419,11 @@ function StatementSheet({
         </span>
       );
     }
+    if (opType === "purchase_comptant") return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+        {t("Achat comptant", "شراء نقدي")}
+      </span>
+    );
     if (op.type === "purchase") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
         <TrendingUp className="h-3 w-3" />{t("Achat", "شراء")}
@@ -442,7 +450,8 @@ function StatementSheet({
       if (opType === "avoir_retour") return t("Avoir retour", "أفوار");
       return op.type;
     }
-    if (opType === "purchase" || opType === "purchase_comptant") return t("Achat", "شراء");
+    if (opType === "purchase_comptant") return t("Achat comptant", "شراء نقدي");
+    if (opType === "purchase") return t("Achat", "شراء");
     if (opType === "ajustement") return t("Ajustement", "تعديل");
     if (opType === "payment") return t("Règlement", "تسديد");
     return op.type;
@@ -505,16 +514,7 @@ function StatementSheet({
     t("Solde", "الرصيد"),
   ];
   const statementRows = ((data?.operations ?? []) as UnifiedOp[]).map((op) => {
-    const source = op.source ?? "supplier";
-    const type = op.type as string;
-    let typeLabel = type;
-    if (source === "customer") {
-      if (type === "vente_a_terme") typeLabel = t("Vente à terme", "بيع بالدين");
-      else if (type === "versement") typeLabel = t("Versement", "دفعة");
-      else if (type === "avoir_retour") typeLabel = t("Avoir retour", "أفوار");
-    } else if (type === "purchase") typeLabel = t("Achat", "شراء");
-    else if (type === "ajustement") typeLabel = t("Ajustement", "تعديل");
-    else if (type === "payment") typeLabel = t("Règlement", "تسديد");
+    const typeLabel = opTypeLabel(op);
 
     const beforeAfter = `${t("Ancien", "قبل")}: ${op.balanceBefore != null ? fmt(op.balanceBefore) : "—"} → ${t("Nouveau", "بعد")}: ${op.balanceAfter != null ? fmt(op.balanceAfter) : "—"}`;
     return [

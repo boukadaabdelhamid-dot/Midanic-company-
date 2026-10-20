@@ -82,7 +82,7 @@ const components = {
   TableCell: passthrough("td"),
 };
 
-function renderStatement(lang) {
+function renderStatement(lang, data = sampleData) {
   const buttonHandlers = {};
   const browser = { csvBlob: null, downloadedFilename: "", printHtml: "", popupBlocked: false };
   const link = {
@@ -107,7 +107,7 @@ function renderStatement(lang) {
     React,
     useState: React.useState,
     useEffect() {},
-    useQuery: () => ({ data: sampleData, isLoading: false, isError: false }),
+    useQuery: () => ({ data, isLoading: false, isError: false }),
     ...components,
     Button,
     useLang: () => ({ lang }),
@@ -172,6 +172,49 @@ const phoneWidth = 390;
 const desktopWidth = 1280;
 const mediumBreakpoint = 768;
 assert.ok(phoneWidth < mediumBreakpoint && desktopWidth >= mediumBreakpoint);
+
+for (const lang of ["fr", "ar"]) {
+  for (const unified of [false, true]) {
+    test(`cash purchases are neutral in display, CSV and print (${lang}, unified=${unified})`, async () => {
+      const cash = {
+        ...sampleData.operations[0],
+        type: "purchase_comptant",
+        amount: "777.77",
+        runningBalance: unified ? "-984.50" : "984.50",
+        balanceBefore: null,
+        balanceAfter: null,
+      };
+      const { html, browser, buttonHandlers } = renderStatement(lang, {
+        operations: [cash],
+        contactBalance: unified ? "-984.50" : null,
+      });
+      const label = lang === "ar" ? "شراء نقدي" : "Achat comptant";
+      for (const section of ["supplier-statement-cards", "supplier-statement-table"]) {
+        const content = findElementByTestId(html, section);
+        assert.ok(content.includes(label));
+        assert.ok(content.includes(cash.runningBalance));
+        assert.ok(!content.includes(cash.amount), "cash amount must not appear as debit or credit");
+      }
+      const row = html.match(/<tbody>([\s\S]*?)<\/tbody>/)[1];
+      const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+      assert.equal(cells[4], "—");
+      assert.equal(cells[5], "—");
+
+      buttonHandlers["button-download-supplier-statement-csv"]();
+      const csv = Buffer.from(await browser.csvBlob.arrayBuffer()).toString("utf8");
+      assert.ok(csv.includes(`"${label}"`));
+      assert.ok(csv.includes(`;"—";"—";"${cash.runningBalance}\n`));
+      assert.ok(!csv.includes(cash.amount));
+      assert.ok(!csv.includes("purchase_comptant"));
+      buttonHandlers["button-print-supplier-statement"]();
+      assert.ok(browser.printHtml.includes(label));
+      assert.ok(browser.printHtml.includes(cash.runningBalance));
+      assert.ok(browser.printHtml.includes('<td class="number">—</td><td class="number">—</td>'));
+      assert.ok(!browser.printHtml.includes(cash.amount));
+      assert.ok(!browser.printHtml.includes("purchase_comptant"));
+    });
+  }
+}
 
 for (const lang of ["fr", "ar"]) {
   const { html, browser, buttonHandlers } = renderStatement(lang);
