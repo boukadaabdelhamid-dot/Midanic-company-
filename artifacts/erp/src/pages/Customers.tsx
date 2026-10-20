@@ -59,17 +59,11 @@ import { useCurrentStore } from "@/hooks/use-current-store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { SaleOrderViewDialog, type SaleOrderDetail } from "@/pages/SaleOrders";
 import SalePaymentBadge from "@/components/SalePaymentBadge";
+import CustomerBalanceOperationDialog from "@/components/CustomerBalanceOperationDialog";
+import { getLinkedSaleOrderId } from "@/lib/customer-operation-order";
 import { RetourPrintDialog } from "@/pages/Retours";
 
 type TFn = (fr: string, ar: string) => string;
-
-function getLinkedSaleOrderId(operation: CustomerOperation): number | null {
-  if (operation.type !== "vente_a_terme") return null;
-  const referenceMatch = operation.reference?.match(/^ORDER[-:#\s]*(\d+)$/i);
-  const noteMatch = operation.note?.match(/(?:commande|order)\s*#?\s*(\d+)/i);
-  const orderId = Number(referenceMatch?.[1] ?? noteMatch?.[1]);
-  return Number.isSafeInteger(orderId) && orderId > 0 ? orderId : null;
-}
 
 function ClassifBadge({ c }: { c?: CustomerClassification | null }) {
   if (!c) return null;
@@ -619,6 +613,8 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
   const [selectedBalanceOperation, setSelectedBalanceOperation] = useState<CustomerOperation | null>(null);
   const [openingBalanceOrder, setOpeningBalanceOrder] = useState(false);
   const [balanceOrderError, setBalanceOrderError] = useState<string | null>(null);
+  const balanceOrderRequest = React.useRef(0);
+  React.useEffect(() => () => { balanceOrderRequest.current += 1; }, []);
 
   // Retours state
   const [bonRetours, setBonRetours] = useState<{ id: number; createdAt: string | null; totalAmount: number; retourType: string | null }[]>([]);
@@ -639,7 +635,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       .catch(() => setBonRetours([]));
   }, [customerId]);
 
-  const openOrderView = async (orderId: number): Promise<boolean> => {
+  const openOrderView = async (orderId: number, shouldOpen = () => true): Promise<boolean> => {
     try {
       const token = localStorage.getItem("midanic_token") ?? "";
       const apiBase = getApiBase();
@@ -648,6 +644,7 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       });
       if (!res.ok) return false;
       const detail: SaleOrderDetail = await res.json();
+      if (Number(detail.user_id) !== customerId || !shouldOpen()) return false;
       setViewingOrder(detail);
       setViewOpen(true);
       return true;
@@ -747,6 +744,38 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
       returned: t("Retourné", "مرتجع"), cancelled: t("Annulé", "ملغى"),
     };
     return map[s] ?? s;
+  };
+
+  const openBalanceOperation = (operation: CustomerOperation) => {
+    balanceOrderRequest.current += 1;
+    setSelectedBalanceOperation(operation);
+    setOpeningBalanceOrder(false);
+    setBalanceOrderError(null);
+  };
+
+  const closeBalanceOperation = () => {
+    balanceOrderRequest.current += 1;
+    setSelectedBalanceOperation(null);
+    setOpeningBalanceOrder(false);
+    setBalanceOrderError(null);
+  };
+
+  const openBalanceOperationOrder = async () => {
+    if (!selectedBalanceOperation) return;
+    const orderId = getLinkedSaleOrderId(selectedBalanceOperation);
+    if (!orderId) return;
+
+    const request = ++balanceOrderRequest.current;
+    setOpeningBalanceOrder(true);
+    setBalanceOrderError(null);
+    const opened = await openOrderView(orderId, () => balanceOrderRequest.current === request);
+    if (balanceOrderRequest.current !== request) return;
+    setOpeningBalanceOrder(false);
+    if (opened) {
+      closeBalanceOperation();
+    } else {
+      setBalanceOrderError(t("Impossible d'ouvrir le bon de vente. Vérifiez vos droits ou réessayez.", "تعذر فتح بون البيع. تحقق من صلاحياتك أو أعد المحاولة."));
+    }
   };
 
   return (
@@ -971,6 +1000,9 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 {t("Le solde après est la valeur enregistrée lors de l'opération; — = valeur historique indisponible.", "الرصيد بعد الحركة هو القيمة المسجلة وقت العملية؛ — يعني أن القيمة التاريخية غير متوفرة.")}
               </p>
+              <p className="text-[11px] text-primary mt-1">
+                {t("Cliquez sur une opération pour voir ses détails et le bon associé.", "اضغط على العملية لعرض تفاصيلها والبون المرتبط بها.")}
+              </p>
             </div>
             <span className="text-xs text-muted-foreground">
               {ops.length} {t("opération(s)", "عملية")}
@@ -986,7 +1018,21 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
             <>
               <div className="space-y-2 md:hidden">
                 {balanceLedgerRows.map(({ op, debit, credit, operation, recordedBalance, dateLabel }) => (
-                  <article key={op.id} data-testid={`card-customer-balance-operation-${op.id}`} className="rounded-lg border bg-card p-3 space-y-3">
+                  <article
+                    key={op.id}
+                    data-testid={`card-customer-balance-operation-${op.id}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={t(`Afficher les détails de l'opération ${operation.label}`, `عرض تفاصيل عملية ${operation.label}`)}
+                    onClick={() => openBalanceOperation(op)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openBalanceOperation(op);
+                      }
+                    }}
+                    className="cursor-pointer rounded-lg border bg-card p-3 space-y-3 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <span className={`inline-flex text-[11px] font-semibold border rounded-full px-2 py-0.5 ${operation.cls}`}>
@@ -1038,7 +1084,21 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
                 <TableBody>
                   {balanceLedgerRows.map(({ op, debit, credit, operation, recordedBalance, dateLabel }) => {
                     return (
-                      <TableRow key={op.id} data-testid={`row-customer-balance-operation-${op.id}`}>
+                      <TableRow
+                        key={op.id}
+                        data-testid={`row-customer-balance-operation-${op.id}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t(`Afficher les détails de l'opération ${operation.label}`, `عرض تفاصيل عملية ${operation.label}`)}
+                        onClick={() => openBalanceOperation(op)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openBalanceOperation(op);
+                          }
+                        }}
+                        className="cursor-pointer hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                         <TableCell className="text-xs tabular-nums whitespace-nowrap">{dateLabel}</TableCell>
                         <TableCell>
                           <span className={`inline-flex text-[11px] font-semibold border rounded-full px-2 py-0.5 whitespace-nowrap ${operation.cls}`}>
@@ -1279,7 +1339,17 @@ function CustomerDetailSheet({ customerId, onClose, t, lang, currency, expanded,
         </DialogContent>
       </Dialog>
 
-      {/* Sale order view dialog — opened from VENTES tab */}
+      <CustomerBalanceOperationDialog
+        row={balanceLedgerRows.find(({ op }) => op.id === selectedBalanceOperation?.id) ?? null}
+        currency={currency}
+        loading={openingBalanceOrder}
+        error={balanceOrderError}
+        canOpenOrder={canViewHistory && can("orders", "view")}
+        onClose={closeBalanceOperation}
+        onOpenOrder={() => void openBalanceOperationOrder()}
+      />
+
+      {/* Sale order view dialog — opened from VENTES or BALANCE */}
       <SaleOrderViewDialog
         open={viewOpen}
         onOpenChange={setViewOpen}
