@@ -4905,6 +4905,7 @@ router.get("/erp/customers/:id/sale-items", authenticate, requireStaff, requireS
         oi.product_id                     AS "productId",
         p.name_en                         AS "productNameEn",
         p.name_ar                         AS "productNameAr",
+        MAX(p.barcode)                    AS "barcode",
         MAX(oi.unit_price)                AS "unitPrice",
         SUM(oi.quantity)::int             AS "quantity",
         MAX(o.id)                         AS "orderId",

@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { RotateCcw, Plus, Printer, Trash2, ChevronsUpDown, Check, User, Search, ShoppingBag } from "lucide-react";
+import { RotateCcw, Plus, Printer, Trash2, ChevronsUpDown, Check, User, Search, ShoppingBag, Barcode } from "lucide-react";
 import { format } from "date-fns";
 import InvoiceDialog from "@/components/InvoiceDialog";
 import type { InvoiceData } from "@/components/InvoiceTemplate";
@@ -28,6 +28,7 @@ type CustomerSaleItem = {
   productId: number;
   productNameEn: string | null;
   productNameAr: string | null;
+  barcode: string | null;
   unitPrice: string;
   quantity: number;
   returnedQty: number;
@@ -417,12 +418,22 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     for (const { barcode, productId } of extraBarcodesData) m.set(barcode.toLowerCase(), productId);
     return m;
   }, [extraBarcodesData]);
+  const extraBarcodesByProductId = useMemo(() => {
+    const m = new Map<number, string[]>();
+    for (const { barcode, productId } of extraBarcodesData) {
+      const barcodes = m.get(productId) ?? [];
+      barcodes.push(barcode.toLowerCase());
+      m.set(productId, barcodes);
+    }
+    return m;
+  }, [extraBarcodesData]);
 
   const [lines, setLines] = useState<RetourLine[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [saleItemSearch, setSaleItemSearch] = useState("");
+  const [productCode, setProductCode] = useState("");
   const [reason, setReason] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -449,9 +460,11 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     if (!q) return customerSaleItems;
     return customerSaleItems.filter((item) =>
       (item.productNameEn ?? "").toLowerCase().includes(q) ||
-      (item.productNameAr ?? "").toLowerCase().includes(q)
+      (item.productNameAr ?? "").toLowerCase().includes(q) ||
+      (item.barcode ?? "").toLowerCase().includes(q) ||
+      (extraBarcodesByProductId.get(item.productId) ?? []).some((barcode) => barcode.includes(q))
     );
-  }, [customerSaleItems, saleItemSearch]);
+  }, [customerSaleItems, saleItemSearch, extraBarcodesByProductId]);
 
   const { data: _custRes } = useGetErpCustomers(
     clientSearch.trim().length > 0 ? { search: clientSearch.trim(), limit: 20 } : { limit: 20 }
@@ -468,6 +481,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
       setClientSearch("");
       setClientComboOpen(false);
       setSaleItemSearch("");
+      setProductCode("");
       setReason("");
       setError(null);
     }
@@ -506,9 +520,15 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     setPickerOpen(false);
   };
 
-  const addFromSaleItem = (item: CustomerSaleItem) => {
+  const addFromSaleItem = (item: CustomerSaleItem, requestedQty?: number) => {
     const returnableQty = Math.max(0, item.quantity - (item.returnedQty ?? 0));
-    if (returnableQty === 0) return;
+    const alreadySelectedQty = lines.find((line) => line.productId === item.productId)?.qty ?? 0;
+    const remainingQty = Math.max(0, returnableQty - alreadySelectedQty);
+    const qtyToAdd = Math.min(requestedQty ?? remainingQty, remainingQty);
+    if (qtyToAdd === 0) {
+      setError(t("La quantité achetée a déjà été entièrement ajoutée au retour.", "تمت إضافة كامل الكمية المشتراة إلى هذا الإرجاع."));
+      return;
+    }
     const designation = (lang === "ar"
       ? (item.productNameAr || item.productNameEn)
       : (item.productNameEn || item.productNameAr) || `#${item.productId}`
@@ -516,9 +536,8 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     setLines((prev) => {
       const idx = prev.findIndex((l) => l.productId === item.productId);
       if (idx >= 0) {
-        // already in list — increment by returnable qty
         const next = [...prev];
-        next[idx] = { ...next[idx], qty: next[idx].qty + returnableQty };
+        next[idx] = { ...next[idx], qty: next[idx].qty + qtyToAdd };
         return next;
       }
       return [
@@ -526,11 +545,41 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
         {
           productId: item.productId,
           designation,
-          qty: returnableQty,
+          qty: qtyToAdd,
           pu: parseFloat(item.unitPrice),
         },
       ];
     });
+  };
+
+  const addProductByCode = () => {
+    const code = productCode.trim().toLocaleLowerCase();
+    if (!code) return;
+
+    const extraProductId = extraBarcodesMap.get(code);
+    const product = products.find((item) =>
+      (item.barcode ?? "").trim().toLocaleLowerCase() === code ||
+      (item.reference ?? "").trim().toLocaleLowerCase() === code ||
+      (extraProductId !== undefined && item.id === extraProductId)
+    );
+
+    if (!product) {
+      setError(t("Aucun produit trouvé pour ce code-barres.", "لم يتم العثور على منتج بهذا الباركود."));
+      return;
+    }
+
+    if (hasRealCustomer && saleItemsLoading) {
+      setError(t("Chargement des achats du client. Réessayez dans un instant.", "جارٍ تحميل مشتريات الزبون. أعد المحاولة بعد لحظة."));
+      return;
+    }
+
+    setError(null);
+    const matchingSaleItem = hasRealCustomer
+      ? customerSaleItems.find((item) => item.productId === product.id)
+      : undefined;
+    if (matchingSaleItem) addFromSaleItem(matchingSaleItem, 1);
+    else addProduct(product);
+    setProductCode("");
   };
 
   const removeLine = (productId: number) => setLines((prev) => prev.filter((l) => l.productId !== productId));
@@ -674,6 +723,20 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                 />
               </div>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("Code-barres / Référence produit", "باركود / مرجع المنتج")}</Label>
+              <div className="relative">
+                <Barcode className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={productCode}
+                  onChange={(e) => setProductCode(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addProductByCode(); } }}
+                  placeholder={t("Scanner ou saisir un code puis appuyer sur Entrée", "امسح أو أدخل الرمز ثم اضغط إدخال")}
+                  className="h-9 pl-9 text-sm"
+                  data-testid="input-return-product-code"
+                />
+              </div>
+            </div>
 
             {/* ── Customer past purchases panel ── */}
             {hasRealCustomer ? (
@@ -699,7 +762,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
                     <Input
                       value={saleItemSearch}
                       onChange={(e) => setSaleItemSearch(e.target.value)}
-                      placeholder={t("Rechercher un produit acheté...", "البحث عن منتج تم شراؤه...")}
+                      placeholder={t("Rechercher par nom ou code-barres...", "البحث بالاسم أو الباركود...")}
                       className="h-8 pl-8 text-xs"
                     />
                   </div>
