@@ -6,6 +6,7 @@ const { test } = require("node:test");
 const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const { mockUseLang } = require("./language-test-helpers.cjs");
 
 const source = readFileSync(path.join(__dirname, "../src/pages/Suppliers.tsx"), "utf8");
 const ast = ts.createSourceFile("Suppliers.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -110,7 +111,7 @@ function renderStatement(lang, data = sampleData) {
     useQuery: () => ({ data, isLoading: false, isError: false }),
     ...components,
     Button,
-    useLang: () => ({ lang }),
+    useLang: mockUseLang(lang),
     usePermissions: () => ({ can: () => true }),
     SupplierBalanceOperationDialog: () => null,
     SupplierPurchaseOrderDialog: () => null,

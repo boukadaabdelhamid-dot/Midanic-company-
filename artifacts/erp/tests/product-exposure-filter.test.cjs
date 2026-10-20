@@ -6,6 +6,7 @@ const { test } = require("node:test");
 const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const { mockUseLang, loadTypeScript } = require("./language-test-helpers.cjs");
 
 const source = readFileSync(path.join(__dirname, "../src/components/ProductExposureFilter.tsx"), "utf8");
 const compiled = ts.transpileModule(source, {
@@ -22,7 +23,7 @@ function load(lang) {
     exports: {},
     require: (name) => {
       if (name === "react") return React;
-      if (name === "@/hooks/use-lang") return { useLang: () => ({ lang }) };
+      if (name === "@/hooks/use-lang") return { useLang: mockUseLang(lang) };
       throw new Error(`Unexpected import: ${name}`);
     },
   });
@@ -30,7 +31,7 @@ function load(lang) {
   return context.exports.default;
 }
 
-for (const lang of ["fr", "ar"]) {
+for (const lang of ["fr", "ar", "en"]) {
   for (const compact of [false, true]) {
     test(`three exposure choices render and send the API values (${lang}, compact=${compact})`, () => {
       const Filter = load(lang);
@@ -44,7 +45,7 @@ for (const lang of ["fr", "ar"]) {
         select.props.onChange({ target: { value } });
         const html = renderToStaticMarkup(React.createElement(Filter, { value, compact, onChange: () => {} }));
         assert.ok(html.includes(`value="${value}" selected=""`));
-        assert.ok(html.includes(lang === "fr" ? "Boutique en ligne" : "المتجر الإلكتروني"));
+        assert.ok(html.includes(lang === "fr" ? "Boutique en ligne" : lang === "en" ? "Online store" : "المتجر الإلكتروني"));
       }
       assert.deepEqual(changes, ["", "true", "false"]);
     });
@@ -64,14 +65,22 @@ test("toolbar and column filters share state, server query and cache key", () =>
 test("existing API translates displayed, hidden and all into the correct database conditions", () => {
   const api = readFileSync(path.join(__dirname, "../../erp-api-server/src/routes/products.ts"), "utf8");
   const ast = ts.createSourceFile("products.ts", api, ts.ScriptTarget.Latest, true);
+  const { getProductExposureFilter } = loadTypeScript("../../erp-api-server/src/lib/product-visibility.ts");
+  let exposureDeclaration;
   let exposureCondition;
   function visit(node) {
-    if (ts.isIfStatement(node) && node.expression.getText(ast) === "filterExposed") {
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some(
+      (declaration) => declaration.name.getText(ast) === "exposedOnly",
+    )) {
+      exposureDeclaration = node.getText(ast);
+    }
+    if (ts.isIfStatement(node) && node.expression.getText(ast) === "exposedOnly !== undefined") {
       exposureCondition = node.getText(ast);
     }
     ts.forEachChild(node, visit);
   }
   visit(ast);
+  assert.ok(exposureDeclaration, "API must resolve the requested exposure filter");
   assert.ok(exposureCondition, "API filter must exist");
   for (const [filterExposed, expected] of [
     ["", []],
@@ -79,8 +88,10 @@ test("existing API translates displayed, hidden and all into the correct databas
     ["false", [["isExposed", false]]],
   ]) {
     const conditions = [];
-    vm.runInNewContext(exposureCondition, {
+    vm.runInNewContext(`${exposureDeclaration}\n${exposureCondition}`, {
       filterExposed, conditions,
+      req: { user: { role: "admin" } },
+      getProductExposureFilter,
       schema: { productsTable: { isExposed: "isExposed" } },
       eq: (column, value) => [column, value],
     });

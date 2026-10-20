@@ -43,7 +43,7 @@ export function useLang(): LangContextType {
 
 export function translateUi(lang: string, fr: string, ar: string): string {
   if (lang === "ar") return ar;
-  if (lang === "en") return enTranslations[fr] ?? fr;
+  if (lang === "en") return Object.hasOwn(enTranslations, fr) ? enTranslations[fr] : fr;
   return fr;
 }
 

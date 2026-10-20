@@ -6,6 +6,7 @@ const { test } = require("node:test");
 const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const { mockUseLang } = require("./language-test-helpers.cjs");
 
 // Exercise the real dashboard presentation without signing in, touching a
 // database, or changing the source module's exports.
@@ -166,7 +167,7 @@ test("store selector is rendered for tenant owners but never for employees", () 
     const context = vm.createContext({
       React, ...components,
       useAuth: () => ({ token }),
-      useLang: () => ({ lang: "fr" }),
+      useLang: mockUseLang("fr"),
       usePermissions: () => ({ can: () => true }),
       useEffect: () => {},
       useState: (value) => [
