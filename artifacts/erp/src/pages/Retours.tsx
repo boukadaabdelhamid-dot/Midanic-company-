@@ -3,7 +3,7 @@ import React, { useState, useMemo } from "react";
 import {
   useGetAdminRetours, useCreateBonRetour, getGetAdminRetoursQueryKey,
   useGetAdminRetour, getGetAdminRetourQueryKey, useCreateStandaloneRetour,
-  useGetProducts, useGetErpCustomers, useGetOrder, getGetOrderQueryKey,
+  getProducts, useGetProducts, useGetErpCustomers, useGetOrder, getGetOrderQueryKey,
   type BonRetourDetailItemsItem, type Product, type CustomerSummary,
 } from "@workspace/erp-api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import InvoiceDialog from "@/components/InvoiceDialog";
 import type { InvoiceData } from "@/components/InvoiceTemplate";
 import { useCurrentStore } from "@/hooks/use-current-store";
 import { ProductPickerDialog } from "@/components/pos/ProductPickerDialog";
+import { findReturnProductByCode } from "@/lib/return-product-lookup";
 
 type CustomerSaleItem = {
   productId: number;
@@ -401,14 +402,14 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   const products: Product[] = useMemo(() => (productsResp?.products ?? []) as Product[], [productsResp]);
 
   const apiBase = getApiBase();
-  const { data: extraBarcodesData = [] } = useQuery<{ barcode: string; productId: number }[]>({
+  const { data: extraBarcodesData = [], refetch: refreshExtraBarcodes } = useQuery<{ barcode: string; productId: number }[]>({
     queryKey: ["extra-barcodes-all"],
     queryFn: async () => {
       const token = localStorage.getItem("midanic_token");
       const r = await fetch(`${apiBase}/api/erp/products/extra-barcodes`, {
         headers: { Authorization: `Bearer ${token ?? ""}` },
       });
-      if (!r.ok) return [];
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json() as Promise<{ barcode: string; productId: number }[]>;
     },
     staleTime: 60_000,
@@ -434,6 +435,9 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
   const [clientSearch, setClientSearch] = useState("");
   const [saleItemSearch, setSaleItemSearch] = useState("");
   const [productCode, setProductCode] = useState("");
+  const [codeLookupPending, setCodeLookupPending] = useState(false);
+  const codeLookupVersion = React.useRef(0);
+  const productCodeInputRef = React.useRef<HTMLInputElement>(null);
   const [reason, setReason] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -473,6 +477,11 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
 
   const createRetour = useCreateStandaloneRetour();
   const [clotureOpen, setClotureOpen] = useState(false);
+
+  React.useEffect(() => {
+    codeLookupVersion.current += 1;
+    setCodeLookupPending(false);
+  }, [open, selectedCustomer?.id]);
 
   React.useEffect(() => {
     if (open) {
@@ -552,34 +561,43 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
     });
   };
 
-  const addProductByCode = () => {
-    const code = productCode.trim().toLocaleLowerCase();
-    if (!code) return;
-
-    const extraProductId = extraBarcodesMap.get(code);
-    const product = products.find((item) =>
-      (item.barcode ?? "").trim().toLocaleLowerCase() === code ||
-      (item.reference ?? "").trim().toLocaleLowerCase() === code ||
-      (extraProductId !== undefined && item.id === extraProductId)
-    );
-
-    if (!product) {
-      setError(t("Aucun produit trouvé pour ce code-barres.", "لم يتم العثور على منتج بهذا الباركود."));
-      return;
-    }
-
+  const addProductByCode = async () => {
+    const code = productCode.trim();
+    if (!code || codeLookupPending) return;
     if (hasRealCustomer && saleItemsLoading) {
       setError(t("Chargement des achats du client. Réessayez dans un instant.", "جارٍ تحميل مشتريات الزبون. أعد المحاولة بعد لحظة."));
       return;
     }
 
     setError(null);
-    const matchingSaleItem = hasRealCustomer
-      ? customerSaleItems.find((item) => item.productId === product.id)
-      : undefined;
-    if (matchingSaleItem) addFromSaleItem(matchingSaleItem, 1);
-    else addProduct(product);
-    setProductCode("");
+    setCodeLookupPending(true);
+    const version = codeLookupVersion.current;
+    try {
+      const product = await findReturnProductByCode(code, getProducts, async () => {
+        const result = await refreshExtraBarcodes({ throwOnError: true });
+        return result.data ?? [];
+      });
+      if (version !== codeLookupVersion.current) return;
+      if (!product) {
+        setError(t("Aucun produit trouvé pour ce code-barres dans ce magasin.", "لم يتم العثور على منتج بهذا الباركود في هذا المتجر."));
+        return;
+      }
+      const matchingSaleItem = hasRealCustomer
+        ? customerSaleItems.find((item) => item.productId === product.id)
+        : undefined;
+      if (matchingSaleItem) addFromSaleItem(matchingSaleItem, 1);
+      else addProduct(product);
+      setProductCode("");
+    } catch {
+      if (version === codeLookupVersion.current) {
+        setError(t("Impossible de rechercher le produit. Vérifiez la connexion et vos droits, puis réessayez.", "تعذر البحث عن المنتج. تحقق من الاتصال والصلاحيات ثم أعد المحاولة."));
+      }
+    } finally {
+      if (version === codeLookupVersion.current) {
+        setCodeLookupPending(false);
+        productCodeInputRef.current?.focus();
+      }
+    }
   };
 
   const removeLine = (productId: number) => setLines((prev) => prev.filter((l) => l.productId !== productId));
@@ -725,16 +743,23 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t("Code-barres / Référence produit", "باركود / مرجع المنتج")}</Label>
-              <div className="relative">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
                 <Barcode className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  ref={productCodeInputRef}
                   value={productCode}
+                  readOnly={codeLookupPending}
                   onChange={(e) => setProductCode(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addProductByCode(); } }}
                   placeholder={t("Scanner ou saisir un code puis appuyer sur Entrée", "امسح أو أدخل الرمز ثم اضغط إدخال")}
                   className="h-9 pl-9 text-sm"
                   data-testid="input-return-product-code"
                 />
+                </div>
+                <Button type="button" variant="outline" onClick={() => void addProductByCode()} disabled={codeLookupPending || !productCode.trim()} data-testid="button-return-product-code">
+                  {codeLookupPending ? t("Recherche...", "جارٍ البحث...") : t("Rechercher", "بحث")}
+                </Button>
               </div>
             </div>
 
@@ -953,7 +978,7 @@ function NouveauRetourDialog({ open, onOpenChange, onCreated }: {
             </Button>
             <Button
               onClick={handleCloture}
-              disabled={createRetour.isPending || lines.length === 0}
+              disabled={createRetour.isPending || codeLookupPending || lines.length === 0}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
