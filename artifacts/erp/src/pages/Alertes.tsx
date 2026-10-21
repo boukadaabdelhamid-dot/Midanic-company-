@@ -985,7 +985,6 @@ export default function Alertes() {
           if (!o) setSelected(new Set());
         }}
         otherStores={otherStores}
-        isAdmin={!!isAdmin}
         onCreated={() => {
           void qc.invalidateQueries({ queryKey: ["alerts-count"] });
           void qc.invalidateQueries({ queryKey: ["alerts-cross-store-missing"] });

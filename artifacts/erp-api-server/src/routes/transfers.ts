@@ -240,19 +240,25 @@ router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requi
 // Body: {
 //   destinationStoreId? (when current store = source),
 //   sourceStoreId?      (when current store = destination, "pull request"),
-//   items: [{ sourceProductId, quantity }], notes,
-//   mode: 'request'|'send'
+//   items: [{ sourceProductId, quantity }], notes
 // }
-// 'request' (default): created in 'requested', destination must approve.
-//   - source-initiated: source asks destination to accept goods (push request)
-//   - destination-initiated: destination asks source to send goods (pull request)
-// 'send' (admin only, source-initiated only): created in 'prepared',
-//   source stock decremented immediately.
+// Every new transfer is created as 'requested' and requires destination approval.
 router.post("/erp/transfers", authenticate, requireStaff, requireStore, requirePermission("transfers", "create"), async (req: AuthRequest, res) => {
   try {
     const currentStoreId = req.currentStoreId!;
     const userId = req.user!.id;
     const { destinationStoreId, sourceStoreId: sourceStoreIdRaw, items, notes, mode } = req.body || {};
+    if (mode !== undefined && mode !== "request" && mode !== "send") {
+      res.status(400).json({ error: "Invalid transfer mode" });
+      return;
+    }
+    if (mode === "send") {
+      res.status(400).json({
+        error: "Destination approval is required for new transfers",
+        code: "DESTINATION_APPROVAL_REQUIRED",
+      });
+      return;
+    }
 
     // Determine which side the current store plays
     let sourceStoreId: number;
@@ -307,19 +313,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
     }
     const sourceMap = new Map(sourceProducts.map(p => [p.id, p]));
 
-    // Build line items + match destination products
-    const preparedMode = mode === "send";
-    if (preparedMode) {
-      if (!isTransferAdmin(req)) {
-        res.status(403).json({ error: "Only admins can send directly without prior approval" });
-        return;
-      }
-      if (initiatorSide !== "source") {
-        res.status(400).json({ error: "Direct send requires you to be on the source store" });
-        return;
-      }
-    }
-
+    // Build line items + match destination products.
     type LineDraft = { sourceProductId: number; destinationProductId: number; quantity: number; matchKey: string };
     const drafts: LineDraft[] = [];
     const unmatched: string[] = [];
@@ -361,8 +355,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
       return;
     }
 
-    const status: TransferStatus = preparedMode ? "prepared" : "requested";
-    const now = new Date();
+    const status: TransferStatus = "requested";
 
     const created = await db.transaction(async (tx) => {
       const [transfer] = await tx.insert(schema.stockTransfersTable).values({
@@ -372,7 +365,6 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
         initiatorSide,
         status,
         notes: notes || null,
-        ...(preparedMode ? { preparedAt: now } : {}),
       }).returning();
 
       await tx.insert(schema.stockTransferItemsTable).values(drafts.map(d => ({
@@ -388,9 +380,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
         status,
         actorUserId: userId,
         actorStoreId: currentStoreId,
-        notes: preparedMode
-          ? "Direct send (admin)"
-          : (initiatorSide === "destination" ? "Pull request from destination" : "Push request from source"),
+        notes: initiatorSide === "destination" ? "Pull request from destination" : "Push request from source",
       });
 
       return transfer;
@@ -410,7 +400,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
 // Allowed transitions:
 // requested → approved (dest)  | rejected (dest)  | cancelled (source)
 // approved  → in_transit (source dispatch) | cancelled (source)
-// prepared  → in_transit (source dispatch, legacy/direct-send) | cancelled (source, admin only)
+// prepared  → in_transit (legacy transfers only) | cancelled (source, admin only)
 // in_transit → received (dest)
 function ensure(req: AuthRequest, ok: boolean, res: import("express").Response, msg = "Forbidden"): boolean {
   if (!ok) { res.status(403).json({ error: msg, code: "STORE_ACCESS_REVOKED" }); return false; }
@@ -484,17 +474,9 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
     const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can prepare")) return;
-    if (t.status === "requested") {
-      // Direct prepare from 'requested' only allowed for source admin (skip approval).
-      if (!isTransferAdmin(req)) {
-        res.status(409).json({ error: `Cannot prepare from status ${t.status}` }); return;
-      }
-    } else if (t.status !== "approved") {
+    if (t.status !== "approved") {
       res.status(409).json({ error: `Cannot prepare from status ${t.status}` }); return;
     }
-
-    const allowedFromStatuses: TransferStatus[] = isTransferAdmin(req)
-      ? ["approved", "requested"] : ["approved"];
 
     const updated = await db.transaction(async (tx) => {
       // Pure status transition — no stock movement at prepare stage.
@@ -503,7 +485,7 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
         .set({ status: "prepared", preparedAt: new Date() })
         .where(and(
           eq(schema.stockTransfersTable.id, t.id),
-          inArray(schema.stockTransfersTable.status, allowedFromStatuses),
+          eq(schema.stockTransfersTable.status, "approved"),
         ))
         .returning();
       if (!u) throw Object.assign(new Error("Status changed by another request"), { http: 409 });

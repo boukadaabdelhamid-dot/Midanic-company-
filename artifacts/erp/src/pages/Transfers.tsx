@@ -232,7 +232,6 @@ export default function Transfers() {
         open={openCreate}
         onOpenChange={setOpenCreate}
         otherStores={otherStores}
-        isAdmin={isAdmin}
         onCreated={() => qc.invalidateQueries({ queryKey: getGetErpTransfersQueryKey(queryParams) })}
       />
       {detailId !== null && (
@@ -413,13 +412,12 @@ function ProductSearchBar({ products: staticProducts, disabled, onPick, tr, tota
 
 // ─── Create dialog ────────────────────────────────────────────────
 export function CreateTransferDialog({
-  open, onOpenChange, otherStores, isAdmin, onCreated,
+  open, onOpenChange, otherStores, onCreated,
   initialDirection, initialStoreId, initialLines, initialPickedProducts,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   otherStores: Array<{ id: number; nameEn: string; nameAr: string }>;
-  isAdmin: boolean;
   onCreated: () => void;
   /** Pre-select direction on open (default "out") */
   initialDirection?: "out" | "in";
@@ -436,7 +434,6 @@ export function CreateTransferDialog({
   const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [direction, setDirection] = useState<"out" | "in">(initialDirection ?? "out");
   const [otherStoreId, setOtherStoreId] = useState(initialStoreId ?? "");
-  const [mode, setMode] = useState<"request" | "send">("request");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(initialLines ?? []);
   const { data: productsRes } = useGetProducts({ limit: 500 });
@@ -470,13 +467,9 @@ export function CreateTransferDialog({
     setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
   const reset = () => {
-    setDirection("out"); setOtherStoreId(""); setMode("request"); setNotes("");
+    setDirection("out"); setOtherStoreId(""); setNotes("");
     setLines([]); setPickedProducts({});
   };
-
-  React.useEffect(() => {
-    if (direction === "in" && mode === "send") setMode("request");
-  }, [direction, mode]);
 
   // Whether this dialog instance was opened with pre-filled lines (e.g. slow-mover quick-transfer).
   const _hadInitialLines = React.useRef((initialLines?.length ?? 0) > 0);
@@ -563,7 +556,6 @@ export function CreateTransferDialog({
           ...(direction === "out"
             ? { destinationStoreId: otherId }
             : { sourceStoreId: otherId }),
-          mode,
           notes: notes || undefined,
           items: lines.map((l) => ({
             sourceProductId: Number(l.sourceProductId),
@@ -622,30 +614,13 @@ export function CreateTransferDialog({
               </Select>
             </div>
             <div>
-              <Label className="text-xs mb-1 block">{tr("Mode", "الوضع")}</Label>
-              <Select value={mode} onValueChange={(v) => setMode(v as "request" | "send")} disabled={direction === "in"}>
-                <SelectTrigger className="h-9 text-sm" data-testid="select-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="request">
-                    {direction === "out" ? tr("Demander approbation", "طلب موافقة") : tr("Demande d'extraction", "طلب سحب")}
-                  </SelectItem>
-                  {isAdmin && direction === "out" && (
-                    <SelectItem value="send">{tr("Envoyer directement (admin)", "إرسال مباشر (مسؤول)")}</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {mode === "send" && direction === "out" && (
-                <p className="text-[11px] text-amber-700 mt-1">
-                  {tr("Le stock sera mis à jour à la réception par le magasin destination.", "يتحدث المخزون عند تأكيد الاستلام من المتجر الوجهة.")}
-                </p>
-              )}
-              {direction === "in" && (
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  {tr("L'admin source doit approuver.", "يجب على إدارة المصدر الموافقة.")}
-                </p>
-              )}
+              <Label className="text-xs mb-1 block">{tr("Étapes du transfert", "خطوات التحويل")}</Label>
+              <p className="rounded-md border bg-muted/30 p-2 text-xs leading-relaxed text-muted-foreground">
+                {tr(
+                  "La destination approuve la demande. Ensuite, la source prépare et expédie en une seule action. Le stock change à la confirmation de réception.",
+                  "توافق الوجهة على الطلب، ثم يجهز المصدر التحويل ويشحنه بخطوة واحدة. يتغير المخزون بعد تأكيد الاستلام.",
+                )}
+              </p>
             </div>
           </div>
 
@@ -745,7 +720,7 @@ export function CreateTransferDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tr("Annuler", "إلغاء")}</Button>
           <Button onClick={submit} disabled={!canCreate || !valid || create.isPending} data-testid="button-submit-transfer">
-            {mode === "send" ? tr("Envoyer", "إرسال") : tr("Demander", "طلب")}
+            {tr("Demander le transfert", "طلب التحويل")}
           </Button>
         </DialogFooter>
       </DialogContent>

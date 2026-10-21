@@ -99,22 +99,18 @@ test("transfer catalogues and actions respect employee grants and company-owner 
       });
     const act = (id: number, action: string, owner: boolean, currentStoreId = sourceId) =>
       fetch(`${base}/erp/transfers/${id}/${action}`, { method: "POST", headers: headers(owner, currentStoreId), body: "{}" });
-    assert.equal((await create(false, "send")).status, 403, "employee cannot bypass approval");
-    const direct = await create(true, "send");
-    assert.equal(direct.status, 201, "company owner can send directly");
-    const transfer = await direct.json() as { id: number; status: string };
-    assert.equal(transfer.status, "prepared");
-    assert.equal((await act(transfer.id, "dispatch", false)).status, 403, "create does not grant dispatching");
-    await grant("edit", true);
-    assert.equal((await act(transfer.id, "dispatch", false)).status, 200, "legacy/direct prepared transfers can still ship");
-    assert.equal((await act(transfer.id, "cancel", false)).status, 403, "employee cannot cancel after shipping");
-    assert.equal((await act(transfer.id, "cancel", true)).status, 200, "company owner can cancel after shipping");
+    assert.equal((await create(false, "send")).status, 400, "employee cannot create a direct-send transfer");
+    await grant("create", true);
+    assert.equal((await create(true, "send")).status, 400, "company owners cannot bypass destination approval for new transfers");
+    assert.equal((await create(false, "send")).status, 400, "employees cannot create direct-send transfers");
 
     const regular = await create(false, "request");
     assert.equal(regular.status, 201);
     const regularTransfer = await regular.json() as { id: number };
+    await grant("edit", true);
     assert.equal((await act(regularTransfer.id, "dispatch", false)).status, 409, "dispatch cannot skip destination approval");
     assert.equal((await act(regularTransfer.id, "dispatch", true)).status, 409, "combined dispatch preserves approval even for an admin request");
+    assert.equal((await act(regularTransfer.id, "prepare", true)).status, 409, "legacy prepare endpoint cannot skip destination approval");
     assert.equal((await act(regularTransfer.id, "receive", false, destinationId)).status, 409, "receipt still requires dispatch");
     assert.equal((await act(regularTransfer.id, "approve", false, destinationId)).status, 200);
     assert.equal((await act(regularTransfer.id, "dispatch", false, destinationId)).status, 403, "only the source may dispatch");
@@ -141,10 +137,24 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal(afterReceipt.find((product) => product.storeId === sourceId)!.stock, 18);
     assert.equal(afterReceipt.find((product) => product.storeId === destinationId)!.stock, 2);
 
+    // Legacy prepared rows remain actionable so deployments do not strand existing transfers.
+    const [legacyPrepared] = await db.insert(schema.stockTransfersTable).values({
+      sourceStoreId: sourceId,
+      destinationStoreId: destinationId,
+      initiatorUserId: ownerId,
+      initiatorSide: "source",
+      status: "prepared",
+      preparedAt: new Date(),
+      notes: "legacy fixture",
+    }).returning();
+    assert.equal((await act(legacyPrepared.id, "dispatch", false)).status, 200, "legacy prepared transfers can still ship");
+    assert.equal((await act(legacyPrepared.id, "cancel", false)).status, 403, "employee cannot cancel after shipping");
+    assert.equal((await act(legacyPrepared.id, "cancel", true)).status, 200, "company owner can cancel after shipping");
+
     const inbound = await create(false, "request", true);
     assert.equal(inbound.status, 201, "employee can initiate a pull request");
     const request = await inbound.json() as { id: number };
-    assert.equal((await act(request.id, "prepare", true)).status, 200, "company owner can prepare a pending request");
+    assert.equal((await act(request.id, "prepare", true)).status, 409, "company owner cannot prepare a pending request before destination approval");
     assert.equal((await act(request.id, "cancel", true)).status, 200);
     await grant("create", false);
     assert.equal((await catalogue(destinationId)).status, 403, "revocation takes effect immediately");
