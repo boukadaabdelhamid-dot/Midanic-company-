@@ -34,4 +34,4 @@
 - [CSV BOM verification](csv-bom-verification.md) — use raw bytes to test UTF-8 BOMs; `Blob.text()` may consume the marker
 - [Legacy sales-source integrity](legacy-sales-source-integrity.md) — historical online labels may be wrong; do not infer a sale channel solely from a missing seller.
 - [Barcode lookup completeness](barcode-lookup-completeness.md) — a missing match in a preloaded catalog page is not proof that a barcode does not exist.
-- [Stock transfer simplification](stock-transfer-simplification.md) — combine preparation and shipment, but retain destination approval and final receipt confirmation.
+- [Stock transfer workflows](stock-transfer-simplification.md) — direct sends skip destination pre-approval; ordinary requests retain approval and final receipt confirmation.

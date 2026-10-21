@@ -57,8 +57,10 @@ const STATUS_LABELS: Record<string, { fr: string; ar: string; cls: string }> = {
 
 function StatusBadge({ status, directSend = false }: { status: string; directSend?: boolean }) {
   const { lang } = useLang();
-  const s = status === "requested" && directSend
-    ? { fr: "Envoi enregistré", ar: "تم تسجيل الإرسال", cls: "bg-blue-100 text-blue-700 border border-blue-200" }
+  const s = directSend && status === "requested"
+    ? { fr: "Créé", ar: "تم الإنشاء", cls: "bg-blue-100 text-blue-700 border border-blue-200" }
+    : directSend && status === "in_transit"
+    ? { fr: "Envoyé", ar: "تم الإرسال", cls: "bg-purple-100 text-purple-700 border border-purple-200" }
     : STATUS_LABELS[status] ?? { fr: status, ar: status, cls: "bg-gray-100" };
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${s.cls}`}>
@@ -448,7 +450,6 @@ export function CreateTransferDialog({
   const canCreate = can("transfers", "create");
   const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [direction, setDirection] = useState<"out" | "in">(initialDirection ?? "out");
-  const [mode, setMode] = useState<"request" | "send">("request");
   const [otherStoreId, setOtherStoreId] = useState(initialStoreId ?? "");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(initialLines ?? []);
@@ -483,7 +484,7 @@ export function CreateTransferDialog({
     setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
   const reset = () => {
-    setDirection("out"); setMode("request"); setOtherStoreId(""); setNotes("");
+    setDirection("out"); setOtherStoreId(""); setNotes("");
     setLines([]); setPickedProducts({});
   };
 
@@ -573,7 +574,7 @@ export function CreateTransferDialog({
             ? { destinationStoreId: otherId }
             : { sourceStoreId: otherId }),
           notes: notes || undefined,
-          ...(direction === "out" ? { mode } : {}),
+          ...(direction === "out" ? { mode: "send" as const } : {}),
           items: lines.map((l) => ({
             sourceProductId: Number(l.sourceProductId),
             quantity: Number(l.quantity),
@@ -607,27 +608,13 @@ export function CreateTransferDialog({
               <Button
                 type="button" size="sm"
                 variant={direction === "in" ? "default" : "outline"}
-                onClick={() => { setDirection("in"); setMode("request"); }}
+                onClick={() => setDirection("in")}
                 data-testid="button-direction-in"
               >
                 <Inbox className="h-3.5 w-3.5 mr-1" /> {tr("Demander depuis un autre magasin", "طلب من متجر آخر")}
               </Button>
             </div>
           </div>
-          {direction === "out" && (
-            <div>
-              <Label className="text-xs mb-1 block">{tr("Mode d'envoi", "نوع الإرسال")}</Label>
-              <Select value={mode} onValueChange={(value) => setMode(value as "request" | "send")}>
-                <SelectTrigger className="h-9 text-sm" data-testid="select-transfer-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="request">{tr("Demander l'accord de destination", "طلب موافقة الوجهة")}</SelectItem>
-                  <SelectItem value="send">{tr("Envoi direct", "إرسال مباشر")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs mb-1 block">
@@ -649,14 +636,10 @@ export function CreateTransferDialog({
               <p className="rounded-md border bg-muted/30 p-2 text-xs leading-relaxed text-muted-foreground">
                 {tr(
                   direction === "out"
-                    ? mode === "send"
-                      ? "L'envoi direct est enregistré, puis préparé et expédié en deux étapes. La destination ouvre le détail et confirme la réception."
-                      : "La destination approuve la demande. Ensuite, la source prépare et expédie en une seule action."
+                    ? "Le transfert est créé dans le magasin source, puis préparé et envoyé en deux étapes. La destination ouvre le détail et confirme la réception."
                     : "La demande est enregistrée pour validation avant préparation et expédition.",
                   direction === "out"
-                    ? mode === "send"
-                      ? "يُسجّل الإرسال المباشر أولًا، ثم يُحضّر ويُرسل في خطوتين. تفتح الوجهة التفاصيل وتؤكد الاستلام."
-                      : "توافق الوجهة على الطلب، ثم يجهز المصدر التحويل ويشحنه بخطوة واحدة."
+                    ? "يُنشأ التحويل في المتجر المصدر، ثم يُحضّر ويُرسل على خطوتين. تفتح الوجهة التفاصيل وتؤكد الاستلام."
                     : "يُسجّل الطلب للموافقة عليه قبل التحضير والإرسال.",
                 )}
                 {" "}
@@ -761,8 +744,8 @@ export function CreateTransferDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tr("Annuler", "إلغاء")}</Button>
           <Button onClick={submit} disabled={!canCreate || !valid || create.isPending} data-testid="button-submit-transfer">
-            {direction === "out" && mode === "send"
-              ? tr("Enregistrer l'envoi direct", "تسجيل الإرسال المباشر")
+            {direction === "out"
+              ? tr("Créer un transfert", "إنشاء تحويل")
               : tr("Demander le transfert", "طلب التحويل")}
           </Button>
         </DialogFooter>
@@ -901,7 +884,7 @@ function TransferDetailDialog({
               <div className="space-y-1.5">
                 {td.events?.map((e) => (
                   <div key={e.id} className="flex items-center gap-2 text-xs">
-                    <StatusBadge status={e.status} />
+                    <StatusBadge status={e.status} directSend={td.directSend} />
                     <span className="text-muted-foreground">
                       {e.createdAt ? format(new Date(e.createdAt), "MMM d, HH:mm") : ""}
                     </span>
@@ -932,7 +915,7 @@ function TransferDetailDialog({
                   disabled={prepare.isPending}
                   data-testid="button-prepare-transfer"
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> {tr("Préparer", "تحضير")}
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> {tr("Préparer l'envoi", "تحضير الإرسال")}
                 </Button>
               )}
               {td.status === "approved" && isSource && (
@@ -952,7 +935,7 @@ function TransferDetailDialog({
                   disabled={ship.isPending}
                   data-testid="button-ship-transfer"
                 >
-                  <Truck className="h-4 w-4 mr-1" /> {tr("Expédier", "إرسال")}
+                  <Truck className="h-4 w-4 mr-1" /> {tr("Envoyer", "إرسال")}
                 </Button>
               )}
               {td.status === "in_transit" && isDest && (
