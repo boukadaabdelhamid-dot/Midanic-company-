@@ -33,12 +33,14 @@ type PurchaseItem = {
   totalCharges?: string | null;
 };
 
+type SupplierSummary = Pick<Supplier, "id" | "name"> & Partial<Pick<Supplier, "address" | "phone">>;
+
 const API_BASE = getApiBase();
 
 export default function SupplierPurchaseOrderDialog({
   supplier, orderId, open, onOpenChange,
 }: {
-  supplier: Supplier | null;
+  supplier: SupplierSummary | null;
   orderId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;

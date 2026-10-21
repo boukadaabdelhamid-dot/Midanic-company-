@@ -71,6 +71,7 @@ function buildSaleInvoice(order: SaleOrderDetail, store: InvoiceData["store"], s
     })),
     showTva,
     tvaRate: parseFloat(store?.tvaRate ?? "19"),
+    discountAmount: parseFloat(order.discount_amount ?? "0"),
     notes: order.payment_method === "a_terme"
       ? "Paiement : À terme / الدفع: آجل"
       : order.payment_method === "comptant"

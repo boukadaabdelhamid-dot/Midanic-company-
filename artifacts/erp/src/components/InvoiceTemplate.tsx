@@ -30,6 +30,7 @@ export type InvoiceData = {
   lines: InvoiceLine[];
   showTva: boolean;
   tvaRate: number;
+  discountAmount?: number;
   notes?: string;
 };
 
@@ -45,7 +46,9 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { store, party, lines, showTva, tvaRate, kind, number, date, notes } = data;
-  const subtotalTtc = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  const grossSubtotalTtc = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  const discountAmount = Math.min(grossSubtotalTtc, Math.max(0, Number(data.discountAmount ?? 0)));
+  const subtotalTtc = grossSubtotalTtc - discountAmount;
   // When TVA is shown we treat unitPrice as TTC and break it down to HT + TVA.
   const ratio = 1 + tvaRate / 100;
   const subtotalHt = showTva ? subtotalTtc / ratio : subtotalTtc;
@@ -244,6 +247,12 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
           <tfoot>
             {showTva ? (
               <>
+                {discountAmount > 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-end">{t("Réduction", "الخصم")}</td>
+                    <td className="text-end num">−{fmt(discountAmount / ratio)} {currency}</td>
+                  </tr>
+                )}
                 <tr>
                   <td colSpan={5} className="text-end">{t("Total HT", "المجموع دون الضريبة")}</td>
                   <td className="text-end num">{fmt(subtotalHt)} {currency}</td>
@@ -258,10 +267,18 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
                 </tr>
               </>
             ) : (
-              <tr>
-                <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>{t("Total", "المجموع")}</td>
-                <td className="text-end num" style={{ background: "#1B3057", color: "#fff" }}>{fmt(subtotalTtc)} {currency}</td>
-              </tr>
+              <>
+                {discountAmount > 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-end">{t("Réduction", "الخصم")}</td>
+                    <td className="text-end num">−{fmt(discountAmount)} {currency}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td colSpan={5} className="text-end" style={{ background: "#1B3057", color: "#fff" }}>{t("Total", "المجموع")}</td>
+                  <td className="text-end num" style={{ background: "#1B3057", color: "#fff" }}>{fmt(subtotalTtc)} {currency}</td>
+                </tr>
+              </>
             )}
           </tfoot>
         </table>

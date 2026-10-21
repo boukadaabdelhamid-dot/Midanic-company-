@@ -13,15 +13,19 @@ import {
 } from "@/components/ui/table";
 import {
   Package, ShoppingCart, TrendingUp, BarChart2, Store,
-  History, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, SlidersHorizontal,
+  History, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, SlidersHorizontal, Printer,
 } from "lucide-react";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
+import { Button } from "@/components/ui/button";
+import SupplierPurchaseOrderDialog from "@/components/SupplierPurchaseOrderDialog";
+import ProductSaleOrderDialog from "@/components/ProductSaleOrderDialog";
 
 const API_BASE = getApiBase();
 
 type PurchaseRecord = {
   purchaseOrderId: number;
+  supplierId: number;
   quantity: number;
   unitCost: string;
   status: string;
@@ -242,6 +246,10 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
   const { lang } = useLang();
   const { can } = usePermissions();
   const canViewPurchasePrice = can("products", "view_purchase_price");
+  const canViewPurchaseOrders = can("purchases", "view");
+  const canViewSaleOrders = can("orders", "view");
+  const [purchaseOrder, setPurchaseOrder] = React.useState<PurchaseRecord | null>(null);
+  const [saleOrderId, setSaleOrderId] = React.useState<number | null>(null);
   const t: Translator = (fr, ar) => useLang.translate(lang, fr, ar);
   const fmt = makeFmt(lang);
   const fmtDateTime = makeFmtDateTime(lang);
@@ -295,7 +303,13 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
     lang === "ar" ? (nameAr || nameEn || fallback) : (nameEn || nameAr || fallback);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog open={open} onOpenChange={(v) => {
+      if (!v) {
+        setPurchaseOrder(null);
+        setSaleOrderId(null);
+        onClose();
+      }
+    }}>
       <DialogContent
         className="max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         dir={dir}
@@ -429,8 +443,22 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
                 </TableHeader>
                 <TableBody>
                   {purchases.map((r) => (
-                    <TableRow key={`${r.purchaseOrderId}`}>
-                      <TableCell className="font-mono text-xs">PO-{r.purchaseOrderId}</TableCell>
+                    <TableRow key={`${r.purchaseOrderId}-${r.storeId}`}>
+                      <TableCell className="font-mono text-xs">
+                        {canViewPurchaseOrders ? (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 font-mono text-xs"
+                            disabled={r.storeId !== currentStoreId}
+                            title={r.storeId !== currentStoreId ? t("Sélectionnez ce magasin pour ouvrir le bon", "اختر هذا المتجر لفتح السند") : t("Ouvrir le bon d'achat", "فتح سند الشراء")}
+                            onClick={() => setPurchaseOrder(r)}
+                          >
+                            <Printer className="me-1 h-3 w-3" />
+                            PO-{r.purchaseOrderId}
+                          </Button>
+                        ) : `PO-${r.purchaseOrderId}`}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px]">
                           {storeName(r.storeNameEn, r.storeNameAr, `#${r.storeId}`)}
@@ -470,8 +498,22 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
                 </TableHeader>
                 <TableBody>
                   {sales.map((r) => (
-                    <TableRow key={`${r.orderId}`}>
-                      <TableCell className="font-mono text-xs">FV-{String(r.orderId).padStart(5, "0")}</TableCell>
+                    <TableRow key={`${r.orderId}-${r.storeId}`}>
+                      <TableCell className="font-mono text-xs">
+                        {canViewSaleOrders ? (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 font-mono text-xs"
+                            disabled={r.storeId !== currentStoreId}
+                            title={r.storeId !== currentStoreId ? t("Sélectionnez ce magasin pour ouvrir le bon", "اختر هذا المتجر لفتح السند") : t("Ouvrir le bon de vente", "فتح بون البيع")}
+                            onClick={() => setSaleOrderId(r.orderId)}
+                          >
+                            <Printer className="me-1 h-3 w-3" />
+                            FV-{String(r.orderId).padStart(5, "0")}
+                          </Button>
+                        ) : `FV-${String(r.orderId).padStart(5, "0")}`}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px]">
                           {storeName(r.storeNameEn, r.storeNameAr, `#${r.storeId}`)}
@@ -540,6 +582,20 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
           </TabsContent>
         </Tabs>
       </DialogContent>
+      <SupplierPurchaseOrderDialog
+        supplier={purchaseOrder ? {
+          id: purchaseOrder.supplierId,
+          name: purchaseOrder.supplierName ?? `#${purchaseOrder.supplierId}`,
+        } : null}
+        orderId={purchaseOrder?.purchaseOrderId ?? null}
+        open={purchaseOrder !== null}
+        onOpenChange={(isOpen) => { if (!isOpen) setPurchaseOrder(null); }}
+      />
+      <ProductSaleOrderDialog
+        orderId={saleOrderId}
+        open={saleOrderId !== null}
+        onOpenChange={(isOpen) => { if (!isOpen) setSaleOrderId(null); }}
+      />
     </Dialog>
   );
 }

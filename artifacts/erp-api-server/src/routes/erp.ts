@@ -2746,6 +2746,7 @@ router.get("/erp/products/:productId/history", authenticate, requireStaff, requi
     // ── Purchase history (all accessible stores + peer products) ──
     const purchases = await db.select({
       purchaseOrderId: schema.purchaseItemsTable.purchaseOrderId,
+      supplierId: schema.purchaseOrdersTable.supplierId,
       quantity: schema.purchaseItemsTable.quantity,
       unitCost: schema.purchaseItemsTable.unitCost,
       status: schema.purchaseOrdersTable.status,
