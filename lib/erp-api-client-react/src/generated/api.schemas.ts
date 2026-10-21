@@ -159,6 +159,7 @@ export interface Product {
   model?: string | null;
   color?: string | null;
   colisage?: number | null;
+  unitSaleEnabled?: boolean | null;
   weight?: string | null;
   priceGros?: string | null;
   priceSemiGros?: string | null;
@@ -221,6 +222,7 @@ export interface CreateProductRequest {
   model?: string | null;
   color?: string | null;
   colisage?: number | null;
+  unitSaleEnabled?: boolean | null;
   weight?: string | null;
   priceGros?: string | null;
   priceSemiGros?: string | null;
@@ -257,6 +259,7 @@ export interface UpdateProductRequest {
   model?: string | null;
   color?: string | null;
   colisage?: number | null;
+  unitSaleEnabled?: boolean | null;
   weight?: string | null;
   priceGros?: string | null;
   priceSemiGros?: string | null;

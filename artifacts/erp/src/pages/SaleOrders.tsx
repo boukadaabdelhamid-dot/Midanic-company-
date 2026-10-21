@@ -48,6 +48,7 @@ export type SaleOrderItem = {
   product_id: number;
   quantity: number;
   unit_price: string;
+  unit_factor?: number | null;
   cost_price: string | null;
   product_name_en: string | null;
   product_name_ar: string | null;
@@ -56,19 +57,23 @@ export type SaleOrderItem = {
 
 export type SaleOrderDetail = SaleOrder & { items: SaleOrderItem[] };
 
-function buildSaleInvoice(order: SaleOrderDetail, store: InvoiceData["store"], showTva: boolean): InvoiceData {
+function buildSaleInvoice(order: SaleOrderDetail, store: InvoiceData["store"], showTva: boolean, lang: string): InvoiceData {
   return {
     kind: "sale",
     number: `BV-${String(order.id).padStart(6, "0")}`,
     date: order.created_at ? new Date(order.created_at) : new Date(),
     store,
     party: { name: order.customer_name, address: "", phone: order.customer_phone },
-    lines: (order.items ?? []).map((it) => ({
-      designation: (it.product_name_en || it.product_name_ar || "—").toUpperCase(),
-      reference: it.product_reference ?? null,
-      qty: it.quantity,
-      unitPrice: parseFloat(it.unit_price),
-    })),
+    lines: (order.items ?? []).map((it) => {
+      const factor = it.unit_factor ?? 1;
+      return {
+        designation: (it.product_name_en || it.product_name_ar || "—").toUpperCase(),
+        reference: it.product_reference ?? null,
+        qty: it.quantity / factor,
+        unitPrice: parseFloat(it.unit_price) * factor,
+        quantityUnit: factor > 1 ? useLang.translate(lang, "unité(s)", "وحدة") : undefined,
+      };
+    }),
     showTva,
     tvaRate: parseFloat(store?.tvaRate ?? "19"),
     discountAmount: parseFloat(order.discount_amount ?? "0"),
@@ -85,6 +90,7 @@ type EditLine = {
   designation: string;
   qty: number;
   pu: number;
+  unitFactor: number;
   puInput?: string; // intermediate string while user is typing (supports comma separator)
 };
 
@@ -213,7 +219,7 @@ export default function SaleOrders() {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const createMutation = useMutation({
-    mutationFn: (payload: { customerUserId?: number | null; customerName?: string; customerPhone?: string; items: { productId: number; quantity: number; unitPrice: number }[]; notes?: string }) =>
+    mutationFn: (payload: { customerUserId?: number | null; customerName?: string; customerPhone?: string; items: { productId: number; quantity: number; unitPrice: number; unitFactor?: number }[]; notes?: string }) =>
       apiPost<{ id: number }>("/erp/sale-orders", payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["erp-sale-orders"] }); setEditorOpen(false); },
     onError: (err: Error) => alert(`Erreur: ${err.message}`),
@@ -267,8 +273,8 @@ export default function SaleOrders() {
 
   const invoiceData: InvoiceData | null = React.useMemo(() => {
     if (!invoiceOrder) return null;
-    return buildSaleInvoice(invoiceOrder, store, showTva);
-  }, [invoiceOrder, store, showTva]);
+    return buildSaleInvoice(invoiceOrder, store, showTva, lang);
+  }, [invoiceOrder, store, showTva, lang]);
 
   const statusLabels: Record<string, string> = {
     draft:      t("Brouillon", "مسودة"),
@@ -668,7 +674,7 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   editing: SaleOrderDetail | null;
-  onSave: (payload: { customerUserId?: number | null; customerName?: string; items: { productId: number; quantity: number; unitPrice: number }[]; paymentMethod: string }) => void;
+  onSave: (payload: { customerUserId?: number | null; customerName?: string; items: { productId: number; quantity: number; unitPrice: number; unitFactor: number }[]; paymentMethod: string }) => void;
   isSaving: boolean;
 }) {
   const { lang } = useLang();
@@ -703,8 +709,9 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
         (editing.items ?? []).map((it) => ({
           productId: it.product_id,
           designation: (it.product_name_en || it.product_name_ar || `#${it.product_id}`).toUpperCase(),
-          qty: it.quantity,
+          qty: it.quantity / (it.unit_factor ?? 1),
           pu: parseFloat(it.unit_price),
+          unitFactor: it.unit_factor ?? 1,
         }))
       );
       if (editing.user_id) {
@@ -739,9 +746,9 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
     return () => document.removeEventListener("mousedown", handler);
   }, [clientComboOpen]);
 
-  const addProductWithValues = (p: Product, { qty, pu }: { qty: number; pu: number }) => {
+  const addProductWithValues = (p: Product, { qty, pu, unitFactor }: { qty: number; pu: number; unitFactor: number }) => {
     setLines((prev) => {
-      const idx = prev.findIndex((l) => l.productId === p.id);
+      const idx = prev.findIndex((l) => l.productId === p.id && l.unitFactor === unitFactor);
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], qty: next[idx].qty + qty, pu };
@@ -752,6 +759,7 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
         designation: (lang === "ar" ? (p.nameAr || p.nameEn) : (p.nameEn || p.nameAr) || `#${p.id}`).toUpperCase(),
         qty,
         pu,
+        unitFactor,
       }];
     });
     setCodeInput("");
@@ -776,14 +784,14 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
     setLines((prev) => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
   const removeLine = (idx: number) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
-  const subtotal = lines.reduce((s, l) => s + l.pu * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + l.pu * l.qty * l.unitFactor, 0);
 
   const handleSave = () => {
     if (lines.length === 0) { alert(t("Ajoutez au moins un article", "أضف مقالاً واحداً على الأقل")); return; }
     onSave({
       customerUserId: selectedCustomer && selectedCustomer.id !== 0 ? selectedCustomer.id : null,
       customerName: selectedCustomer?.name,
-      items: lines.map((l) => ({ productId: l.productId, quantity: l.qty, unitPrice: l.pu })),
+      items: lines.map((l) => ({ productId: l.productId, quantity: l.qty, unitPrice: l.pu, unitFactor: l.unitFactor })),
       paymentMethod,
     });
   };
@@ -955,7 +963,7 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
                     const idx = lines.indexOf(line);
                     return (
                     <TableRow
-                      key={line.productId}
+                      key={`${line.productId}-${line.unitFactor}`}
                       className="cursor-pointer hover:bg-[#1B3057]/5"
                       onClick={() => {
                         const prod = products.find((p) => p.id === line.productId) ?? null;
@@ -964,10 +972,17 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
                       }}
                     >
                       <TableCell className="text-sm font-medium">{line.designation}</TableCell>
-                      <TableCell className="text-center text-sm">{line.qty}</TableCell>
-                      <TableCell className="text-right text-sm">{line.pu.toFixed(2)}</TableCell>
+                      <TableCell className="text-center text-sm">
+                        {line.qty}
+                        {line.unitFactor > 1 && (
+                          <span className="block text-[10px] text-muted-foreground">
+                            {line.unitFactor} {t("pièces / unité", "قطعة / وحدة")}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">{(line.pu * line.unitFactor).toFixed(2)}</TableCell>
                       <TableCell className="text-right text-sm font-semibold">
-                        {(line.pu * line.qty).toFixed(2)} {currency}
+                        {(line.pu * line.qty * line.unitFactor).toFixed(2)} {currency}
                       </TableCell>
                       <TableCell>
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-700"
@@ -1026,12 +1041,13 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
         product={pendingProduct}
         initialQty={pendingEditIdx !== null ? lines[pendingEditIdx]?.qty : undefined}
         initialPu={pendingEditIdx !== null ? lines[pendingEditIdx]?.pu : undefined}
+        initialUnitFactor={pendingEditIdx !== null ? lines[pendingEditIdx]?.unitFactor : undefined}
         isEdit={pendingEditIdx !== null}
-        onConfirm={({ qty, pu }) => {
+        onConfirm={({ qty, pu, unitFactor }) => {
           if (pendingEditIdx !== null) {
-            updateLine(pendingEditIdx, { qty, pu });
+            updateLine(pendingEditIdx, { qty, pu, unitFactor });
           } else if (pendingProduct) {
-            addProductWithValues(pendingProduct, { qty, pu });
+            addProductWithValues(pendingProduct, { qty, pu, unitFactor });
           }
           setPendingProduct(null);
           setPendingEditIdx(null);
@@ -1044,13 +1060,14 @@ function SaleOrderEditor({ open, onOpenChange, editing, onSave, isSaving }: {
 
 // ─── Add Line BV Dialog ───────────────────────────────────────────────────────
 function AddLineBvDialog({
-  product, onConfirm, onCancel, initialQty, initialPu, isEdit,
+  product, onConfirm, onCancel, initialQty, initialPu, initialUnitFactor, isEdit,
 }: {
   product: Product | null;
-  onConfirm: (vals: { qty: number; pu: number }) => void;
+  onConfirm: (vals: { qty: number; pu: number; unitFactor: number }) => void;
   onCancel: () => void;
   initialQty?: number;
   initialPu?: number;
+  initialUnitFactor?: number;
   isEdit?: boolean;
 }) {
   const { lang } = useLang();
@@ -1058,20 +1075,36 @@ function AddLineBvDialog({
 
   const [qty, setQty] = useState("1");
   const [pu, setPu] = useState("0");
+  const [unitFactor, setUnitFactor] = useState(1);
   const qtyRef = React.useRef<HTMLInputElement>(null);
+  const configuredFactor = Number(product?.colisage ?? 1);
+  const unitFactorOption = initialUnitFactor && initialUnitFactor > 1
+    ? initialUnitFactor
+    : configuredFactor;
+  const canSellByUnit = Boolean(
+    (product?.unitSaleEnabled && Number.isSafeInteger(configuredFactor) && configuredFactor > 1) ||
+    (initialUnitFactor && initialUnitFactor > 1),
+  );
 
   React.useEffect(() => {
     if (!product) return;
     setQty(initialQty !== undefined ? String(initialQty) : "1");
     setPu(initialPu !== undefined ? String(initialPu) : (product.price ?? "0"));
+    setUnitFactor(initialUnitFactor && initialUnitFactor > 1 ? initialUnitFactor : 1);
     setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 50);
-  }, [product, initialQty, initialPu]);
+  }, [product, initialQty, initialPu, initialUnitFactor]);
 
   function handleConfirm() {
-    const qtyN = Math.max(1, parseFloat(qty) || 1);
-    const puN = Math.max(0, parseFloat(pu) || 0);
-    onConfirm({ qty: qtyN, pu: puN });
+    const qtyN = Number(qty.replace(",", "."));
+    if (!Number.isFinite(qtyN) || qtyN <= 0 || (unitFactor > 1 && !Number.isSafeInteger(qtyN))) return;
+    const puN = Math.max(0, Number(pu.replace(",", ".")) || 0);
+    onConfirm({ qty: qtyN, pu: puN, unitFactor });
   }
+
+  const quantityValue = Number(qty.replace(",", "."));
+  const invalidQuantity = !Number.isFinite(quantityValue) || quantityValue <= 0 ||
+    (unitFactor > 1 && !Number.isSafeInteger(quantityValue));
+  const piecePrice = Math.max(0, Number(pu.replace(",", ".")) || 0);
 
   return (
     <Dialog open={!!product} onOpenChange={(o) => { if (!o) onCancel(); }}>
@@ -1092,12 +1125,41 @@ function AddLineBvDialog({
         )}
 
         <div className="grid grid-cols-2 gap-3">
+          {canSellByUnit && (
+            <div className="col-span-2">
+              <Label className="text-xs mb-1.5 block">{t("Unité de vente", "وحدة البيع")}</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={unitFactor === 1 ? "default" : "outline"}
+                  className={unitFactor === 1 ? "bg-[#1B3057] hover:bg-[#1B3057]/90" : ""}
+                  onClick={() => setUnitFactor(1)}
+                >
+                  {t("À la pièce", "بالقطعة")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={unitFactor > 1 ? "default" : "outline"}
+                  className={unitFactor > 1 ? "bg-[#1B3057] hover:bg-[#1B3057]/90" : ""}
+                  onClick={() => setUnitFactor(unitFactorOption)}
+                  disabled={!Number.isSafeInteger(unitFactorOption) || unitFactorOption < 2}
+                >
+                  {t(`Par unité (${unitFactorOption} pièces)`, `بالوحدة (${unitFactorOption} قطعة)`)}
+                </Button>
+              </div>
+            </div>
+          )}
           <div>
-            <Label className="text-xs mb-1 block">{t("Qté", "الكمية")}</Label>
+            <Label className="text-xs mb-1 block">
+              {unitFactor > 1 ? t("Qté (unités)", "الكمية (وحدات)") : t("Qté", "الكمية")}
+            </Label>
             <Input
               ref={qtyRef}
               type="number"
               min={1}
+              step={unitFactor > 1 ? 1 : "any"}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               onFocus={(e) => e.target.select()}
@@ -1106,7 +1168,9 @@ function AddLineBvDialog({
             />
           </div>
           <div>
-            <Label className="text-xs mb-1 block">{t("PU (Vente)", "سعر البيع")}</Label>
+            <Label className="text-xs mb-1 block">
+              {canSellByUnit ? t("Prix par pièce", "سعر القطعة") : t("PU (Vente)", "سعر البيع")}
+            </Label>
             <Input
               type="number"
               min={0}
@@ -1118,13 +1182,20 @@ function AddLineBvDialog({
               onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
             />
           </div>
+          {unitFactor > 1 && (
+            <p className="col-span-2 -mt-1 text-xs text-muted-foreground">
+              {t("Prix de l'unité", "سعر الوحدة")}: {(piecePrice * unitFactor).toFixed(2)} {lang === "ar" ? "دج" : "DA"}
+              {" · "}
+              {t("Quantité en stock", "الكمية المحتسبة في المخزون")}: {Number.isFinite(quantityValue) ? quantityValue * unitFactor : 0} {t("pièces", "قطع")}
+            </p>
+          )}
         </div>
 
         <DialogFooter className="mt-2 gap-2">
           <Button variant="outline" onClick={onCancel} className="flex-1">
             {t("Annuler", "إلغاء")}
           </Button>
-          <Button onClick={handleConfirm} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button onClick={handleConfirm} disabled={invalidQuantity} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
             <Plus className="h-4 w-4 mr-1.5" />
             {isEdit ? t("Modifier", "تعديل") : t("Ajouter", "إضافة")}
           </Button>
@@ -1150,8 +1221,8 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
     setInvoiceOpen(false);
   }, [open, order?.id]);
   const invoiceData = useMemo(
-    () => order ? buildSaleInvoice(order, store, showTva) : null,
-    [order, store, showTva],
+    () => order ? buildSaleInvoice(order, store, showTva, lang) : null,
+    [order, store, showTva, lang],
   );
   const canViewProfit = can("orders", "view_profit");
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
@@ -1211,8 +1282,17 @@ export function SaleOrderViewDialog({ open, onOpenChange, order }: {
                     <TableCell className="text-sm font-medium">
                       {(it.product_name_en || it.product_name_ar || `#${it.product_id}`).toUpperCase()}
                     </TableCell>
-                    <TableCell className="text-center text-sm">{it.quantity}</TableCell>
-                    <TableCell className="text-right text-sm">{parseFloat(it.unit_price).toFixed(2)} {currency}</TableCell>
+                    <TableCell className="text-center text-sm">
+                      {it.quantity / (it.unit_factor ?? 1)}
+                      {(it.unit_factor ?? 1) > 1 && (
+                        <span className="block text-[10px] text-muted-foreground">
+                          {it.unit_factor} {t("pièces / unité", "قطعة / وحدة")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {(parseFloat(it.unit_price) * (it.unit_factor ?? 1)).toFixed(2)} {currency}
+                    </TableCell>
                     <TableCell className="text-right text-sm font-semibold">
                       {(it.quantity * parseFloat(it.unit_price)).toFixed(2)} {currency}
                     </TableCell>

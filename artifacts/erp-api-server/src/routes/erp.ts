@@ -20,6 +20,7 @@ import {
   applyCaisseDelta,
   type DbLike,
 } from "../lib/balance-sync";
+import { normalizeSaleUnitLine } from "../lib/sale-order-units";
 
 const router = Router();
 
@@ -5757,18 +5758,66 @@ router.get("/erp/purchases/history/:productId", authenticate, requireStaff, requ
 // Helpers for sale-order payload validation
 // ─────────────────────────────────────────────────────────────────────────────
 
-type SaleOrderItem = { productId: number; quantity: number; unitPrice: number };
+type SaleOrderItem = { productId: number; quantity: number; unitPrice: number; unitFactor?: number | null };
+type NormalizedSaleOrderItem = {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  unitFactor: number;
+  costPrice: string;
+  lineTotal: number;
+};
 
 function validateSaleItems(items: unknown): string | null {
   if (!Array.isArray(items) || items.length === 0) return "items must be a non-empty array";
   for (const it of items) {
     if (typeof it !== "object" || it === null) return "each item must be an object";
-    const { productId, quantity, unitPrice } = it as Record<string, unknown>;
+    const { productId, quantity, unitPrice, unitFactor } = it as Record<string, unknown>;
     if (!Number.isInteger(Number(productId)) || Number(productId) <= 0) return `invalid productId: ${String(productId)}`;
     if (typeof quantity !== "number" || !isFinite(quantity) || quantity <= 0) return `quantity must be a positive number`;
     if (typeof unitPrice !== "number" || !isFinite(unitPrice) || unitPrice < 0) return `unitPrice must be a non-negative number`;
+    if (unitFactor != null && (typeof unitFactor !== "number" || !Number.isSafeInteger(unitFactor) || unitFactor < 1)) {
+      return "unitFactor must be a positive whole number";
+    }
   }
   return null;
+}
+
+async function normalizeSaleOrderItems(
+  items: SaleOrderItem[],
+  storeId: number,
+  allowUnitSelling: boolean,
+  historicalFactors: Map<number, Set<number>> = new Map(),
+): Promise<{ items?: NormalizedSaleOrderItem[]; error?: string }> {
+  const productIds = Array.from(new Set(items.map((item) => item.productId)));
+  const products = await db.select({
+    id: schema.productsTable.id,
+    unitSaleEnabled: schema.productsTable.unitSaleEnabled,
+    colisage: schema.productsTable.colisage,
+    costPrice: schema.productsTable.costPrice,
+  }).from(schema.productsTable)
+    .where(and(eq(schema.productsTable.storeId, storeId), inArray(schema.productsTable.id, productIds)));
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const normalized: NormalizedSaleOrderItem[] = [];
+
+  for (const item of items) {
+    const product = productById.get(item.productId);
+    if (!product) return { error: `Product ${item.productId} does not belong to this store` };
+    const factor = item.unitFactor ?? 1;
+    if (!allowUnitSelling && factor > 1) {
+      return { error: "Wholesale units are only available on Bon de vente" };
+    }
+    const result = normalizeSaleUnitLine(item, product, {
+      allowHistoricalFactor: historicalFactors.get(item.productId)?.has(factor) ?? false,
+    });
+    if (!result.ok) return { error: result.error };
+    normalized.push({
+      productId: item.productId,
+      ...result.value,
+      costPrice: product.costPrice ?? "0",
+    });
+  }
+  return { items: normalized };
 }
 
 // Verify all product IDs belong to the given store; return first invalid id or null.
@@ -5847,6 +5896,7 @@ router.get("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
           'product_id', oi.product_id,
           'quantity', oi.quantity,
           'unit_price', oi.unit_price,
+          'unit_factor', oi.unit_factor,
           'cost_price', oi.cost_price,
           'product_name_en', p.name_en,
           'product_name_ar', p.name_ar,
@@ -5894,6 +5944,9 @@ router.post("/erp/sale-orders", authenticate, requireStaff, requireStore, requir
     const productIds = (items as SaleOrderItem[]).map(i => Number(i.productId));
     const badId = await checkProductsInStore(productIds, storeId);
     if (badId !== null) { res.status(400).json({ error: `Product ${badId} does not belong to this store` }); return; }
+    const normalizedResult = await normalizeSaleOrderItems(items as SaleOrderItem[], storeId, orderSource === "bon");
+    if (!normalizedResult.items) { res.status(400).json({ error: normalizedResult.error }); return; }
+    const normalizedItems = normalizedResult.items;
 
     let cName = (customerName ?? "").trim() || "DIVERS COMPTOIR";
     let cPhone = (customerPhone ?? "").trim();
@@ -5904,7 +5957,7 @@ router.post("/erp/sale-orders", authenticate, requireStaff, requireStore, requir
       if (u) { cName = u.name ?? cName; cPhone = u.phone ?? cPhone; }
     }
 
-    const total = (items as SaleOrderItem[]).reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    const total = normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     // Atomic: create order + items in one transaction
     const orderId = await db.transaction(async (tx) => {
@@ -5919,12 +5972,10 @@ router.post("/erp/sale-orders", authenticate, requireStaff, requireStore, requir
       `);
       const newId = (orderRes.rows[0] as { id: number }).id;
 
-      for (const item of items as SaleOrderItem[]) {
-        const prodRes = await tx.execute(sql`SELECT cost_price FROM products WHERE id = ${item.productId} AND store_id = ${storeId} LIMIT 1`);
-        const costPrice = (prodRes.rows[0] as { cost_price?: string | null } | undefined)?.cost_price ?? "0";
+      for (const item of normalizedItems) {
         await tx.execute(sql`
-          INSERT INTO order_items (order_id, product_id, quantity, unit_price, cost_price)
-          VALUES (${newId}, ${item.productId}, ${item.quantity}, ${item.unitPrice.toFixed(2)}, ${costPrice})
+          INSERT INTO order_items (order_id, product_id, quantity, unit_price, cost_price, unit_factor)
+          VALUES (${newId}, ${item.productId}, ${item.quantity}, ${item.unitPrice.toFixed(2)}, ${item.costPrice}, ${item.unitFactor})
         `);
       }
       return newId;
@@ -5953,8 +6004,8 @@ router.put("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
 
     const pm = paymentMethod === "a_terme" ? "a_terme" : "comptant";
 
-    const existRes = await db.execute(sql`SELECT id, status FROM orders WHERE id = ${id} AND store_id = ${storeId} AND order_source IN ('bon', 'pos') LIMIT 1`);
-    const existing = existRes.rows[0] as { id: number; status: string } | undefined;
+    const existRes = await db.execute(sql`SELECT id, status, order_source FROM orders WHERE id = ${id} AND store_id = ${storeId} AND order_source IN ('bon', 'pos') LIMIT 1`);
+    const existing = existRes.rows[0] as { id: number; status: string; order_source: string } | undefined;
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     if (existing.status === "delivered" || existing.status === "cancelled") {
       res.status(400).json({ error: "Impossible de modifier un bon clôturé ou annulé" }); return;
@@ -5963,6 +6014,24 @@ router.put("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
     const productIds = (items as SaleOrderItem[]).map(i => Number(i.productId));
     const badId = await checkProductsInStore(productIds, storeId);
     if (badId !== null) { res.status(400).json({ error: `Product ${badId} does not belong to this store` }); return; }
+    const previousItems = await db.select({
+      productId: schema.orderItemsTable.productId,
+      unitFactor: schema.orderItemsTable.unitFactor,
+    }).from(schema.orderItemsTable).where(eq(schema.orderItemsTable.orderId, id));
+    const historicalFactors = new Map<number, Set<number>>();
+    for (const item of previousItems) {
+      const factors = historicalFactors.get(item.productId) ?? new Set<number>();
+      factors.add(item.unitFactor);
+      historicalFactors.set(item.productId, factors);
+    }
+    const normalizedResult = await normalizeSaleOrderItems(
+      items as SaleOrderItem[],
+      storeId,
+      existing.order_source === "bon",
+      historicalFactors,
+    );
+    if (!normalizedResult.items) { res.status(400).json({ error: normalizedResult.error }); return; }
+    const normalizedItems = normalizedResult.items;
 
     let cName = (customerName ?? "").trim() || "DIVERS COMPTOIR";
     let cPhone = (customerPhone ?? "").trim();
@@ -5972,7 +6041,7 @@ router.put("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
       if (u) { cName = u.name ?? cName; cPhone = u.phone ?? cPhone; }
     }
 
-    const total = (items as SaleOrderItem[]).reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    const total = normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     // Atomic: update order + replace items in one transaction
     await db.transaction(async (tx) => {
@@ -5988,10 +6057,11 @@ router.put("/erp/sale-orders/:id", authenticate, requireStaff, requireStore, req
         WHERE id = ${id}
       `);
       await tx.execute(sql`DELETE FROM order_items WHERE order_id = ${id}`);
-      for (const item of items as SaleOrderItem[]) {
-        const prodRes = await tx.execute(sql`SELECT cost_price FROM products WHERE id = ${item.productId} AND store_id = ${storeId} LIMIT 1`);
-        const costPrice = (prodRes.rows[0] as { cost_price?: string | null } | undefined)?.cost_price ?? "0";
-        await tx.execute(sql`INSERT INTO order_items (order_id, product_id, quantity, unit_price, cost_price) VALUES (${id}, ${item.productId}, ${item.quantity}, ${item.unitPrice.toFixed(2)}, ${costPrice})`);
+      for (const item of normalizedItems) {
+        await tx.execute(sql`
+          INSERT INTO order_items (order_id, product_id, quantity, unit_price, cost_price, unit_factor)
+          VALUES (${id}, ${item.productId}, ${item.quantity}, ${item.unitPrice.toFixed(2)}, ${item.costPrice}, ${item.unitFactor})
+        `);
       }
     });
 

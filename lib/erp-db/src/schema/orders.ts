@@ -33,6 +33,7 @@ export const orderItemsTable = pgTable("order_items", {
   productId: integer("product_id").references(() => productsTable.id).notNull(),
   quantity: doublePrecision("quantity").notNull(),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  unitFactor: integer("unit_factor").notNull().default(1),
   costPrice: numeric("cost_price", { precision: 10, scale: 2 }),
 });
 

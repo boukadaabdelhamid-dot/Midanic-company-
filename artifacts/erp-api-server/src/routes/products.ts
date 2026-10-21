@@ -323,7 +323,7 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
     const {
       nameAr, nameEn, descriptionAr, descriptionEn, price, imageUrl, stock, categoryId,
       reference, barcode, costPrice, catalogueType,
-      brand, model, color, colisage, weight,
+      brand, model, color, colisage, unitSaleEnabled, weight,
       priceGros, priceSemiGros, priceMin,
       catalogue1, catalogue2, catalogue3, catalogue4, catalogue5, catalogue6,
       isActive, isExposed,
@@ -331,6 +331,19 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       minStock,
       images,
     } = req.body;
+    if (unitSaleEnabled !== undefined && typeof unitSaleEnabled !== "boolean") {
+      res.status(400).json({ error: "unitSaleEnabled must be a boolean" });
+      return;
+    }
+    const productColisage = colisage == null || colisage === "" ? 1 : Number(colisage);
+    if (!Number.isSafeInteger(productColisage) || productColisage < 1) {
+      res.status(400).json({ error: "colisage must be a positive whole number" });
+      return;
+    }
+    if (unitSaleEnabled === true && productColisage < 2) {
+      res.status(400).json({ error: "A unit must contain at least two pieces" });
+      return;
+    }
     if (categoryId != null) {
       const [cat] = await db.select({ id: schema.categoriesTable.id })
         .from(schema.categoriesTable)
@@ -369,7 +382,8 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       brand: brand || null,
       model: model || null,
       color: color || null,
-      colisage: colisage || 1,
+      colisage: productColisage,
+      unitSaleEnabled: unitSaleEnabled === true,
       weight: weight || null,
       priceGros: priceGros || null,
       priceSemiGros: priceSemiGros || null,
@@ -410,6 +424,36 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
     // Pull images out — they live in a separate table, not on products
     const images = body.images;
     delete body.images;
+    if ("unitSaleEnabled" in body && typeof body.unitSaleEnabled !== "boolean") {
+      res.status(400).json({ error: "unitSaleEnabled must be a boolean" });
+      return;
+    }
+    if (body.colisage != null) {
+      const productColisage = Number(body.colisage);
+      if (!Number.isSafeInteger(productColisage) || productColisage < 1) {
+        res.status(400).json({ error: "colisage must be a positive whole number" });
+        return;
+      }
+      body.colisage = productColisage;
+    }
+    if (body.unitSaleEnabled === true) {
+      let productColisage = body.colisage;
+      if ("colisage" in body && body.colisage == null) {
+        res.status(400).json({ error: "A unit must contain at least two pieces" });
+        return;
+      }
+      if (productColisage == null) {
+        const [currentProduct] = await db.select({ colisage: schema.productsTable.colisage })
+          .from(schema.productsTable)
+          .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
+          .limit(1);
+        productColisage = currentProduct?.colisage;
+      }
+      if (!Number.isSafeInteger(Number(productColisage)) || Number(productColisage) < 2) {
+        res.status(400).json({ error: "A unit must contain at least two pieces" });
+        return;
+      }
+    }
     if (body.categoryId != null) {
       const [cat] = await db.select({ id: schema.categoriesTable.id })
         .from(schema.categoriesTable)

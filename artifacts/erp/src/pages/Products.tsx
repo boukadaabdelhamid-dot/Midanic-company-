@@ -175,7 +175,7 @@ type ProductForm = {
   costPrice: string; catalogueType: string;
   brand: string; model: string; color: string;
   brandId: string; colorId: string; familyId: string;
-  colisage: string; weight: string;
+  colisage: string; unitSaleEnabled: boolean; weight: string;
   priceGros: string; priceSemiGros: string; priceMin: string;
   catalogue1: string; catalogue2: string; catalogue3: string;
   catalogue4: string; catalogue5: string; catalogue6: string;
@@ -190,7 +190,7 @@ const emptyForm: ProductForm = {
   reference: "", barcode: "", costPrice: "", catalogueType: "ARTICLE",
   brand: "", model: "", color: "",
   brandId: "", colorId: "", familyId: "",
-  colisage: "1", weight: "",
+  colisage: "1", unitSaleEnabled: false, weight: "",
   priceGros: "", priceSemiGros: "", priceMin: "",
   catalogue1: "", catalogue2: "", catalogue3: "",
   catalogue4: "", catalogue5: "", catalogue6: "",
@@ -730,7 +730,7 @@ export default function Products() {
       brandId: pp.brandId ? String(pp.brandId) : "",
       colorId: pp.colorId ? String(pp.colorId) : "",
       familyId: pp.familyId ? String(pp.familyId) : "",
-      colisage: String(p.colisage ?? 1), weight: p.weight ?? "",
+      colisage: String(p.colisage ?? 1), unitSaleEnabled: p.unitSaleEnabled ?? false, weight: p.weight ?? "",
       priceGros: p.priceGros ?? "", priceSemiGros: p.priceSemiGros ?? "",
       priceMin: p.priceMin ?? "",
       catalogue1: p.catalogue1 ?? "", catalogue2: p.catalogue2 ?? "",
@@ -747,6 +747,11 @@ export default function Products() {
   };
 
   const handleSave = () => {
+    const unitFactor = Number(form.colisage);
+    if (form.unitSaleEnabled && (!Number.isSafeInteger(unitFactor) || unitFactor < 2)) {
+      setDialogError(t("Indiquez au moins 2 pièces par unité.", "أدخل قطعتين على الأقل في كل وحدة."));
+      return;
+    }
     const brandIdInt = form.brandId ? parseInt(form.brandId) : undefined;
     const colorIdInt = form.colorId ? parseInt(form.colorId) : undefined;
     const familyIdInt = form.familyId ? parseInt(form.familyId) : undefined;
@@ -776,6 +781,7 @@ export default function Products() {
       colorId: colorIdInt ?? null,
       familyId: familyIdInt ?? null,
       colisage: parseInt(form.colisage) || 1,
+      unitSaleEnabled: form.unitSaleEnabled,
       weight: form.weight || null,
       priceGros: form.priceGros || null,
       priceSemiGros: form.priceSemiGros || null,
@@ -853,6 +859,7 @@ export default function Products() {
         model: p.model ?? undefined,
         color: p.color ?? undefined,
         colisage: p.colisage ?? 1,
+        unitSaleEnabled: p.unitSaleEnabled ?? false,
         weight: p.weight ?? undefined,
         priceGros: p.priceGros ?? undefined,
         priceSemiGros: p.priceSemiGros ?? undefined,
@@ -1737,8 +1744,30 @@ export default function Products() {
                       <Input type="number" min="0" step="1" placeholder={t("Facultatif", "اختياري")} value={form.minStock} onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))} className="h-8 text-sm" />
                     </div>
                     <div>
-                       <Label className="text-xs mb-1 block">{t("Colisage", "التعبئة")}</Label>
-                      <Input type="number" min="1" value={form.colisage} onChange={(e) => setForm((f) => ({ ...f, colisage: e.target.value }))} className="h-8 text-sm" />
+                      <Label className="text-xs mb-1 block">{t("Colisage / pièces par unité", "عدد القطع في الوحدة")}</Label>
+                      <Input
+                        type="number"
+                        min={form.unitSaleEnabled ? 2 : 1}
+                        step="1"
+                        value={form.colisage}
+                        onChange={(e) => setForm((f) => ({ ...f, colisage: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <Label htmlFor="product-unit-sale-enabled" className="text-xs leading-tight">
+                          {t("Activer la vente par unité", "تفعيل البيع بالوحدة")}
+                        </Label>
+                        <Switch
+                          id="product-unit-sale-enabled"
+                          checked={form.unitSaleEnabled}
+                          onCheckedChange={(checked) => setForm((f) => ({ ...f, unitSaleEnabled: checked }))}
+                        />
+                      </div>
+                      {form.unitSaleEnabled && Number(form.colisage) >= 2 && (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {t(`1 unité = ${form.colisage} pièces`, `كل وحدة = ${form.colisage} قطع`)}
+                        </p>
+                      )}
                     </div>
                     <div>
                        <Label className="text-xs mb-1 block">{t("Poids (kg)", "الوزن (كغ)")}</Label>

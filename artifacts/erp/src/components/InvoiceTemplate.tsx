@@ -8,6 +8,7 @@ export type InvoiceLine = {
   reference?: string | null;
   qty: number;
   unitPrice: number;
+  quantityUnit?: string;
 };
 
 export type InvoiceParty = {
@@ -236,7 +237,9 @@ export default function InvoiceTemplate({ data, currency = "دج" }: { data: Inv
                     <td>{i + 1}</td>
                     <td>{l.designation}</td>
                     <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#475569" }}>{l.reference || "—"}</td>
-                    <td className="text-end num">{l.qty}</td>
+                    <td className="text-end num">
+                      {l.qty}{l.quantityUnit ? ` ${l.quantityUnit}` : ""}
+                    </td>
                     <td className="text-end num">{fmt(puHt)}</td>
                     <td className="text-end num">{fmt(lineHt)}</td>
                   </tr>

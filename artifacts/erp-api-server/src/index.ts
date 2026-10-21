@@ -110,6 +110,7 @@ CREATE TABLE "products" (
         "model" text,
         "color" text,
         "colisage" integer DEFAULT 1,
+        "unit_sale_enabled" boolean DEFAULT false NOT NULL,
         "weight" numeric(10, 2),
         "price_gros" numeric(10, 2),
         "price_semi_gros" numeric(10, 2),
@@ -142,7 +143,8 @@ CREATE TABLE "order_items" (
         "order_id" integer NOT NULL,
         "product_id" integer NOT NULL,
         "quantity" integer NOT NULL,
-        "unit_price" numeric(10, 2) NOT NULL
+        "unit_price" numeric(10, 2) NOT NULL,
+        "unit_factor" integer DEFAULT 1 NOT NULL
 );--> statement-breakpoint
 CREATE TABLE "orders" (
         "id" serial PRIMARY KEY NOT NULL,
@@ -851,6 +853,8 @@ async function runMigrations(targetPool: Pool = pool) {
   // column introduced by the baseline migration stream above.
   await targetPool.query(`ALTER TABLE "erp"."stock_transfers" ADD COLUMN IF NOT EXISTS "direct_send" boolean NOT NULL DEFAULT false`);
   await targetPool.query(`ALTER TABLE "erp"."stock_transfer_items" ADD COLUMN IF NOT EXISTS "received_quantity" integer`);
+  await targetPool.query(`ALTER TABLE "erp"."products" ADD COLUMN IF NOT EXISTS "unit_sale_enabled" boolean NOT NULL DEFAULT false`);
+  await targetPool.query(`ALTER TABLE "erp"."order_items" ADD COLUMN IF NOT EXISTS "unit_factor" integer NOT NULL DEFAULT 1`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "session_version" integer NOT NULL DEFAULT 0`);
   await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);
