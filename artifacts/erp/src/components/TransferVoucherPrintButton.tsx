@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useLang } from "@/hooks/use-lang";
-import type { StockTransferDetail } from "@workspace/erp-api-client-react";
+import type { StockTransferDetail, StoreLite } from "@workspace/erp-api-client-react";
 import { Printer } from "lucide-react";
 
 function escapeHtml(value: unknown): string {
@@ -38,8 +38,25 @@ export default function TransferVoucherPrintButton({
     const formatDate = (value?: string | null) => value
       ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
       : "—";
-    const storeName = (store?: { nameEn: string; nameAr: string } | null) =>
+    const storeName = (store?: StoreLite | null) =>
       isArabic ? store?.nameAr || store?.nameEn || "—" : store?.nameEn || store?.nameAr || "—";
+    const storeCard = (store: StoreLite | undefined, labelFr: string, labelAr: string) => {
+      const details: [string, string | null | undefined][] = [
+        [tr("Adresse", "العنوان"), store?.address],
+        [tr("Téléphone", "الهاتف"), store?.phone],
+        ["NIF", store?.nif],
+        ["RC", store?.rc],
+        ["AI", store?.ai],
+      ];
+      const presentDetails = details.filter(([, value]) => typeof value === "string" && value.trim().length > 0);
+      return `<div class="store-card">
+        <div class="label">${escapeHtml(tr(labelFr, labelAr))}</div>
+        <div class="store-name">${escapeHtml(storeName(store))}</div>
+        ${presentDetails.length
+          ? presentDetails.map(([label, value]) => `<div class="store-line"><span class="store-field-label">${escapeHtml(label)}:</span> ${escapeHtml(value)}</div>`).join("")
+          : `<div class="store-empty">${escapeHtml(tr("Coordonnées non renseignées", "لم تُسجّل معلومات المتجر"))}</div>`}
+      </div>`;
+    };
     const statusFr: Record<string, string> = {
       requested: transfer.directSend ? "Créé" : "Demandé",
       approved: "Approuvé",
@@ -100,6 +117,12 @@ export default function TransferVoucherPrintButton({
           .reference { margin-top: 6px; color: #42516a; font-size: 14px; font-weight: 700; }
           .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin: 18px 0; }
           .meta-item { border-bottom: 1px solid #e1e6ef; padding-bottom: 7px; }
+          .stores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+          .store-card { border: 1px solid #d7deea; border-radius: 5px; padding: 10px; min-height: 78px; }
+          .store-name { font-size: 14px; font-weight: 700; margin: 4px 0 6px; }
+          .store-line { margin-top: 3px; font-size: 10px; overflow-wrap: anywhere; }
+          .store-field-label { color: #65718a; font-weight: 600; }
+          .store-empty { color: #7b8496; font-size: 10px; }
           .label { color: #65718a; font-size: 10px; margin-bottom: 3px; }
           .value { font-weight: 600; }
           table { width: 100%; border-collapse: collapse; margin-top: 7px; }
@@ -128,9 +151,11 @@ export default function TransferVoucherPrintButton({
             </div>
             <div class="copy">${escapeHtml(side)}</div>
           </header>
+          <section class="stores">
+            ${storeCard(transfer.sourceStore, "Magasin source", "المتجر المصدر")}
+            ${storeCard(transfer.destinationStore, "Magasin destination", "المتجر الوجهة")}
+          </section>
           <section class="meta">
-            <div class="meta-item"><div class="label">${escapeHtml(tr("Magasin source", "المتجر المصدر"))}</div><div class="value">${escapeHtml(storeName(transfer.sourceStore))}</div></div>
-            <div class="meta-item"><div class="label">${escapeHtml(tr("Magasin destination", "المتجر الوجهة"))}</div><div class="value">${escapeHtml(storeName(transfer.destinationStore))}</div></div>
             <div class="meta-item"><div class="label">${escapeHtml(tr("Date de création", "تاريخ الإنشاء"))}</div><div class="value">${escapeHtml(formatDate(transfer.createdAt))}</div></div>
             <div class="meta-item"><div class="label">${escapeHtml(tr("État", "الحالة"))}</div><div class="value">${escapeHtml(status)}</div></div>
             <div class="meta-item"><div class="label">${escapeHtml(tr("Préparé le", "تاريخ التحضير"))}</div><div class="value">${escapeHtml(formatDate(transfer.preparedAt))}</div></div>

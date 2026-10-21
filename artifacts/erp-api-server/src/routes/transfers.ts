@@ -213,7 +213,16 @@ router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requi
       .where(eq(schema.stockTransferEventsTable.transferId, t.id))
       .orderBy(schema.stockTransferEventsTable.createdAt, schema.stockTransferEventsTable.id);
 
-    const stores = await db.select({ id: schema.storesTable.id, nameEn: schema.storesTable.nameEn, nameAr: schema.storesTable.nameAr })
+    const stores = await db.select({
+      id: schema.storesTable.id,
+      nameEn: schema.storesTable.nameEn,
+      nameAr: schema.storesTable.nameAr,
+      address: schema.storesTable.address,
+      phone: schema.storesTable.phone,
+      nif: schema.storesTable.nif,
+      rc: schema.storesTable.rc,
+      ai: schema.storesTable.ai,
+    })
       .from(schema.storesTable).where(inArray(schema.storesTable.id, [t.sourceStoreId, t.destinationStoreId]));
     const storeMap = new Map(stores.map(s => [s.id, s]));
 

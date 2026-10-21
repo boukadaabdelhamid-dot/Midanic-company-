@@ -1182,6 +1182,11 @@ export interface StoreLite {
   id: number;
   nameEn: string;
   nameAr: string;
+  address?: string | null;
+  phone?: string | null;
+  nif?: string | null;
+  rc?: string | null;
+  ai?: string | null;
 }
 
 export type StockTransferStatus =

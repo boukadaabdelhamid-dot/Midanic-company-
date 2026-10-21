@@ -1540,6 +1540,7 @@ export const enTranslations: Record<string, string> = {
   "Confirmer la réception": "Confirm receipt",
   "Imprimer le bon de transfert": "Print transfer voucher",
   "Bon de transfert inter-magasins": "Inter-store transfer voucher",
+  "Coordonnées non renseignées": "Store details not provided",
   "Copie du magasin source": "Source store copy",
   "Copie du magasin destinataire": "Destination store copy",
   "Copie du transfert": "Transfer copy",

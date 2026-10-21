@@ -2415,6 +2415,11 @@ export const GetErpTransfersResponseItem = zod
           id: zod.number(),
           nameEn: zod.string(),
           nameAr: zod.string(),
+          address: zod.string().nullish(),
+          phone: zod.string().nullish(),
+          nif: zod.string().nullish(),
+          rc: zod.string().nullish(),
+          ai: zod.string().nullish(),
         })
         .optional(),
       destinationStore: zod
@@ -2422,6 +2427,11 @@ export const GetErpTransfersResponseItem = zod
           id: zod.number(),
           nameEn: zod.string(),
           nameAr: zod.string(),
+          address: zod.string().nullish(),
+          phone: zod.string().nullish(),
+          nif: zod.string().nullish(),
+          rc: zod.string().nullish(),
+          ai: zod.string().nullish(),
         })
         .optional(),
       initiatorUser: zod
@@ -2497,6 +2507,11 @@ export const GetErpTransferResponse = zod
           id: zod.number(),
           nameEn: zod.string(),
           nameAr: zod.string(),
+          address: zod.string().nullish(),
+          phone: zod.string().nullish(),
+          nif: zod.string().nullish(),
+          rc: zod.string().nullish(),
+          ai: zod.string().nullish(),
         })
         .optional(),
       destinationStore: zod
@@ -2504,6 +2519,11 @@ export const GetErpTransferResponse = zod
           id: zod.number(),
           nameEn: zod.string(),
           nameAr: zod.string(),
+          address: zod.string().nullish(),
+          phone: zod.string().nullish(),
+          nif: zod.string().nullish(),
+          rc: zod.string().nullish(),
+          ai: zod.string().nullish(),
         })
         .optional(),
       initiatorUser: zod
