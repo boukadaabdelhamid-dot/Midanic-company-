@@ -3,6 +3,7 @@ import { eq, and, or, desc, inArray, sql, gte } from "drizzle-orm";
 import { db, schema } from "../lib/db";
 import { authenticate, requireStaff, requireStore, isAdmin, requirePermission, type AuthRequest } from "../lib/auth";
 import { broadcastToStaffByStores } from "../lib/ws";
+import { ReceiveErpTransferBody } from "@workspace/erp-api-zod";
 
 const router = Router();
 
@@ -200,6 +201,7 @@ router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requi
       sourceProductId: schema.stockTransferItemsTable.sourceProductId,
       destinationProductId: schema.stockTransferItemsTable.destinationProductId,
       quantity: schema.stockTransferItemsTable.quantity,
+      receivedQuantity: schema.stockTransferItemsTable.receivedQuantity,
       matchKey: schema.stockTransferItemsTable.matchKey,
       sourceProductNameEn: schema.productsTable.nameEn,
       sourceProductNameAr: schema.productsTable.nameAr,
@@ -620,11 +622,42 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
       res.status(409).json({ error: `Cannot receive from status ${t.status} — must be in_transit` }); return;
     }
 
+    const parsedBody = ReceiveErpTransferBody.safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+      res.status(400).json({ error: parsedBody.error.message });
+      return;
+    }
+
     const items = await db.select().from(schema.stockTransferItemsTable)
       .where(eq(schema.stockTransferItemsTable.transferId, t.id));
+    const receivedQuantities = new Map<number, number>();
+    if (parsedBody.data.items !== undefined) {
+      if (parsedBody.data.items.length !== items.length) {
+        res.status(400).json({ error: "Provide one received quantity for every transfer item" });
+        return;
+      }
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+      for (const receivedItem of parsedBody.data.items) {
+        const transferItem = itemsById.get(receivedItem.transferItemId);
+        if (!transferItem || receivedQuantities.has(receivedItem.transferItemId)) {
+          res.status(400).json({ error: "Invalid or duplicate transfer item" });
+          return;
+        }
+        if (receivedItem.receivedQuantity > transferItem.quantity) {
+          res.status(400).json({ error: `Received quantity cannot exceed sent quantity for item ${transferItem.id}` });
+          return;
+        }
+        receivedQuantities.set(receivedItem.transferItemId, receivedItem.receivedQuantity);
+      }
+      if (receivedQuantities.size !== items.length) {
+        res.status(400).json({ error: "Provide one received quantity for every transfer item" });
+        return;
+      }
+    }
 
     const updated = await db.transaction(async (tx) => {
       for (const it of items) {
+        const receivedQuantity = receivedQuantities.get(it.id) ?? it.quantity;
         // destinationProductId is guaranteed at create time; defensive check.
         if (!it.destinationProductId) {
           throw Object.assign(
@@ -632,20 +665,25 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
             { http: 500 },
           );
         }
+        await tx.update(schema.stockTransferItemsTable)
+          .set({ receivedQuantity })
+          .where(eq(schema.stockTransferItemsTable.id, it.id));
+        if (receivedQuantity === 0) continue;
+
         // Deduct from source — all stock movement is consolidated here at receive.
         // Conditional UPDATE aborts if stock is insufficient (concurrent sale, etc.).
         const srcUpd = await tx.update(schema.productsTable)
-          .set({ stock: sql`${schema.productsTable.stock} - ${it.quantity}` })
+          .set({ stock: sql`${schema.productsTable.stock} - ${receivedQuantity}` })
           .where(and(
             eq(schema.productsTable.id, it.sourceProductId),
-            gte(schema.productsTable.stock, it.quantity),
+            gte(schema.productsTable.stock, receivedQuantity),
           ))
           .returning({ id: schema.productsTable.id, nameEn: schema.productsTable.nameEn });
         if (srcUpd.length === 0) {
           const [p] = await tx.select({ nameEn: schema.productsTable.nameEn, stock: schema.productsTable.stock })
             .from(schema.productsTable).where(eq(schema.productsTable.id, it.sourceProductId)).limit(1);
           throw Object.assign(
-            new Error(`Insufficient stock at source for "${p?.nameEn ?? `#${it.sourceProductId}`}" (have ${p?.stock ?? 0}, need ${it.quantity})`),
+            new Error(`Insufficient stock at source for "${p?.nameEn ?? `#${it.sourceProductId}`}" (have ${p?.stock ?? 0}, need ${receivedQuantity})`),
             { http: 409 },
           );
         }
@@ -653,13 +691,13 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
           storeId: t.sourceStoreId,
           productId: it.sourceProductId,
           type: "out",
-          quantity: it.quantity,
+          quantity: receivedQuantity,
           reason: "Inter-store transfer (received — source deduction)",
           reference: `TR-${t.id}`,
         });
         // Add to destination.
         const dstUpd = await tx.update(schema.productsTable)
-          .set({ stock: sql`${schema.productsTable.stock} + ${it.quantity}` })
+          .set({ stock: sql`${schema.productsTable.stock} + ${receivedQuantity}` })
           .where(eq(schema.productsTable.id, it.destinationProductId))
           .returning({ id: schema.productsTable.id });
         if (dstUpd.length === 0) {
@@ -669,7 +707,7 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
           storeId: t.destinationStoreId,
           productId: it.destinationProductId,
           type: "in",
-          quantity: it.quantity,
+          quantity: receivedQuantity,
           reason: "Inter-store transfer (received)",
           reference: `TR-${t.id}`,
         });
@@ -681,7 +719,7 @@ router.post("/erp/transfers/:id/receive", authenticate, requireStaff, requireSto
       if (!u) throw Object.assign(new Error("Status changed by another request"), { http: 409 });
       await tx.insert(schema.stockTransferEventsTable).values({
         transferId: t.id, status: "received", actorUserId: req.user!.id,
-        actorStoreId: t.destinationStoreId, notes: req.body?.notes ?? null,
+        actorStoreId: t.destinationStoreId, notes: parsedBody.data.notes ?? null,
       });
       return u;
     });

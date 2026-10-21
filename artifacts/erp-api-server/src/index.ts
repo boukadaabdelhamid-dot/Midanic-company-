@@ -305,6 +305,7 @@ CREATE TABLE "stock_transfer_items" (
         "source_product_id" integer NOT NULL,
         "destination_product_id" integer,
         "quantity" integer NOT NULL,
+        "received_quantity" integer,
         "match_key" text NOT NULL
 );--> statement-breakpoint
 CREATE TABLE "stock_transfers" (
@@ -849,6 +850,7 @@ async function runMigrations(targetPool: Pool = pool) {
   // Push-bootstrapped databases may already have stock_transfers without the
   // column introduced by the baseline migration stream above.
   await targetPool.query(`ALTER TABLE "erp"."stock_transfers" ADD COLUMN IF NOT EXISTS "direct_send" boolean NOT NULL DEFAULT false`);
+  await targetPool.query(`ALTER TABLE "erp"."stock_transfer_items" ADD COLUMN IF NOT EXISTS "received_quantity" integer`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "session_version" integer NOT NULL DEFAULT 0`);
   await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);

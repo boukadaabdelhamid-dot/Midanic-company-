@@ -83,19 +83,30 @@ export default function TransferVoucherPrintButton({
         : tr("Copie du transfert", "نسخة التحويل");
     const items = transfer.items ?? [];
     const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const allReceiptQuantitiesRecorded = items.length > 0 && items.every((item) => item.receivedQuantity != null);
+    const totalReceivedQuantity = items.reduce((sum, item) => sum + Number(item.receivedQuantity ?? 0), 0);
 
     const rows = items.map((item, index) => {
       const productName = isArabic
         ? item.sourceProductNameAr || item.sourceProductNameEn || `#${item.sourceProductId}`
         : item.sourceProductNameEn || item.sourceProductNameAr || `#${item.sourceProductId}`;
       const quantity = new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(item.quantity);
+      const receivedQuantity = item.receivedQuantity == null
+        ? null
+        : new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(item.receivedQuantity);
+      const difference = item.receivedQuantity == null ? null : item.quantity - item.receivedQuantity;
+      const differenceNote = difference == null || difference === 0
+        ? ""
+        : difference > 0
+          ? `${tr("Manquant", "الناقص")}: ${new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(difference)}`
+          : `${tr("Excédent", "زيادة")}: ${new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(Math.abs(difference))}`;
       return `<tr>
         <td class="number">${index + 1}</td>
         <td>${escapeHtml(productName)}</td>
         <td class="code">${escapeHtml(item.matchKey)}</td>
         <td class="quantity">${escapeHtml(quantity)}</td>
-        <td class="count-cell"></td>
-        <td class="note-cell"></td>
+        <td class="count-cell">${receivedQuantity == null ? "" : escapeHtml(receivedQuantity)}</td>
+        <td class="note-cell">${escapeHtml(differenceNote)}</td>
       </tr>`;
     }).join("");
 
@@ -167,15 +178,18 @@ export default function TransferVoucherPrintButton({
               <th class="number">N°</th>
               <th>${escapeHtml(tr("Produit", "المنتج"))}</th>
               <th>${escapeHtml(tr("Référence / code-barres", "المرجع / الباركود"))}</th>
-              <th class="quantity">${escapeHtml(tr("Quantité prévue", "الكمية المرسلة"))}</th>
-              <th class="quantity">${escapeHtml(tr("Quantité comptée", "الكمية المعدودة"))}</th>
+              <th class="quantity">${escapeHtml(tr("Quantité envoyée", "الكمية المرسلة"))}</th>
+              <th class="quantity">${escapeHtml(tr("Quantité reçue", "الكمية المستلمة"))}</th>
               <th>${escapeHtml(tr("Écart / observation", "الفرق / ملاحظة"))}</th>
             </tr></thead>
             <tbody>${rows || `<tr><td colspan="6">${escapeHtml(tr("Aucun article", "لا توجد أصناف"))}</td></tr>`}</tbody>
             <tfoot><tr>
               <td colspan="3">${escapeHtml(tr("Total des unités", "مجموع الوحدات"))}</td>
               <td class="quantity">${escapeHtml(new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(totalQuantity))}</td>
-              <td></td><td></td>
+              <td class="quantity">${allReceiptQuantitiesRecorded ? escapeHtml(new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(totalReceivedQuantity)) : ""}</td>
+              <td>${allReceiptQuantitiesRecorded && totalReceivedQuantity < totalQuantity
+                ? escapeHtml(`${tr("Manquant", "الناقص")}: ${new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(totalQuantity - totalReceivedQuantity)}`)
+                : ""}</td>
             </tr></tfoot>
           </table>
           ${transfer.notes ? `<section class="notes"><div class="label">${escapeHtml(tr("Notes", "ملاحظات"))}</div>${escapeHtml(transfer.notes)}</section>` : ""}

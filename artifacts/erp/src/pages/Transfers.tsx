@@ -1,5 +1,5 @@
 import { getApiBase } from "../lib/api-base";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   useGetErpTransfers,
   useGetErpTransfer,
@@ -771,6 +771,10 @@ function TransferDetailDialog({
   const canEdit = can("transfers", "edit");
   const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const { data: detail, isLoading } = useGetErpTransfer(id);
+  const [receivedQuantities, setReceivedQuantities] = useState<Record<number, string>>({});
+  useEffect(() => {
+    if (open) setReceivedQuantities({});
+  }, [id, open]);
   const approve = useApproveErpTransfer();
   const reject = useRejectErpTransfer();
   const prepare = usePrepareErpTransfer();
@@ -795,10 +799,31 @@ function TransferDetailDialog({
   const td = detail as StockTransferDetail | undefined;
   const isSource = td ? currentStoreId === td.sourceStoreId : false;
   const isDest = td ? currentStoreId === td.destinationStoreId : false;
+  const isReceiving = td?.status === "in_transit" && isDest;
+  const hasSavedReceipt = td?.status === "received" && td.items?.some((item) => item.receivedQuantity != null);
+  const showReceiptColumn = isReceiving || hasSavedReceipt;
+  const invalidReceiptQuantity = Boolean(isReceiving && canEdit && td?.items?.some((item) => {
+    const raw = receivedQuantities[item.id] ?? String(item.quantity);
+    if (!raw.trim()) return true;
+    const quantity = Number(raw);
+    return !Number.isSafeInteger(quantity) || quantity < 0 || quantity > item.quantity;
+  }));
 
   const act = (m: { mutate: (v: { id: number }, opts: { onSuccess: () => void }) => void }) => {
     if (!canEdit) return;
     m.mutate({ id }, { onSuccess: () => onChanged() });
+  };
+  const submitReceipt = () => {
+    if (!canEdit || !td || !isReceiving || invalidReceiptQuantity || !td.items?.length) return;
+    receive.mutate({
+      id,
+      data: {
+        items: td.items.map((item) => ({
+          transferItemId: item.id,
+          receivedQuantity: Number(receivedQuantities[item.id] ?? item.quantity),
+        })),
+      },
+    }, { onSuccess: () => onChanged() });
   };
 
   return (
@@ -860,7 +885,10 @@ function TransferDetailDialog({
                     <TableRow>
                       <TableHead>{tr("Produit", "المنتج")}</TableHead>
                       <TableHead>{tr("Clé appariement", "مفتاح المطابقة")}</TableHead>
-                      <TableHead className="text-right">{tr("Qté", "الكمية")}</TableHead>
+                      <TableHead className="text-right">
+                        {showReceiptColumn ? tr("Qté envoyée", "الكمية المرسلة") : tr("Qté", "الكمية")}
+                      </TableHead>
+                      {showReceiptColumn && <TableHead className="text-right">{tr("Qté reçue", "الكمية المستلمة")}</TableHead>}
                       <TableHead className="text-right">{tr("Stock source", "مخزون المصدر")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -872,6 +900,35 @@ function TransferDetailDialog({
                           <TableCell className="text-sm">{it.sourceProductNameEn ?? `#${it.sourceProductId}`}</TableCell>
                           <TableCell className="text-xs font-mono text-muted-foreground">{it.matchKey}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums">{it.quantity}</TableCell>
+                          {showReceiptColumn && (
+                            <TableCell className="text-right tabular-nums">
+                              {isReceiving && canEdit ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={it.quantity}
+                                    step={1}
+                                    inputMode="numeric"
+                                    aria-label={`${tr("Qté reçue", "الكمية المستلمة")} — ${it.sourceProductNameEn ?? it.sourceProductId}`}
+                                    data-testid={`input-received-quantity-${it.id}`}
+                                    className="h-8 w-24 text-right"
+                                    value={receivedQuantities[it.id] ?? String(it.quantity)}
+                                    onChange={(event) => setReceivedQuantities((current) => ({
+                                      ...current,
+                                      [it.id]: event.target.value,
+                                    }))}
+                                  />
+                                  {Number.isSafeInteger(Number(receivedQuantities[it.id] ?? it.quantity)) &&
+                                    Number(receivedQuantities[it.id] ?? it.quantity) < it.quantity && (
+                                      <span className="text-[10px] text-amber-700">
+                                        {tr("Manquant", "الناقص")}: {it.quantity - Number(receivedQuantities[it.id] ?? it.quantity)}
+                                      </span>
+                                    )}
+                                </div>
+                              ) : isReceiving ? "—" : (it.receivedQuantity ?? it.quantity)}
+                            </TableCell>
+                          )}
                           <TableCell className={`text-right tabular-nums ${insufficient ? "text-red-600 font-semibold" : ""}`}>
                             {it.sourceProductStock ?? "—"}
                           </TableCell>
@@ -881,6 +938,21 @@ function TransferDetailDialog({
                   </TableBody>
                 </Table>
               </div>
+              {isReceiving && canEdit && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    {tr("La quantité non reçue reste dans le stock source.", "الكمية غير المستلمة تبقى في مخزون المصدر.")}
+                  </p>
+                  {invalidReceiptQuantity && (
+                    <p className="text-xs text-red-600" role="alert">
+                      {tr(
+                        "Les quantités reçues doivent être des entiers entre 0 et la quantité envoyée.",
+                        "يجب أن تكون الكميات المستلمة أعدادًا صحيحة بين صفر والكمية المرسلة.",
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -943,7 +1015,12 @@ function TransferDetailDialog({
                 </Button>
               )}
               {td.status === "in_transit" && isDest && (
-                <Button size="sm" onClick={() => act(receive)} disabled={receive.isPending} data-testid="button-receive">
+                <Button
+                  size="sm"
+                  onClick={submitReceipt}
+                  disabled={receive.isPending || !td.items?.length || (canEdit && invalidReceiptQuantity)}
+                  data-testid="button-receive"
+                >
                   <Inbox className="h-4 w-4 mr-1" /> {tr("Confirmer la réception", "تأكيد الاستلام")}
                 </Button>
               )}

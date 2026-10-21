@@ -2541,6 +2541,7 @@ export const GetErpTransferResponse = zod
             sourceProductId: zod.number(),
             destinationProductId: zod.number().nullish(),
             quantity: zod.number(),
+            receivedQuantity: zod.number().nullish(),
             matchKey: zod.string(),
             sourceProductNameEn: zod.string().nullish(),
             sourceProductNameAr: zod.string().nullish(),
@@ -2724,6 +2725,10 @@ export const ReceiveErpTransferParams = zod.object({
 
 export const ReceiveErpTransferBody = zod.object({
   notes: zod.string().optional(),
+  items: zod.array(zod.object({
+    transferItemId: zod.number().int().positive(),
+    receivedQuantity: zod.number().int().min(0),
+  })).optional(),
 });
 
 export const ReceiveErpTransferResponse = zod.object({

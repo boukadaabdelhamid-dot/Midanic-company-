@@ -420,6 +420,7 @@ export const stockTransferItemsTable = pgTable("stock_transfer_items", {
   sourceProductId: integer("source_product_id").references(() => productsTable.id).notNull(),
   destinationProductId: integer("destination_product_id").references(() => productsTable.id),
   quantity: integer("quantity").notNull(),
+  receivedQuantity: integer("received_quantity"),
   matchKey: text("match_key").notNull(), // reference or barcode used to match across stores
 });
 

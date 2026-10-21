@@ -97,8 +97,12 @@ test("transfer catalogues and actions respect employee grants and company-owner 
           mode, items: [{ sourceProductId, quantity: 2 }],
         }),
       });
-    const act = (id: number, action: string, owner: boolean, currentStoreId = sourceId) =>
-      fetch(`${base}/erp/transfers/${id}/${action}`, { method: "POST", headers: headers(owner, currentStoreId), body: "{}" });
+    const act = (id: number, action: string, owner: boolean, currentStoreId = sourceId, body: unknown = {}) =>
+      fetch(`${base}/erp/transfers/${id}/${action}`, {
+        method: "POST",
+        headers: headers(owner, currentStoreId),
+        body: JSON.stringify(body),
+      });
     const regular = await create(false, "request");
     assert.equal(regular.status, 201);
     const regularTransfer = await regular.json() as { id: number };
@@ -156,11 +160,24 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal(beforeDirectReceipt.find((product) => product.storeId === sourceId)!.stock, 18);
     assert.equal(beforeDirectReceipt.find((product) => product.storeId === destinationId)!.stock, 2);
     assert.equal((await act(direct.id, "receive", false)).status, 403, "source cannot confirm destination receipt");
-    assert.equal((await act(direct.id, "receive", false, destinationId)).status, 200);
+    const [directItem] = await db.select({ id: schema.stockTransferItemsTable.id })
+      .from(schema.stockTransferItemsTable)
+      .where(eq(schema.stockTransferItemsTable.transferId, direct.id));
+    assert.ok(directItem);
+    assert.equal((await act(direct.id, "receive", false, destinationId, {
+      items: [{ transferItemId: directItem.id, receivedQuantity: 3 }],
+    })).status, 400, "received quantity cannot exceed the sent quantity");
+    assert.equal((await act(direct.id, "receive", false, destinationId, {
+      items: [{ transferItemId: directItem.id, receivedQuantity: 1 }],
+    })).status, 200, "destination can confirm a partial receipt");
+    const [receiptLine] = await db.select({ receivedQuantity: schema.stockTransferItemsTable.receivedQuantity })
+      .from(schema.stockTransferItemsTable)
+      .where(eq(schema.stockTransferItemsTable.id, directItem.id));
+    assert.equal(receiptLine?.receivedQuantity, 1, "actual received quantity is retained on the transfer");
     const afterDirectReceipt = await db.select({ storeId: schema.productsTable.storeId, stock: schema.productsTable.stock })
       .from(schema.productsTable).where(inArray(schema.productsTable.storeId, [sourceId, destinationId]));
-    assert.equal(afterDirectReceipt.find((product) => product.storeId === sourceId)!.stock, 16);
-    assert.equal(afterDirectReceipt.find((product) => product.storeId === destinationId)!.stock, 4);
+    assert.equal(afterDirectReceipt.find((product) => product.storeId === sourceId)!.stock, 17);
+    assert.equal(afterDirectReceipt.find((product) => product.storeId === destinationId)!.stock, 3);
 
     // Legacy prepared rows remain actionable so deployments do not strand existing transfers.
     const [legacyPrepared] = await db.insert(schema.stockTransfersTable).values({
@@ -186,7 +203,7 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal((await create(false, "request")).status, 403);
     const unchanged = await db.select({ stock: schema.productsTable.stock })
       .from(schema.productsTable).where(eq(schema.productsTable.id, sourceProductId));
-    assert.equal(unchanged[0]!.stock, 16, "only the received transfers change stock");
+    assert.equal(unchanged[0]!.stock, 17, "only the received quantities change source stock");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     try {

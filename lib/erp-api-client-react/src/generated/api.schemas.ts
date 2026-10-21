@@ -1234,6 +1234,7 @@ export interface StockTransferItem {
   sourceProductId: number;
   destinationProductId?: number | null;
   quantity: number;
+  receivedQuantity?: number | null;
   matchKey: string;
   sourceProductNameEn?: string | null;
   sourceProductNameAr?: string | null;
@@ -1287,6 +1288,10 @@ export interface CreateStockTransferRequest {
 
 export interface StockTransferActionRequest {
   notes?: string;
+  items?: {
+    transferItemId: number;
+    receivedQuantity: number;
+  }[];
 }
 
 export type CaisseKind = (typeof CaisseKind)[keyof typeof CaisseKind];
