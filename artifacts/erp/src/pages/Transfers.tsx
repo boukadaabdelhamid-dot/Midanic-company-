@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeftRight, Plus, Send, CheckCircle2, XCircle, Truck, Inbox, Ban, Trash2, ScanLine, AlertTriangle } from "lucide-react";
+import TransferVoucherPrintButton from "@/components/TransferVoucherPrintButton";
 import { format } from "date-fns";
 
 type TrFn = (fr: string, ar: string) => string;
@@ -804,15 +805,18 @@ function TransferDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {tr("Transfert", "تحويل")} #{id}
-            {td && <StatusBadge status={td.status} directSend={td.directSend} />}
-            {td?.directSend && (
-              <span className="text-[10px] rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-orange-800">
-                {tr("Envoi direct", "إرسال مباشر")}
-              </span>
-            )}
-          </DialogTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <DialogTitle className="flex items-center gap-2">
+              {tr("Transfert", "تحويل")} #{id}
+              {td && <StatusBadge status={td.status} directSend={td.directSend} />}
+              {td?.directSend && (
+                <span className="text-[10px] rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-orange-800">
+                  {tr("Envoi direct", "إرسال مباشر")}
+                </span>
+              )}
+            </DialogTitle>
+            {td && <TransferVoucherPrintButton transfer={td} currentStoreId={currentStoreId} />}
+          </div>
         </DialogHeader>
         {isLoading || !td ? (
           <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
