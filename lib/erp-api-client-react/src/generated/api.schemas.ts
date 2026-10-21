@@ -1203,6 +1203,7 @@ export interface StockTransfer {
   destinationStoreId: number;
   initiatorUserId?: number;
   initiatorSide?: string;
+  directSend?: boolean;
   status: StockTransferStatus;
   notes?: string | null;
   createdAt: string;

@@ -401,7 +401,8 @@ export const stockTransfersTable = pgTable("stock_transfers", {
   sourceStoreId: integer("source_store_id").references(() => storesTable.id).notNull(),
   destinationStoreId: integer("destination_store_id").references(() => storesTable.id).notNull(),
   initiatorUserId: integer("initiator_user_id").references(() => usersTable.id).notNull(),
-  initiatorSide: text("initiator_side").notNull(), // 'source' (direct send) or 'destination' (request)
+  initiatorSide: text("initiator_side").notNull(), // source-initiated push/direct send or destination-initiated pull request
+  directSend: boolean("direct_send").notNull().default(false),
   status: stockTransferStatusEnum("status").notNull().default("requested"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

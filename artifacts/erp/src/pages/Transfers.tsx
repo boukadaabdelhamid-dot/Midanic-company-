@@ -6,6 +6,8 @@ import {
   useCreateErpTransfer,
   useApproveErpTransfer,
   useRejectErpTransfer,
+  usePrepareErpTransfer,
+  useShipErpTransfer,
   useReceiveErpTransfer,
   useCancelErpTransfer,
   useGetProducts,
@@ -53,9 +55,11 @@ const STATUS_LABELS: Record<string, { fr: string; ar: string; cls: string }> = {
   cancelled:  { fr: "Annulé",       ar: "ملغى",        cls: "bg-gray-100 text-gray-600 border border-gray-200" },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, directSend = false }: { status: string; directSend?: boolean }) {
   const { lang } = useLang();
-  const s = STATUS_LABELS[status] ?? { fr: status, ar: status, cls: "bg-gray-100" };
+  const s = status === "requested" && directSend
+    ? { fr: "Envoi enregistré", ar: "تم تسجيل الإرسال", cls: "bg-blue-100 text-blue-700 border border-blue-200" }
+    : STATUS_LABELS[status] ?? { fr: status, ar: status, cls: "bg-gray-100" };
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${s.cls}`}>
       {useLang.translate(lang, s.fr, s.ar)}
@@ -197,7 +201,16 @@ export default function Transfers() {
                             </TableCell>
                             <TableCell className="text-sm">{t.itemCount ?? 0}</TableCell>
                             <TableCell className="text-sm font-semibold tabular-nums">{t.totalQuantity ?? 0}</TableCell>
-                            <TableCell><StatusBadge status={t.status} /></TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <StatusBadge status={t.status} directSend={t.directSend} />
+                                {t.directSend && (
+                                  <span className="text-[10px] rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-orange-800">
+                                    {tr("Envoi direct", "إرسال مباشر")}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="text-xs text-muted-foreground" data-testid={`text-initiator-${t.id}`}>
                               {t.initiatorUser?.name || t.initiatorUser?.email || `#${t.initiatorUserId ?? "?"}`}
                             </TableCell>
@@ -206,7 +219,9 @@ export default function Transfers() {
                             </TableCell>
                             <TableCell>
                               <Button size="sm" variant="outline" onClick={() => setDetailId(t.id)} data-testid={`button-open-transfer-${t.id}`}>
-                                {tr("Ouvrir", "فتح")}
+                                {isOutgoing || t.status !== "in_transit"
+                                  ? tr("Ouvrir", "فتح")
+                                  : tr("Inspecter", "تفقد")}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -433,6 +448,7 @@ export function CreateTransferDialog({
   const canCreate = can("transfers", "create");
   const tr: TrFn = (fr, ar) => useLang.translate(lang, fr, ar);
   const [direction, setDirection] = useState<"out" | "in">(initialDirection ?? "out");
+  const [mode, setMode] = useState<"request" | "send">("request");
   const [otherStoreId, setOtherStoreId] = useState(initialStoreId ?? "");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(initialLines ?? []);
@@ -467,7 +483,7 @@ export function CreateTransferDialog({
     setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
   const reset = () => {
-    setDirection("out"); setOtherStoreId(""); setNotes("");
+    setDirection("out"); setMode("request"); setOtherStoreId(""); setNotes("");
     setLines([]); setPickedProducts({});
   };
 
@@ -557,6 +573,7 @@ export function CreateTransferDialog({
             ? { destinationStoreId: otherId }
             : { sourceStoreId: otherId }),
           notes: notes || undefined,
+          ...(direction === "out" ? { mode } : {}),
           items: lines.map((l) => ({
             sourceProductId: Number(l.sourceProductId),
             quantity: Number(l.quantity),
@@ -590,13 +607,27 @@ export function CreateTransferDialog({
               <Button
                 type="button" size="sm"
                 variant={direction === "in" ? "default" : "outline"}
-                onClick={() => setDirection("in")}
+                onClick={() => { setDirection("in"); setMode("request"); }}
                 data-testid="button-direction-in"
               >
                 <Inbox className="h-3.5 w-3.5 mr-1" /> {tr("Demander depuis un autre magasin", "طلب من متجر آخر")}
               </Button>
             </div>
           </div>
+          {direction === "out" && (
+            <div>
+              <Label className="text-xs mb-1 block">{tr("Mode d'envoi", "نوع الإرسال")}</Label>
+              <Select value={mode} onValueChange={(value) => setMode(value as "request" | "send")}>
+                <SelectTrigger className="h-9 text-sm" data-testid="select-transfer-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="request">{tr("Demander l'accord de destination", "طلب موافقة الوجهة")}</SelectItem>
+                  <SelectItem value="send">{tr("Envoi direct", "إرسال مباشر")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs mb-1 block">
@@ -617,9 +648,19 @@ export function CreateTransferDialog({
               <Label className="text-xs mb-1 block">{tr("Étapes du transfert", "خطوات التحويل")}</Label>
               <p className="rounded-md border bg-muted/30 p-2 text-xs leading-relaxed text-muted-foreground">
                 {tr(
-                  "La destination approuve la demande. Ensuite, la source prépare et expédie en une seule action. Le stock change à la confirmation de réception.",
-                  "توافق الوجهة على الطلب، ثم يجهز المصدر التحويل ويشحنه بخطوة واحدة. يتغير المخزون بعد تأكيد الاستلام.",
+                  direction === "out"
+                    ? mode === "send"
+                      ? "L'envoi direct est enregistré, puis préparé et expédié en deux étapes. La destination ouvre le détail et confirme la réception."
+                      : "La destination approuve la demande. Ensuite, la source prépare et expédie en une seule action."
+                    : "La demande est enregistrée pour validation avant préparation et expédition.",
+                  direction === "out"
+                    ? mode === "send"
+                      ? "يُسجّل الإرسال المباشر أولًا، ثم يُحضّر ويُرسل في خطوتين. تفتح الوجهة التفاصيل وتؤكد الاستلام."
+                      : "توافق الوجهة على الطلب، ثم يجهز المصدر التحويل ويشحنه بخطوة واحدة."
+                    : "يُسجّل الطلب للموافقة عليه قبل التحضير والإرسال.",
                 )}
+                {" "}
+                {tr("Le stock change uniquement à la réception confirmée.", "لا يتغير المخزون إلا بعد تأكيد الاستلام.")}
               </p>
             </div>
           </div>
@@ -720,7 +761,9 @@ export function CreateTransferDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tr("Annuler", "إلغاء")}</Button>
           <Button onClick={submit} disabled={!canCreate || !valid || create.isPending} data-testid="button-submit-transfer">
-            {tr("Demander le transfert", "طلب التحويل")}
+            {direction === "out" && mode === "send"
+              ? tr("Enregistrer l'envoi direct", "تسجيل الإرسال المباشر")
+              : tr("Demander le transfert", "طلب التحويل")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -746,6 +789,8 @@ function TransferDetailDialog({
   const { data: detail, isLoading } = useGetErpTransfer(id);
   const approve = useApproveErpTransfer();
   const reject = useRejectErpTransfer();
+  const prepare = usePrepareErpTransfer();
+  const ship = useShipErpTransfer();
   const dispatch = useMutation({
     mutationFn: async ({ id: transferId }: { id: number }) => {
       const token = localStorage.getItem("midanic_token") ?? "";
@@ -778,7 +823,12 @@ function TransferDetailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {tr("Transfert", "تحويل")} #{id}
-            {td && <StatusBadge status={td.status} />}
+            {td && <StatusBadge status={td.status} directSend={td.directSend} />}
+            {td?.directSend && (
+              <span className="text-[10px] rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-orange-800">
+                {tr("Envoi direct", "إرسال مباشر")}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
         {isLoading || !td ? (
@@ -865,7 +915,7 @@ function TransferDetailDialog({
             </div>
 
             {canEdit && <div className="flex flex-wrap gap-2 pt-2 border-t">
-              {td.status === "requested" && isDest && (
+              {td.status === "requested" && isDest && !td.directSend && (
                 <>
                   <Button size="sm" onClick={() => act(approve)} disabled={approve.isPending} data-testid="button-approve">
                     <CheckCircle2 className="h-4 w-4 mr-1" /> {tr("Approuver", "قبول")}
@@ -875,22 +925,39 @@ function TransferDetailDialog({
                   </Button>
                 </>
               )}
-              {(td.status === "approved" || td.status === "prepared") && isSource && (
+              {td.status === "requested" && td.directSend && isSource && (
+                <Button
+                  size="sm"
+                  onClick={() => act(prepare)}
+                  disabled={prepare.isPending}
+                  data-testid="button-prepare-transfer"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> {tr("Préparer", "تحضير")}
+                </Button>
+              )}
+              {td.status === "approved" && isSource && (
                 <Button
                   size="sm"
                   onClick={() => dispatch.mutate({ id })}
                   disabled={dispatch.isPending}
                   data-testid="button-dispatch-transfer"
                 >
-                  <Truck className="h-4 w-4 mr-1" />
-                  {td.status === "prepared"
-                    ? tr("Expédier", "شحن")
-                    : tr("Préparer et expédier", "تجهيز وشحن")}
+                  <Truck className="h-4 w-4 mr-1" /> {tr("Préparer et expédier", "تجهيز وشحن")}
+                </Button>
+              )}
+              {td.status === "prepared" && isSource && (
+                <Button
+                  size="sm"
+                  onClick={() => act(ship)}
+                  disabled={ship.isPending}
+                  data-testid="button-ship-transfer"
+                >
+                  <Truck className="h-4 w-4 mr-1" /> {tr("Expédier", "إرسال")}
                 </Button>
               )}
               {td.status === "in_transit" && isDest && (
                 <Button size="sm" onClick={() => act(receive)} disabled={receive.isPending} data-testid="button-receive">
-                  <Inbox className="h-4 w-4 mr-1" /> {tr("Réceptionner", "استلام")}
+                  <Inbox className="h-4 w-4 mr-1" /> {tr("Confirmer la réception", "تأكيد الاستلام")}
                 </Button>
               )}
               {!["received", "cancelled", "rejected"].includes(td.status) && isSource &&
@@ -900,10 +967,10 @@ function TransferDetailDialog({
                 </Button>
               )}
             </div>}
-            {(approve.error || reject.error || dispatch.error || receive.error || cancel.error) && (
+            {(approve.error || reject.error || prepare.error || ship.error || dispatch.error || receive.error || cancel.error) && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
                 {(() => {
-                  const error = approve.error || reject.error || dispatch.error || receive.error || cancel.error;
+                  const error = approve.error || reject.error || prepare.error || ship.error || dispatch.error || receive.error || cancel.error;
                   return (error as { error?: string })?.error
                     ?? (error as Error)?.message
                     ?? tr("Action échouée", "فشل الإجراء");

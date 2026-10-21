@@ -242,7 +242,8 @@ router.get("/erp/transfers/:id", authenticate, requireStaff, requireStore, requi
 //   sourceStoreId?      (when current store = destination, "pull request"),
 //   items: [{ sourceProductId, quantity }], notes
 // }
-// Every new transfer is created as 'requested' and requires destination approval.
+// New requests and direct sends are both recorded first. Direct sends skip
+// destination pre-approval but still require source preparation and shipment.
 router.post("/erp/transfers", authenticate, requireStaff, requireStore, requirePermission("transfers", "create"), async (req: AuthRequest, res) => {
   try {
     const currentStoreId = req.currentStoreId!;
@@ -252,13 +253,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
       res.status(400).json({ error: "Invalid transfer mode" });
       return;
     }
-    if (mode === "send") {
-      res.status(400).json({
-        error: "Destination approval is required for new transfers",
-        code: "DESTINATION_APPROVAL_REQUIRED",
-      });
-      return;
-    }
+    const directSend = mode === "send";
 
     // Determine which side the current store plays
     let sourceStoreId: number;
@@ -274,6 +269,10 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
       initiatorSide = "destination";
     } else {
       res.status(400).json({ error: "Provide exactly one of sourceStoreId or destinationStoreId" });
+      return;
+    }
+    if (directSend && initiatorSide !== "source") {
+      res.status(400).json({ error: "Direct send must be created from the source store" });
       return;
     }
     if (!Number.isInteger(sourceStoreId) || !Number.isInteger(destId) || sourceStoreId === destId) {
@@ -363,6 +362,7 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
         destinationStoreId: destId,
         initiatorUserId: userId,
         initiatorSide,
+        directSend,
         status,
         notes: notes || null,
       }).returning();
@@ -380,7 +380,9 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
         status,
         actorUserId: userId,
         actorStoreId: currentStoreId,
-        notes: initiatorSide === "destination" ? "Pull request from destination" : "Push request from source",
+        notes: directSend
+          ? "Direct send registered at source"
+          : initiatorSide === "destination" ? "Pull request from destination" : "Push request from source",
       });
 
       return transfer;
@@ -398,9 +400,9 @@ router.post("/erp/transfers", authenticate, requireStaff, requireStore, requireP
 
 // ─── ACTIONS ───────────────────────────────────────────────────────
 // Allowed transitions:
-// requested → approved (dest)  | rejected (dest)  | cancelled (source)
-// approved  → in_transit (source dispatch) | cancelled (source)
-// prepared  → in_transit (legacy transfers only) | cancelled (source, admin only)
+// requested → approved (dest) | rejected (dest) | prepared (source, direct send) | cancelled
+// approved → prepared (source) | in_transit (source combined request dispatch) | cancelled
+// prepared → in_transit (source ship) | cancelled
 // in_transit → received (dest)
 function ensure(req: AuthRequest, ok: boolean, res: import("express").Response, msg = "Forbidden"): boolean {
   if (!ok) { res.status(403).json({ error: msg, code: "STORE_ACCESS_REVOKED" }); return false; }
@@ -417,7 +419,10 @@ router.post("/erp/transfers/:id/approve", authenticate, requireStaff, requireSto
     const t = await loadTransferOr404(id, req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnDestination(req, t), res, "Only destination side can approve")) return;
-    if (t.status !== "requested") { res.status(409).json({ error: `Cannot approve from status ${t.status}` }); return; }
+    if (t.status !== "requested" || t.directSend) {
+      res.status(409).json({ error: t.directSend ? "Direct send does not require destination approval" : `Cannot approve from status ${t.status}` });
+      return;
+    }
 
     const updated = await db.transaction(async (tx) => {
       const [u] = await tx.update(schema.stockTransfersTable)
@@ -446,7 +451,10 @@ router.post("/erp/transfers/:id/reject", authenticate, requireStaff, requireStor
     const t = await loadTransferOr404(id, req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnDestination(req, t), res, "Only destination side can reject")) return;
-    if (t.status !== "requested") { res.status(409).json({ error: `Cannot reject from status ${t.status}` }); return; }
+    if (t.status !== "requested" || t.directSend) {
+      res.status(409).json({ error: t.directSend ? "Direct send does not require destination approval" : `Cannot reject from status ${t.status}` });
+      return;
+    }
 
     const updated = await db.transaction(async (tx) => {
       const [u] = await tx.update(schema.stockTransfersTable)
@@ -474,9 +482,11 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
     const t = await loadTransferOr404(pid(req, "id"), req);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
     if (!ensure(req, actorOnSource(req, t), res, "Only source side can prepare")) return;
-    if (t.status !== "approved") {
+    const canPrepare = t.status === "approved" || (t.status === "requested" && t.directSend);
+    if (!canPrepare) {
       res.status(409).json({ error: `Cannot prepare from status ${t.status}` }); return;
     }
+    const fromStatus = t.status;
 
     const updated = await db.transaction(async (tx) => {
       // Pure status transition — no stock movement at prepare stage.
@@ -485,7 +495,7 @@ router.post("/erp/transfers/:id/prepare", authenticate, requireStaff, requireSto
         .set({ status: "prepared", preparedAt: new Date() })
         .where(and(
           eq(schema.stockTransfersTable.id, t.id),
-          eq(schema.stockTransfersTable.status, "approved"),
+          eq(schema.stockTransfersTable.status, fromStatus),
         ))
         .returning();
       if (!u) throw Object.assign(new Error("Status changed by another request"), { http: 409 });
@@ -533,7 +543,8 @@ router.post("/erp/transfers/:id/ship", authenticate, requireStaff, requireStore,
   }
 });
 
-// One source-side action, while retaining both audit events and receive-only stock movement.
+// Normal approval requests can be prepared and shipped together. Direct sends
+// must first pass through /prepare and then /ship as separate actions.
 router.post("/erp/transfers/:id/dispatch", authenticate, requireStaff, requireStore, requirePermission("transfers", "edit"), async (req: AuthRequest, res) => {
   try {
     const id = pid(req, "id");

@@ -2389,6 +2389,7 @@ export const GetErpTransfersResponseItem = zod
     destinationStoreId: zod.number(),
     initiatorUserId: zod.number().optional(),
     initiatorSide: zod.string().optional(),
+    directSend: zod.boolean().optional(),
     status: zod.enum([
       "requested",
       "approved",
@@ -2470,6 +2471,7 @@ export const GetErpTransferResponse = zod
     destinationStoreId: zod.number(),
     initiatorUserId: zod.number().optional(),
     initiatorSide: zod.string().optional(),
+    directSend: zod.boolean().optional(),
     status: zod.enum([
       "requested",
       "approved",

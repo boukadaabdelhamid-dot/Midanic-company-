@@ -313,6 +313,7 @@ CREATE TABLE "stock_transfers" (
         "destination_store_id" integer NOT NULL,
         "initiator_user_id" integer NOT NULL,
         "initiator_side" text NOT NULL,
+        "direct_send" boolean DEFAULT false NOT NULL,
         "status" "stock_transfer_status" DEFAULT 'requested' NOT NULL,
         "notes" text,
         "created_at" timestamp DEFAULT now() NOT NULL,
@@ -845,6 +846,9 @@ async function runMigrations(targetPool: Pool = pool) {
     }
   }
   logger.info({ applied, skipped }, "DB migrations done.");
+  // Push-bootstrapped databases may already have stock_transfers without the
+  // column introduced by the baseline migration stream above.
+  await targetPool.query(`ALTER TABLE "erp"."stock_transfers" ADD COLUMN IF NOT EXISTS "direct_send" boolean NOT NULL DEFAULT false`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "platform_user_id" integer`);
   await targetPool.query(`ALTER TABLE "erp"."users" ADD COLUMN IF NOT EXISTS "session_version" integer NOT NULL DEFAULT 0`);
   await targetPool.query(`ALTER TABLE "erp"."stores" ADD COLUMN IF NOT EXISTS "platform_tenant_id" integer`);

@@ -99,11 +99,6 @@ test("transfer catalogues and actions respect employee grants and company-owner 
       });
     const act = (id: number, action: string, owner: boolean, currentStoreId = sourceId) =>
       fetch(`${base}/erp/transfers/${id}/${action}`, { method: "POST", headers: headers(owner, currentStoreId), body: "{}" });
-    assert.equal((await create(false, "send")).status, 400, "employee cannot create a direct-send transfer");
-    await grant("create", true);
-    assert.equal((await create(true, "send")).status, 400, "company owners cannot bypass destination approval for new transfers");
-    assert.equal((await create(false, "send")).status, 400, "employees cannot create direct-send transfers");
-
     const regular = await create(false, "request");
     assert.equal(regular.status, 201);
     const regularTransfer = await regular.json() as { id: number };
@@ -137,6 +132,36 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal(afterReceipt.find((product) => product.storeId === sourceId)!.stock, 18);
     assert.equal(afterReceipt.find((product) => product.storeId === destinationId)!.stock, 2);
 
+    const directResponse = await create(false, "send");
+    assert.equal(directResponse.status, 201, "employee with create permission can register a direct send");
+    const direct = await directResponse.json() as { id: number; status: string; directSend: boolean };
+    assert.equal(direct.status, "requested", "direct send is recorded before preparation");
+    assert.equal(direct.directSend, true);
+    assert.equal((await act(direct.id, "approve", false, destinationId)).status, 409, "direct send skips destination pre-approval");
+    assert.equal((await act(direct.id, "reject", false, destinationId)).status, 409, "direct send cannot be rejected as an approval request");
+    assert.equal((await act(direct.id, "dispatch", false)).status, 409, "direct send cannot skip preparation");
+    assert.equal((await act(direct.id, "prepare", false, destinationId)).status, 403, "only the source can prepare");
+    assert.equal((await act(direct.id, "prepare", false)).status, 200);
+    assert.equal((await act(direct.id, "receive", false, destinationId)).status, 409, "destination cannot receive before shipment");
+    const directShip = await act(direct.id, "ship", false);
+    assert.equal(directShip.status, 200, "source ships after preparation");
+    assert.equal((await act(direct.id, "ship", false)).status, 409, "shipment cannot be repeated");
+    const directEvents = await db.select({ status: schema.stockTransferEventsTable.status })
+      .from(schema.stockTransferEventsTable)
+      .where(eq(schema.stockTransferEventsTable.transferId, direct.id))
+      .orderBy(schema.stockTransferEventsTable.createdAt, schema.stockTransferEventsTable.id);
+    assert.deepEqual(directEvents.map((event) => event.status), ["requested", "prepared", "in_transit"]);
+    const beforeDirectReceipt = await db.select({ storeId: schema.productsTable.storeId, stock: schema.productsTable.stock })
+      .from(schema.productsTable).where(inArray(schema.productsTable.storeId, [sourceId, destinationId]));
+    assert.equal(beforeDirectReceipt.find((product) => product.storeId === sourceId)!.stock, 18);
+    assert.equal(beforeDirectReceipt.find((product) => product.storeId === destinationId)!.stock, 2);
+    assert.equal((await act(direct.id, "receive", false)).status, 403, "source cannot confirm destination receipt");
+    assert.equal((await act(direct.id, "receive", false, destinationId)).status, 200);
+    const afterDirectReceipt = await db.select({ storeId: schema.productsTable.storeId, stock: schema.productsTable.stock })
+      .from(schema.productsTable).where(inArray(schema.productsTable.storeId, [sourceId, destinationId]));
+    assert.equal(afterDirectReceipt.find((product) => product.storeId === sourceId)!.stock, 16);
+    assert.equal(afterDirectReceipt.find((product) => product.storeId === destinationId)!.stock, 4);
+
     // Legacy prepared rows remain actionable so deployments do not strand existing transfers.
     const [legacyPrepared] = await db.insert(schema.stockTransfersTable).values({
       sourceStoreId: sourceId,
@@ -161,7 +186,7 @@ test("transfer catalogues and actions respect employee grants and company-owner 
     assert.equal((await create(false, "request")).status, 403);
     const unchanged = await db.select({ stock: schema.productsTable.stock })
       .from(schema.productsTable).where(eq(schema.productsTable.id, sourceProductId));
-    assert.equal(unchanged[0]!.stock, 18, "only the received transfer changes stock");
+    assert.equal(unchanged[0]!.stock, 16, "only the received transfers change stock");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     try {
