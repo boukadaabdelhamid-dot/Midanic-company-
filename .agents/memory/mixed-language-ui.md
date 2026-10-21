@@ -16,3 +16,10 @@ Run existing presentation regression tests, not only typecheck and build, when c
 **Why:** The English rollout compiled successfully but left extracted-component tests using incomplete language mocks. Compilation alone did not establish compatibility with existing regression coverage.
 
 **How to apply:** Check language-dependent rendering and unchanged machine values across French, Arabic, and English. Distinguish test-harness failures from actual browser failures before attributing an issue to localization.
+
+## Preview-account verification
+Do not consider a development admin ready merely because login succeeds; verify a selected authorized store and a working signed-in Dashboard.
+
+**Why:** The preview admin accepted credentials without any store membership, making multiple pages fail with store-required errors that appeared to be a localization regression.
+
+**How to apply:** Check the actual login/store context before attributing empty or failed pages to translation changes. Keep preview recovery limited to development-only standalone stores; never grant the preview admin access to customer companies.

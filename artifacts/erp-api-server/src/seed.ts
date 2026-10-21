@@ -1,6 +1,6 @@
 import { db, schema } from "./lib/db";
 import bcrypt from "bcryptjs";
-import { eq, asc, and, sql } from "drizzle-orm";
+import { eq, asc, and, isNull, sql } from "drizzle-orm";
 import { getTenantDatabaseContext } from "./lib/db";
 import { planTenantStoreBootstrap } from "./lib/tenant-store-mapping";
 
@@ -101,6 +101,23 @@ export async function bootstrap() {
       ) {
         throw new Error("Preview ERP admin password sync refused: target is not an active standalone admin");
       }
+      // A preview admin also needs a store membership: authentication alone
+      // cannot load store-scoped pages such as Dashboard. Never grant access
+      // to a tenant store, or run this repair outside this development guard.
+      const [previewStore] = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(and(
+          eq(schema.storesTable.slug, "principal"),
+          eq(schema.storesTable.isActive, true),
+          isNull(schema.storesTable.platformTenantId),
+        )).limit(1);
+      if (!previewStore) {
+        throw new Error("Preview ERP admin setup refused: no active standalone principal store");
+      }
+      await db.insert(schema.userStoresTable).values({
+        userId: previewAdmin.id,
+        storeId: previewStore.id,
+      }).onConflictDoNothing();
       await db.update(schema.usersTable).set({
         passwordHash: await bcrypt.hash(previewPassword, 10),
         sessionVersion: sql`${schema.usersTable.sessionVersion} + 1`,
