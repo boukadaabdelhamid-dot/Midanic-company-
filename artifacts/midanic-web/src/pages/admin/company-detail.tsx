@@ -20,7 +20,7 @@ interface Props {
   onFeatures: () => void;
   onRefresh: () => void;
   onImport: () => void;
-  onStatus: (status: string) => Promise<void>;
+  onStatus: (status: string) => Promise<boolean>;
   onCatalog: (mode: "shared" | "separate") => Promise<boolean>;
 }
 
@@ -143,7 +143,7 @@ export function CompanyDetail(props: Props) {
     </AlertDialog>
     <AlertDialog open={nextStatus !== null} onOpenChange={open => { if (!open && !saving) setNextStatus(null); }}>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{tAdmin("Confirm access change")}</AlertDialogTitle><AlertDialogDescription>{t.companyName} · #{t.id}<br />{tAdmin("This changes ERP access for this company.")} {nextStatus && tAdmin(nextStatus)}</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter><AlertDialogCancel disabled={saving}>{tAdmin("Cancel")}</AlertDialogCancel><Button disabled={saving} onClick={async () => { if (!nextStatus) return; setSaving(true); try { await props.onStatus(nextStatus); setNextStatus(null); } finally { setSaving(false); } }}>{tAdmin(saving ? "Saving..." : "Confirm")}</Button></AlertDialogFooter>
+        <AlertDialogFooter><AlertDialogCancel disabled={saving}>{tAdmin("Cancel")}</AlertDialogCancel><Button disabled={saving} onClick={async () => { if (!nextStatus) return; setSaving(true); try { if (await props.onStatus(nextStatus)) setNextStatus(null); } finally { setSaving(false); } }}>{tAdmin(saving ? "Saving..." : "Confirm")}</Button></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   </section>;

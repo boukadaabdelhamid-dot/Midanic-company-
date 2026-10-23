@@ -36,6 +36,10 @@ args = "artifacts/web-store: web"
 task = "workflow.run"
 args = "ERP API"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "company-isolation"
+
 [[workflows.workflow]]
 name = "ERP API"
 author = "agent"
@@ -47,6 +51,17 @@ waitForPort = 8082
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "company-isolation"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/midanic-web test:company-isolation"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [agent]
 stack = "PNPM_WORKSPACE"

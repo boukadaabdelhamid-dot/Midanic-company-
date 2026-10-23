@@ -2,6 +2,7 @@
 export const companyCopy: Record<"en" | "fr" | "ar", Record<string, string>> = {
   en: {},
   fr: {
+    "This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.": "Cela supprime le sous-domaine et bloque son accès. L’entreprise et ses données ERP ne seront pas supprimées.",
     "Features": "Fonctionnalités", "Manage features": "Gérer les fonctionnalités", "Store limit": "Limite d’implantations",
     "Management": "Gestion", "Platform": "Plateforme", "Company register": "Registre des entreprises",
     "ERP Companies": "Entreprises ERP", "Super administrator": "Super-administrateur",
@@ -30,6 +31,7 @@ export const companyCopy: Record<"en" | "fr" | "ar", Record<string, string>> = {
     "not_requested": "Non demandé", "Unavailable": "Indisponible", "Confirm": "Confirmer", "Cancel": "Annuler",
   },
   ar: {
+    "This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.": "سيُحذف النطاق الفرعي ويُمنع الوصول عبره. لن تُحذف الشركة أو بيانات ERP الخاصة بها.",
     "Store limit": "الحد الأقصى للمواقع",
     "Management": "الإدارة", "Platform": "المنصة", "Company register": "سجل الشركات",
     "ERP Companies": "شركات ERP", "Super administrator": "مدير المنصة",

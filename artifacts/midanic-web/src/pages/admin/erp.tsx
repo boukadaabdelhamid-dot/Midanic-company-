@@ -265,14 +265,16 @@ export default function AdminErp() {
   async function updateStatus(tenant: ErpTenant, status: string) {
     if (status === "converted") {
       openContractEditor(tenant);
-      return;
+      return true;
     }
     try {
       const updated = await adminApi.updateErpTenant(tenant.id, { status });
       setTenants((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
       toast({ title: tAdmin("ERP account updated") });
+      return true;
     } catch (error) {
       toast({ title: tAdmin("Update failed"), description: (error as Error).message, variant: "destructive" });
+      return false;
     }
   }
 
@@ -813,7 +815,7 @@ export default function AdminErp() {
 
       <Dialog
         open={Boolean(contractTenant)}
-        onOpenChange={(open) => !open && setContractTenant(null)}
+        onOpenChange={(open) => !open && !savingContract && setContractTenant(null)}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -898,7 +900,7 @@ export default function AdminErp() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(domainTenant)} onOpenChange={(open) => !open && setDomainTenant(null)}>
+      <Dialog open={Boolean(domainTenant)} onOpenChange={(open) => !open && !savingDomain && !deletingDomain && setDomainTenant(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{tAdmin("Manage ERP company domain")}</DialogTitle>
@@ -949,19 +951,19 @@ export default function AdminErp() {
               variant="destructive"
               className="mr-auto"
               onClick={() => setDeleteDomainOpen(true)}
-              disabled={deletingDomain}
+              disabled={deletingDomain || savingDomain}
             >
               <Trash2 className="mr-2 h-4 w-4" />{tAdmin("Delete domain")}
             </Button>
-            <Button variant="outline" onClick={() => setDomainTenant(null)}>{tAdmin("Cancel")}</Button>
-            <Button onClick={() => void saveDomain()} disabled={savingDomain}>
+            <Button variant="outline" disabled={savingDomain || deletingDomain} onClick={() => setDomainTenant(null)}>{tAdmin("Cancel")}</Button>
+            <Button onClick={() => void saveDomain()} disabled={savingDomain || deletingDomain}>
               {savingDomain ? tAdmin("Saving...") : tAdmin("Save domain")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(webStoreTenant)} onOpenChange={(open) => !open && setWebStoreTenant(null)}>
+      <Dialog open={Boolean(webStoreTenant)} onOpenChange={(open) => !open && !savingWebStore && !deletingWebStoreDomain && setWebStoreTenant(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{tAdmin("Manage customer Web Store")}</DialogTitle>
@@ -1027,22 +1029,23 @@ export default function AdminErp() {
               variant="destructive"
               className="mr-auto"
               onClick={() => setDeleteWebStoreDomainOpen(true)}
-              disabled={deletingWebStoreDomain || !webStoreTenant?.webStoreHostname}
+              disabled={savingWebStore || deletingWebStoreDomain || !webStoreTenant?.webStoreHostname}
             >
               <Trash2 className="mr-2 h-4 w-4" />{tAdmin("Delete domain")}
             </Button>
-            <Button variant="outline" onClick={() => setWebStoreTenant(null)}>{tAdmin("Cancel")}</Button>
-            <Button onClick={() => void saveWebStore()} disabled={savingWebStore}>
+            <Button variant="outline" disabled={savingWebStore || deletingWebStoreDomain} onClick={() => setWebStoreTenant(null)}>{tAdmin("Cancel")}</Button>
+            <Button onClick={() => void saveWebStore()} disabled={savingWebStore || deletingWebStoreDomain}>
               {savingWebStore ? tAdmin("Saving...") : tAdmin("Save Web Store")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(featureTenant)} onOpenChange={(open) => !open && setFeatureTenant(null)}>
+      <Dialog open={Boolean(featureTenant)} onOpenChange={(open) => !open && !savingFeatures && setFeatureTenant(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{tAdmin("Manage company features")}</DialogTitle>
+            <p className="text-sm text-muted-foreground">{featureTenant?.companyName} · #{featureTenant?.id}</p>
           </DialogHeader>
           <div className="space-y-2 rounded-lg border p-3">
             <label className="text-sm font-medium" htmlFor="erp-max-stores">
@@ -1089,7 +1092,7 @@ export default function AdminErp() {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFeatureTenant(null)}>{tAdmin("Cancel")}</Button>
+            <Button variant="outline" disabled={savingFeatures} onClick={() => setFeatureTenant(null)}>{tAdmin("Cancel")}</Button>
             <Button onClick={() => void saveFeatures()} disabled={savingFeatures}>
               {savingFeatures ? tAdmin("Saving...") : tAdmin("Save features")}
             </Button>
@@ -1102,6 +1105,8 @@ export default function AdminErp() {
           <AlertDialogHeader>
             <AlertDialogTitle>{tAdmin("Delete this Web Store domain?")}</AlertDialogTitle>
             <AlertDialogDescription>
+              {webStoreTenant?.companyName} · #{webStoreTenant?.id} · {webStoreTenant?.webStoreHostname}
+              {" — "}
               {tAdmin("This removes the Web Store hostname and blocks access through it. The customer and its data will not be deleted.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1123,7 +1128,9 @@ export default function AdminErp() {
           <AlertDialogHeader>
            <AlertDialogTitle>{tAdmin("Delete this ERP domain?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.
+              {domainTenant?.companyName} · #{domainTenant?.id} · {domainTenant?.hostname}
+              {" — "}
+              {tAdmin("This removes the subdomain and blocks access through it. The company and its ERP data will not be deleted.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
