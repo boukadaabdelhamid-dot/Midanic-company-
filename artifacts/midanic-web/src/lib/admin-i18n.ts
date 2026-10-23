@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { companyCopy } from './company-copy';
 
 type SupportedLanguage = 'en' | 'fr' | 'ar';
 
@@ -890,7 +891,7 @@ export function useAdminText() {
       : 'en') as SupportedLanguage;
 
   const tAdmin = useCallback(
-    (text: string) => translations[language][text] ?? text,
+    (text: string) => translations[language][text] ?? companyCopy[language][text] ?? text,
     [language],
   );
 

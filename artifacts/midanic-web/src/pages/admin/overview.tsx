@@ -24,6 +24,7 @@ import { useGetPublicStats } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminText } from '@/lib/admin-i18n';
 import { Link } from 'wouter';
+import { CompanyOverview } from './company-overview';
 
 // ── colours for pie chart ────────────────────────────────────────────────────
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -126,6 +127,7 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-8">
+      <CompanyOverview />
       <div>
         <h1 className="text-2xl font-bold">{tAdmin('Overview')}</h1>
         <p className="text-muted-foreground text-sm mt-1">{tAdmin('Platform at a glance')}</p>

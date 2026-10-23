@@ -25,7 +25,7 @@ export default function Cart() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { lang } = useLang();
-  const { acceptOrders, minOrderAmount } = useStoreConfig();
+  const { acceptOrders, minOrderAmount, showPrices } = useStoreConfig();
   const queryClient = useQueryClient();
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState<{ type: CouponValidationResponseType; value: number; code: string } | null>(null);
@@ -126,15 +126,15 @@ export default function Cart() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8 space-y-6">
-          <div className="hidden md:grid grid-cols-12 gap-4 pb-4 border-b text-sm font-semibold text-muted-foreground uppercase tracking-wider" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          <div className={`hidden md:grid ${showPrices ? "grid-cols-12" : "grid-cols-9"} gap-4 pb-4 border-b text-sm font-semibold text-muted-foreground uppercase tracking-wider`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
             <div className="col-span-6">{lang === 'ar' ? 'المنتج' : 'Product'}</div>
             <div className="col-span-3 text-center">{lang === 'ar' ? 'الكمية' : 'Quantity'}</div>
-            <div className="col-span-3 text-right">{lang === 'ar' ? 'المجموع' : 'Total'}</div>
+            {showPrices && <div className="col-span-3 text-right">{lang === 'ar' ? 'المجموع' : 'Total'}</div>}
           </div>
           
           <div className="space-y-6 md:space-y-0 md:divide-y">
             {items.map((item: CartItem) => (
-              <div key={item.id} className="flex flex-col md:grid md:grid-cols-12 gap-6 items-start md:items-center py-6 bg-card md:bg-transparent border md:border-0 rounded-xl md:rounded-none p-4 md:p-0">
+              <div key={item.id} className={`flex flex-col md:grid ${showPrices ? "md:grid-cols-12" : "md:grid-cols-9"} gap-6 items-start md:items-center py-6 bg-card md:bg-transparent border md:border-0 rounded-xl md:rounded-none p-4 md:p-0`}>
                 {/* Product details */}
                 <div className="col-span-6 flex gap-4 w-full">
                   <div className="w-24 h-24 bg-muted/20 rounded-lg overflow-hidden shrink-0 border">
@@ -148,7 +148,7 @@ export default function Cart() {
                     <Link href={`/products/${item.product?.id}`} className="font-serif font-bold text-lg leading-tight hover:text-primary transition-colors line-clamp-2 mb-1" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                       {lang === 'ar' ? item.product?.nameAr : item.product?.nameEn}
                     </Link>
-                    <div className="text-muted-foreground font-medium mb-3">دج {item.product?.price}</div>
+                    {showPrices && <div className="text-muted-foreground font-medium mb-3">دج {item.product?.price}</div>}
                     <button 
                       onClick={() => handleRemove(item.product?.id ?? item.id)}
                       disabled={storeCart.isPending}
@@ -183,10 +183,12 @@ export default function Cart() {
                 </div>
                 
                 {/* Total */}
-                <div className="col-span-3 flex justify-between md:justify-end w-full font-bold text-lg text-primary pt-4 border-t md:border-0 md:pt-0">
-                  <span className="md:hidden text-muted-foreground">{lang === 'ar' ? 'المجموع:' : 'Total:'}</span>
-                  دج {(parseFloat(item.product?.price ?? "0") * item.quantity).toFixed(2)}
-                </div>
+                {showPrices && (
+                  <div className="col-span-3 flex justify-between md:justify-end w-full font-bold text-lg text-primary pt-4 border-t md:border-0 md:pt-0">
+                    <span className="md:hidden text-muted-foreground">{lang === 'ar' ? 'المجموع:' : 'Total:'}</span>
+                    دج {(parseFloat(item.product?.price ?? "0") * item.quantity).toFixed(2)}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -198,7 +200,7 @@ export default function Cart() {
               {lang === 'ar' ? 'ملخص الطلب' : 'Order Summary'}
             </h2>
 
-            <div className="space-y-4 text-base mb-8">
+            {showPrices && <div className="space-y-4 text-base mb-8">
               <div className="flex justify-between text-muted-foreground" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                 <span>{lang === 'ar' ? 'المجموع الفرعي' : 'Subtotal'}</span>
                 <span className="font-medium text-foreground">دج {subtotal.toFixed(2)}</span>
@@ -215,10 +217,6 @@ export default function Cart() {
                 <span>{lang === 'ar' ? 'الإجمالي' : 'Total'}</span>
                 <span className="text-primary">دج {total.toFixed(2)}</span>
               </div>
-              <p className="text-xs text-muted-foreground text-center mt-2" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                {lang === 'ar' ? 'شامل ضريبة القيمة المضافة' : 'Includes VAT'}
-              </p>
-
               {belowMinOrder && (
                 <div className="flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -227,7 +225,15 @@ export default function Cart() {
                     : `Minimum order amount is دج ${minOrderAmount.toFixed(2)}. Please add more items.`}
                 </div>
               )}
-            </div>
+            </div>}
+            {belowMinOrder && !showPrices && (
+              <div className="flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-6 text-xs" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                {lang === 'ar'
+                  ? 'لم يتم استيفاء الحد الأدنى للطلب. أضف المزيد من المنتجات.'
+                  : 'The minimum order requirement is not met. Add more products.'}
+              </div>
+            )}
 
             <div className="space-y-3 mb-8">
               <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground block" dir={lang === 'ar' ? 'rtl' : 'ltr'}>

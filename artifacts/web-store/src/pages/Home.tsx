@@ -1,196 +1,203 @@
 import React from "react";
-import { Link } from "wouter";
-import { getGetProductsQueryKey, useGetProducts } from "@workspace/erp-api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
+import { getGetProductQueryKey, getGetProductQueryOptions, getGetProductsQueryKey, useGetProducts } from "@workspace/erp-api-client-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight, Check, Search, ShoppingBag, Sparkles } from "lucide-react";
 import { resolveImg } from "@/lib/utils";
 import { ProductCard } from "@/components/product/ProductCard";
+import { StoreCategoryCards, type StoreProductType } from "@/components/product/StoreCategoryCards";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLang } from "@/hooks/use-lang";
 import { useStoreConfig } from "@/hooks/use-store-config";
-import { AlertTriangle } from "lucide-react";
 import { getApiBase } from "../lib/api-base";
 import { getStoreRequestHeaders } from "../lib/store-headers";
+import "./storefront.css";
 
 const API_BASE = getApiBase();
-
-type ProductType = { id: number; nameFr: string; nameAr: string; imageUrl: string | null };
+const FALLBACK_HERO = "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?q=80&w=2000&auto=format&fit=crop";
 
 export default function Home() {
   const { lang } = useLang();
-  const productParams = { limit: 8, filterExposed: "true" };
-  const { data: productsRes, isLoading: isLoadingProducts } = useGetProducts(
-    productParams,
-    { query: {
+  const isAr = lang === "ar";
+  const [, setLocation] = useLocation();
+  const {
+    bannerUrl,
+    description,
+    acceptOrders,
+    nameAr,
+    nameEn,
+    featuredProductIds,
+    featuredCategoryIds,
+  } = useStoreConfig();
+  const productParams = { limit: 100, filterExposed: "true" };
+  const productList = useGetProducts(productParams, {
+    query: {
       queryKey: getGetProductsQueryKey(productParams),
-      refetchInterval: 15_000,
+      staleTime: 30_000,
       refetchOnWindowFocus: "always",
-    } },
-  );
-  const { bannerUrl, acceptOrders, featuredProductIds, description } = useStoreConfig();
-
-  const { data: productTypes, isLoading: isLoadingTypes } = useQuery<ProductType[]>({
+    },
+  });
+  const typeQuery = useQuery<StoreProductType[]>({
     queryKey: ["/api/product-types"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/product-types`, {
+      const response = await fetch(`${API_BASE}/api/product-types`, {
         headers: getStoreRequestHeaders(),
       });
-      if (!res.ok) throw new Error("Failed to fetch product types");
-      return res.json() as Promise<ProductType[]>;
+      if (!response.ok) throw new Error(`Could not load product categories (${response.status})`);
+      return response.json() as Promise<StoreProductType[]>;
     },
     staleTime: 5 * 60 * 1000,
   });
+  const featuredQueries = useQueries({
+    queries: featuredProductIds.map((id) =>
+      getGetProductQueryOptions(id, {
+        query: {
+          queryKey: getGetProductQueryKey(id),
+          enabled: true,
+          retry: false,
+          staleTime: 30_000,
+          refetchOnWindowFocus: "always",
+        },
+      }),
+    ),
+  });
+  const isFeaturedLoading = featuredQueries.some((query) => query.isLoading);
+  const featuredProducts = featuredQueries.flatMap((query) =>
+    query.data && query.data.isExposed !== false ? [query.data] : [],
+  );
+  const products = featuredProductIds.length > 0
+    ? featuredProducts
+    : (productList.data?.products ?? []).slice(0, 8);
+  const productsLoading = featuredProductIds.length > 0 ? isFeaturedLoading : productList.isLoading;
+  const productsError = featuredProductIds.length > 0
+    ? featuredQueries.some((query) => query.isError)
+    : productList.isError;
+  const heroImage = resolveImg(bannerUrl) ?? FALLBACK_HERO;
+  const storeName = isAr ? nameAr : nameEn;
+  const copy = {
+    eyebrow: isAr ? "اختيارات تناسبك" : "A collection for you",
+    heroTitle: isAr ? `اكتشف منتجات ${storeName}` : `Discover ${storeName}`,
+    intro: isAr
+      ? "تصفّح مجموعة المتجر واكتشف ما يناسبك."
+      : "Explore the store collection and find what works for you.",
+    browse: isAr ? "تصفّح المنتجات" : "Browse products",
+    featured: featuredProductIds.length > 0
+      ? (isAr ? "اختيارات المتجر" : "The store edit")
+      : (isAr ? "منتجات المتجر" : "Store products"),
+    featuredHint: featuredProductIds.length > 0
+      ? (isAr ? "منتجات مختارة من المتجر" : "A selection from this store")
+      : (isAr ? "تصفّح المنتجات المتاحة في المتجر" : "Browse the products available in this store"),
+    allProducts: isAr ? "كل المنتجات" : "View all products",
+    searchPlaceholder: isAr ? "ابحث عن منتج..." : "Search products...",
+    searchLabel: isAr ? "بحث المنتجات" : "Search products",
+    stockNote: isAr ? "تصفح بسهولة، واختر ما يناسبك" : "Browse easily. Find your favorites.",
+    productsError: isAr ? "تعذّر تحميل المنتجات." : "Products could not be loaded.",
+    retry: isAr ? "إعادة المحاولة" : "Try again",
+    emptyProducts: featuredProductIds.length > 0
+      ? (isAr ? "لا توجد منتجات مميزة حالياً." : "No featured products are available right now.")
+      : (isAr ? "لا توجد منتجات متاحة حالياً." : "No products are available right now."),
+    ordersPaused: isAr ? "الطلبات متوقفة مؤقتاً. يمكنك متابعة تصفح المنتجات." : "Orders are temporarily paused. You can continue browsing.",
+  };
 
-  const allProducts = productsRes?.products ?? [];
-  const allTypes = productTypes ?? [];
-
-  const sortedProducts = featuredProductIds.length > 0
-    ? [
-        ...allProducts.filter((p) => featuredProductIds.includes(p.id)),
-        ...allProducts.filter((p) => !featuredProductIds.includes(p.id)),
-      ]
-    : allProducts;
-
-  const heroImage = resolveImg(bannerUrl) ||
-    "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?q=80&w=2000&auto=format&fit=crop";
+  const scrollToProducts = () => document.getElementById("store-products")?.scrollIntoView({ behavior: "smooth" });
+  const openSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const value = String(form.get("search") ?? "").trim();
+    setLocation(value ? `/products?search=${encodeURIComponent(value)}` : "/products");
+  };
 
   return (
-    <div className="flex flex-col min-h-screen">
-
-      {/* Orders suspended banner */}
-      {!acceptOrders && (
-        <div className="w-full bg-amber-50 border-b border-amber-200 py-3 px-4 flex items-center justify-center gap-2 text-amber-800 text-sm font-medium" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {lang === 'ar'
-            ? 'لا يمكن استقبال الطلبات مؤقتاً. يمكنك التصفح والإضافة إلى السلة ولكن لا يمكن تأكيد الطلب في هذا الوقت.'
-            : 'Orders are temporarily suspended. You can browse and add to cart, but checkout is unavailable right now.'}
-        </div>
-      )}
-
-      {/* Hero Section */}
-      <section className="relative w-full h-[80vh] min-h-[600px] flex items-center justify-center bg-secondary/30 overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent z-10" />
-          <div className="absolute inset-0 bg-primary/20 z-10 mix-blend-multiply" />
-          <img
-            src={heroImage}
-            alt="Luxury Beauty"
-            className="w-full h-full object-cover object-center"
-          />
-        </div>
-        <div className="container relative z-20 px-4 md:px-6 text-center max-w-4xl mx-auto flex flex-col items-center">
-          <Badge variant="outline" className="mb-6 bg-background/50 backdrop-blur border-primary/20 text-primary uppercase tracking-widest text-xs px-4 py-1.5 font-medium">
-            {lang === 'ar' ? 'العلامة التجارية الفاخرة' : 'Premium Grooming'}
-          </Badge>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold tracking-tight mb-6 text-foreground drop-shadow-sm">
-            {lang === 'ar' ? 'اكتشف أناقتك المميزة' : 'Discover Your Signature Elegance'}
-          </h1>
-          <p className="mt-4 text-lg md:text-2xl max-w-2xl mx-auto text-muted-foreground">
-            {description
-              ? description
-              : lang === 'ar'
-                ? 'مستحضرات التجميل والعناية الفاخرة المصممة لنمط الحياة العصري في الشرق الأوسط.'
-                : 'Premium beauty and grooming essentials curated for the modern Middle Eastern lifestyle.'}
-          </p>
-          <div className="mt-10 flex flex-col sm:flex-row gap-4">
-            <Link href="/products">
-              <Button size="lg" className="text-lg px-10 h-14 rounded-full" data-testid="button-shop-now">
-                {lang === 'ar' ? 'تسوق الآن' : 'Shop Now'}
-              </Button>
-            </Link>
+    <div className="storefront-home" dir={isAr ? "rtl" : "ltr"}>
+      {!acceptOrders && <div className="sf-order-notice" role="status">{copy.ordersPaused}</div>}
+      <section className="sf-hero" id="top">
+        <img className="sf-hero-image" src={heroImage} alt="" />
+        <div className="sf-hero-shade" />
+        <div className="sf-hero-copy">
+          <span className="sf-eyebrow"><Sparkles size={15} aria-hidden="true" />{copy.eyebrow}</span>
+          <h1>{copy.heroTitle}</h1>
+          <p>{description || copy.intro}</p>
+          <div className="sf-hero-actions">
+            <Button className="sf-primary-button" onClick={scrollToProducts}>
+              {copy.browse}{isAr ? <ArrowLeft size={17} /> : <ArrowRight size={17} />}
+            </Button>
+            <span className="sf-hero-proof"><Check size={15} />{copy.stockNote}</span>
           </div>
         </div>
+        <span className="sf-hero-caption">{storeName}</span>
       </section>
 
-      {/* Featured Categories (Product Types) */}
-      <section className="py-20 md:py-32 bg-background border-b border-border/40">
-        <div className="container px-4 md:px-6 mx-auto">
-          <div className="flex flex-col items-center text-center mb-16">
-            <h2 className="text-4xl font-serif font-bold tracking-tight">
-              {lang === 'ar' ? 'تسوق حسب الفئة' : 'Shop by Category'}
-            </h2>
-            <div className="w-12 h-1 bg-primary mt-6 rounded-full opacity-60"></div>
-          </div>
+      <StoreCategoryCards
+        categories={typeQuery.data ?? []}
+        featuredCategoryIds={featuredCategoryIds}
+        products={productList.data?.products ?? []}
+        isLoading={typeQuery.isLoading}
+        isError={typeQuery.isError}
+        onRetry={() => { void typeQuery.refetch(); }}
+        lang={lang}
+      />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-            {isLoadingTypes ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-square rounded-full" />
-              ))
-            ) : (
-              allTypes.map((type) => (
-                <Link
-                  key={type.id}
-                  href={`/products?type=${encodeURIComponent(type.nameFr)}`}
-                  className="group flex flex-col items-center gap-6"
-                  data-testid={`link-type-${type.id}`}
-                >
-                  <div className="w-36 h-36 md:w-56 md:h-56 rounded-full bg-secondary/30 flex items-center justify-center border border-border group-hover:border-primary/50 group-hover:bg-secondary/50 transition-all duration-500 overflow-hidden relative">
-                    {type.imageUrl ? (
-                      <img
-                        src={resolveImg(type.imageUrl)}
-                        alt={lang === 'ar' ? type.nameAr : type.nameFr}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      />
-                    ) : (
-                      <span className="text-5xl text-primary font-serif italic opacity-30">
-                        {(lang === 'ar' ? type.nameAr : type.nameFr).charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-serif text-xl group-hover:text-primary transition-colors">
-                      {lang === 'ar' ? type.nameAr : type.nameFr}
-                    </h3>
-                  </div>
-                </Link>
-              ))
-            )}
+      <section className="sf-collection" id="store-products">
+        <div className="sf-collection-heading">
+          <div>
+            <span className="sf-kicker">{isAr ? "المجموعة" : "THE COLLECTION"}</span>
+            <h2>{copy.featured}</h2>
+            <p>{copy.featuredHint}</p>
           </div>
+          <Link href="/products" className="sf-view-all">
+            {copy.allProducts}{isAr ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}
+          </Link>
         </div>
-      </section>
 
-      {/* Featured Products */}
-      <section className="py-20 md:py-32 bg-background">
-        <div className="container px-4 md:px-6 mx-auto">
-          <div className="flex justify-between items-end mb-12">
-            <div>
-              <h2 className="text-4xl font-serif font-bold tracking-tight">
-                {lang === 'ar' ? 'المجموعة المميزة' : 'Featured Collection'}
-              </h2>
-            </div>
-            <Link href="/products">
-              <Button variant="link" className="hidden sm:flex text-lg hover:no-underline hover:text-primary/80">
-                {lang === 'ar' ? 'عرض الكل' : 'View All'} &rarr;
-              </Button>
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {isLoadingProducts ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex flex-col gap-4">
-                  <Skeleton className="aspect-[4/5] w-full rounded-lg" />
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                </div>
-              ))
-            ) : (
-              sortedProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))
-            )}
-          </div>
-
-          <div className="mt-12 sm:hidden flex justify-center">
-            <Link href="/products">
-              <Button variant="outline" className="w-full h-12 rounded-full text-lg">
-                {lang === 'ar' ? 'عرض الكل' : 'View All'}
-              </Button>
-            </Link>
-          </div>
+        <div className="sf-tools">
+          <form className="sf-search" onSubmit={openSearch} role="search">
+            <Search size={18} aria-hidden="true" />
+            <input name="search" type="search" placeholder={copy.searchPlaceholder} aria-label={copy.searchLabel} />
+            <button type="submit" aria-label={copy.searchLabel}>{isAr ? "بحث" : "Search"}</button>
+          </form>
+          <span className="sf-result-count" aria-live="polite">
+            {productsLoading ? (isAr ? "جارٍ التحميل…" : "Loading…") : products.length}
+          </span>
         </div>
+
+        {productsLoading ? (
+          <div className="sf-product-grid" aria-label={isAr ? "جارٍ تحميل المنتجات" : "Loading products"}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div className="sf-skeleton-card" key={index}>
+                <Skeleton className="aspect-[4/5] w-full rounded-xl" />
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : productsError ? (
+          <div className="sf-query-state" role="alert">
+            <p>{copy.productsError}</p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (featuredProductIds.length > 0) {
+                  void Promise.all(featuredQueries.map((query) => query.refetch()));
+                } else {
+                  void productList.refetch();
+                }
+              }}
+            >
+              {copy.retry}
+            </Button>
+          </div>
+        ) : products.length > 0 ? (
+          <div className="sf-product-grid">
+            {products.map((product) => <ProductCard key={product.id} product={product} />)}
+          </div>
+        ) : (
+          <div className="sf-query-state">
+            <ShoppingBag size={25} aria-hidden="true" />
+            <p>{copy.emptyProducts}</p>
+            <Link href="/products" className="sf-text-link">{copy.allProducts}</Link>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/auth-context';
 import { useTheme } from '@/contexts/theme-context';
@@ -15,6 +15,8 @@ import { Menu, X, Sun, Moon, Globe, User, LogOut, ShieldCheck, LayoutDashboard }
 import { useUpdateLanguage, useLogout } from '@workspace/api-client-react';
 
 export function Navbar() {
+  const [location] = useLocation();
+  const isAdmin = location.startsWith('/admin');
   const { t, i18n } = useTranslation();
   const { user, isAuthenticated, logout: authLogout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -73,7 +75,7 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-6">
+          {!isAdmin && <div className="hidden md:flex items-center gap-6">
             <Link href="/products" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-products">
               {t('nav.products')}
             </Link>
@@ -89,7 +91,7 @@ export function Navbar() {
             <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-blog">
               {t('nav.blog')}
             </Link>
-          </div>
+          </div>}
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
@@ -178,6 +180,9 @@ export function Navbar() {
             variant="ghost"
             size="sm"
             className="md:hidden"
+            aria-label={mobileMenuOpen
+              ? (i18n.language.startsWith('ar') ? 'إغلاق قائمة الحساب' : 'Close account menu')
+              : (i18n.language.startsWith('ar') ? 'الحساب واللغة' : 'Account and language')}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             data-testid="button-mobile-menu"
           >
@@ -188,6 +193,7 @@ export function Navbar() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 space-y-3 border-t border-border">
+            {!isAdmin && <>
             <Link
               href="/products"
               className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
@@ -228,6 +234,7 @@ export function Navbar() {
             >
               {t('nav.blog')}
             </Link>
+            </>}
             <div className="flex items-center gap-2 pt-2 border-t border-border">
               <Button
                 variant="ghost"

@@ -5,32 +5,32 @@ import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, RotateCw } from "lucide-react";
 import { useLang } from "@/hooks/use-lang";
 import { getApiBase } from "../lib/api-base";
 import { getStoreRequestHeaders } from "../lib/store-headers";
 
 const API_BASE = getApiBase();
 
-type ProductType = { id: number; nameFr: string; nameAr: string; imageUrl: string | null };
+type ProductType = { id: number; nameFr?: string; nameEn?: string; nameAr: string; imageUrl?: string | null };
 
 export default function Products() {
   const { lang } = useLang();
-  const [searchParams] = useState(new URLSearchParams(window.location.search));
+  const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const initialType = searchParams.get("type") || undefined;
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [activeType, setActiveType] = useState<string | undefined>(initialType);
   const [page, setPage] = useState(1);
   const pageSize = 24;
 
-  const { data: productTypes } = useQuery<ProductType[]>({
+  const { data: productTypes, isError: isTypesError, refetch: refetchTypes } = useQuery<ProductType[]>({
     queryKey: ["/api/product-types"],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/product-types`, {
         headers: getStoreRequestHeaders(),
       });
-      if (!res.ok) throw new Error("Failed to fetch product types");
+      if (!res.ok) throw new Error(`Could not load product categories (${res.status})`);
       return res.json() as Promise<ProductType[]>;
     },
     staleTime: 5 * 60 * 1000,
@@ -43,7 +43,7 @@ export default function Products() {
     page,
     limit: pageSize,
   };
-  const { data: productsRes, isLoading, isError, isFetching } = useGetProducts(
+  const { data: productsRes, isLoading, isError, isFetching, refetch } = useGetProducts(
     productParams,
     { query: {
       queryKey: getGetProductsQueryKey(productParams),
@@ -54,6 +54,7 @@ export default function Products() {
   const products = productsRes?.products ?? [];
   const total = productsRes?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const categoryLabel = (type: ProductType) => type.nameFr || type.nameEn || "";
 
   // Hiding the last product on a page must not strand visitors on an empty page.
   useEffect(() => {
@@ -61,13 +62,13 @@ export default function Products() {
   }, [productsRes, page, totalPages]);
 
   return (
-    <div className="container mx-auto px-4 py-12 md:py-20">
+    <div className="container mx-auto px-4 py-12 md:py-20" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div className="mb-16 text-center max-w-2xl mx-auto">
         <h1 className="text-4xl md:text-5xl font-serif font-bold mb-4 text-foreground">
           {lang === 'ar' ? 'مجموعتنا' : 'Our Collection'}
         </h1>
         <p className="text-lg text-muted-foreground">
-          {lang === 'ar' ? 'تصفح مجموعتنا المختارة بعناية من منتجات العناية والجمال الفاخرة.' : 'Browse our carefully curated selection of premium beauty and grooming essentials.'}
+          {lang === 'ar' ? 'تصفّح المنتجات المتاحة في هذا المتجر.' : 'Browse products available from this store.'}
         </p>
       </div>
 
@@ -75,10 +76,11 @@ export default function Products() {
         {/* Sidebar Filters */}
         <div className="w-full md:w-64 flex flex-col gap-8 shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Search className={`absolute ${lang === "ar" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground`} />
             <Input
               placeholder={lang === 'ar' ? "بحث..." : "Search..."}
-              className="pl-10 h-12 bg-background border-border/60 focus-visible:border-primary"
+              className={`${lang === "ar" ? "pr-10" : "pl-10"} h-12 bg-background border-border/60 focus-visible:border-primary`}
+              dir={lang === "ar" ? "rtl" : "ltr"}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               data-testid="input-search"
@@ -104,16 +106,25 @@ export default function Products() {
               {productTypes?.map((type) => (
                 <Button
                   key={type.id}
-                  variant={activeType === type.nameFr ? "secondary" : "ghost"}
-                  className={`justify-start font-medium text-left ${activeType === type.nameFr ? 'bg-secondary/50 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                  onClick={() => { setActiveType(type.nameFr); setPage(1); }}
+                  variant={activeType === categoryLabel(type) ? "secondary" : "ghost"}
+                  className={`justify-start font-medium text-left ${activeType === categoryLabel(type) ? 'bg-secondary/50 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => { setActiveType(categoryLabel(type)); setPage(1); }}
                   data-testid={`btn-category-${type.id}`}
                 >
                   <span dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                    {lang === 'ar' ? type.nameAr : type.nameFr}
+                    {lang === 'ar' ? type.nameAr : categoryLabel(type)}
                   </span>
                 </Button>
               ))}
+              {isTypesError && (
+                <div className="mt-2 text-sm text-destructive" role="alert">
+                  <p>{lang === "ar" ? "تعذّر تحميل الفئات." : "Categories could not be loaded."}</p>
+                  <Button type="button" variant="link" className="h-auto px-0" onClick={() => { void refetchTypes(); }}>
+                    <RotateCw className="mr-1 h-3 w-3" />
+                    {lang === "ar" ? "إعادة المحاولة" : "Try again"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -130,12 +141,25 @@ export default function Products() {
                 </div>
               ))}
             </div>
-          ) : isError || products.length === 0 ? (
+          ) : isError ? (
+            <div className="text-center py-32 bg-muted/20 border border-border/40 rounded-xl flex flex-col items-center justify-center">
+              <p className="text-xl text-muted-foreground font-serif mb-6" role="alert">
+                {lang === 'ar' ? 'تعذّر تحميل المنتجات حالياً.' : 'Products could not be loaded right now.'}
+              </p>
+              <Button
+                variant="outline"
+                size="lg"
+                className="rounded-full px-8"
+                onClick={() => { void refetch(); }}
+              >
+                <RotateCw className="mr-2 h-4 w-4" />
+                {lang === 'ar' ? 'إعادة المحاولة' : 'Try again'}
+              </Button>
+            </div>
+          ) : products.length === 0 ? (
             <div className="text-center py-32 bg-muted/20 border border-border/40 rounded-xl flex flex-col items-center justify-center">
               <p className="text-xl text-muted-foreground font-serif mb-6">
-                {isError
-                  ? (lang === 'ar' ? 'تعذّر تحميل المنتجات حالياً.' : 'Products could not be loaded right now.')
-                  : (lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : 'No products found matching your criteria.')}
+                {lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : 'No products found matching your criteria.'}
               </p>
               <Button
                 variant="outline"

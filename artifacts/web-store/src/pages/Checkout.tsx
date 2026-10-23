@@ -56,7 +56,7 @@ export default function Checkout() {
   const { lang } = useLang();
   const { user } = useAuth();
 
-  const { acceptOrders, minOrderAmount } = useStoreConfig();
+  const { acceptOrders, minOrderAmount, showPrices } = useStoreConfig();
   const storeCart = useStoreCart();
   const { data: cart, isLoading, error: cartError } = storeCart;
   const createOrder = useSubmitStoreOrder();
@@ -179,8 +179,12 @@ export default function Checkout() {
             {!acceptOrders
               ? (lang === "ar" ? "الطلبات معلقة مؤقتاً. لا يمكن تأكيد الطلب في هذا الوقت." : "Orders are temporarily suspended. You cannot place an order right now.")
               : (lang === "ar"
-                  ? `الحد الأدنى للطلب هو دج ${minOrderAmount.toFixed(2)}. يرجى إضافة المزيد من المنتجات.`
-                  : `Minimum order is دج ${minOrderAmount.toFixed(2)}. Please add more items to your cart.`)}
+                  ? showPrices
+                    ? `الحد الأدنى للطلب هو دج ${minOrderAmount.toFixed(2)}. يرجى إضافة المزيد من المنتجات.`
+                    : "لم يتم استيفاء الحد الأدنى للطلب. أضف المزيد من المنتجات."
+                  : showPrices
+                    ? `Minimum order is دج ${minOrderAmount.toFixed(2)}. Please add more items to your cart.`
+                    : "The minimum order requirement is not met. Add more products.")}
           </div>
         )}
         <h1
@@ -317,32 +321,28 @@ export default function Checkout() {
                           : item.product?.nameEn}
                       </p>
                       <p className="text-muted-foreground text-xs mt-1">
-                        {item.quantity} x دج {item.product?.price}
+                        {showPrices ? `${item.quantity} x دج ${item.product?.price}` : `${item.quantity} ${lang === "ar" ? "قطعة" : "items"}`}
                       </p>
                     </div>
-                    <div className="font-bold text-sm shrink-0">
-                      دج{" "}
-                      {(
-                        parseFloat(item.product?.price ?? "0") * item.quantity
-                      ).toFixed(2)}
-                    </div>
+                    {showPrices && (
+                      <div className="font-bold text-sm shrink-0">
+                        دج{" "}
+                        {(
+                          parseFloat(item.product?.price ?? "0") * item.quantity
+                        ).toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
 
-              <div
+              {showPrices && <div
                 className="space-y-3 pt-6 border-t text-sm mb-6"
                 dir={lang === "ar" ? "rtl" : "ltr"}
               >
                 <div className="flex justify-between text-muted-foreground">
                   <span>{lang === "ar" ? "المجموع الفرعي" : "Subtotal"}</span>
                   <span>دج {subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{lang === "ar" ? "التوصيل" : "Shipping"}</span>
-                  <span className="text-green-600 font-medium">
-                    {lang === "ar" ? "مجاني" : "Free"}
-                  </span>
                 </div>
                 {couponCode && (
                   <div className="flex justify-between text-green-600">
@@ -358,7 +358,7 @@ export default function Checkout() {
                   <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
                   <span>دج {subtotal.toFixed(2)}</span>
                 </div>
-              </div>
+              </div>}
 
               <Button
                 type="submit"

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'wouter';
 import {
   adminApi,
   type AdminLicense,
@@ -59,20 +60,6 @@ const STATUS_COLORS: Record<string, string> = {
   suspended: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   revoked: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
-
-const ERP_STATUS_COLORS: Record<string, string> = {
-  active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  converted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  suspended: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  expired: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-};
-
-function formatCalendarDate(value: string | null) {
-  if (!value) return '—';
-  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
-}
 
 const TYPE_LABELS: Record<string, string> = {
   trial: 'Trial',
@@ -642,60 +629,10 @@ export default function AdminLicenses() {
         </TabsContent>
 
         <TabsContent value="companies" className="mt-4 space-y-3">
-          <div className="rounded-md border bg-background">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tAdmin('Company')}</TableHead>
-                  <TableHead>{tAdmin('Owner')}</TableHead>
-                  <TableHead>{tAdmin('ERP status')}</TableHead>
-                  <TableHead>{tAdmin('Contract term')}</TableHead>
-                  <TableHead>{tAdmin('Contract start date')}</TableHead>
-                  <TableHead>{tAdmin('Contract expiry')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {companiesLoading
-                  ? Array.from({ length: 4 }).map((_, i) => (
-                      <TableRow key={i}>
-                        {Array.from({ length: 6 }).map((__, j) => (
-                          <TableCell key={j}><div className="h-4 w-24 animate-pulse rounded bg-muted" /></TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  : companies.length === 0
-                  ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        {tAdmin('No ERP companies yet')}
-                      </TableCell>
-                    </TableRow>
-                  )
-                  : companies.map(company => {
-                    const ownerName = [company.ownerFirstName, company.ownerLastName].filter(Boolean).join(' ');
-                    return (
-                      <TableRow key={company.id}>
-                        <TableCell className="font-medium">{company.companyName}</TableCell>
-                        <TableCell className="text-sm">{company.ownerEmail || ownerName || `#${company.ownerUserId}`}</TableCell>
-                        <TableCell>
-                          <Badge className={`text-xs ${ERP_STATUS_COLORS[company.status] ?? ''}`}>
-                            {tAdmin(company.status)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {company.contractPeriod ? tAdmin(company.contractPeriod) : tAdmin('No contract set')}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatCalendarDate(company.contractStartsAt)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatCalendarDate(company.contractEndsAt)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
+          <div className="rounded-xl border bg-background p-8 text-center">
+            <h2 className="font-semibold">{tAdmin('ERP Companies')}</h2>
+            <p className="my-3 text-sm text-muted-foreground">{tAdmin('ERP accounts are managed in the company register.')}</p>
+            <Button asChild><Link href="/admin/erp">{tAdmin('Open company register')}</Link></Button>
           </div>
         </TabsContent>
       </Tabs>

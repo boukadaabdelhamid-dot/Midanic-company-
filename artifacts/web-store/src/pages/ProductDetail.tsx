@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLang } from "@/hooks/use-lang";
-import { Star, ShoppingCart, Minus, Plus, ShieldCheck, Truck } from "lucide-react";
+import { useStoreConfig } from "@/hooks/use-store-config";
+import { Star, ShoppingCart, Minus, Plus } from "lucide-react";
 import { resolveImg } from "@/lib/utils";
 
 export default function ProductDetail() {
@@ -24,6 +25,7 @@ export default function ProductDetail() {
   const productId = Number(params?.id);
   const { user } = useAuth();
   const { lang } = useLang();
+  const { showPrices, showStock, acceptOrders } = useStoreConfig();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -164,9 +166,7 @@ export default function ProductDetail() {
             </span>
           </div>
           
-          <div className="text-3xl font-bold mb-8 text-primary">
-            دج {product.price}
-          </div>
+          {showPrices && <div className="text-3xl font-bold mb-8 text-primary">دج {product.price}</div>}
 
           <div className="mb-10 text-muted-foreground leading-relaxed text-lg" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
             {lang === 'ar' ? product.descriptionAr : product.descriptionEn}
@@ -194,7 +194,7 @@ export default function ProductDetail() {
                     size="icon" 
                     className="h-10 w-10 rounded-full hover:bg-muted"
                     onClick={() => setQuantity(Math.min(product.stock || 99, quantity + 1))}
-                    disabled={quantity >= (product.stock || 99) || isOutOfStock}
+                    disabled={quantity >= (product.stock || 99) || isOutOfStock || !acceptOrders}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -205,13 +205,15 @@ export default function ProductDetail() {
                 <Button 
                   size="lg" 
                   className="w-full h-14 text-lg rounded-full shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
-                  disabled={isOutOfStock || addToCart.isPending}
+                  disabled={isOutOfStock || !acceptOrders || addToCart.isPending}
                   onClick={handleAddToCart}
                   data-testid="button-add-to-cart"
                 >
                   <ShoppingCart className="mr-3 h-5 w-5" />
-                  {isOutOfStock 
-                    ? (lang === 'ar' ? 'نفذت الكمية' : 'Out of Stock') 
+                  {!acceptOrders
+                    ? (lang === 'ar' ? 'الطلبات متوقفة مؤقتاً' : 'Orders temporarily paused')
+                    : isOutOfStock
+                      ? (lang === 'ar' ? 'نفذت الكمية' : 'Out of Stock')
                     : (addToCart.isPending 
                         ? (lang === 'ar' ? 'جاري الإضافة...' : 'Adding...') 
                         : (lang === 'ar' ? 'أضف إلى السلة' : 'Add to Cart'))}
@@ -219,23 +221,13 @@ export default function ProductDetail() {
               </div>
             </div>
             
-            {product.stock !== undefined && (
+            {showStock && product.stock !== undefined && (
               <p className={`mt-4 text-sm font-medium ${isOutOfStock ? 'text-destructive' : 'text-green-600'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                 {isOutOfStock ? (lang === 'ar' ? 'المنتج غير متوفر حالياً' : 'Currently out of stock') : (lang === 'ar' ? `${product.stock} متوفر في المخزون` : `${product.stock} available in stock`)}
               </p>
             )}
           </div>
           
-          <div className="mt-8 pt-8 border-t grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex items-center gap-3 text-muted-foreground">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">{lang === 'ar' ? 'منتجات أصلية 100%' : '100% Authentic Products'}</span>
-            </div>
-            <div className="flex items-center gap-3 text-muted-foreground">
-              <Truck className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">{lang === 'ar' ? 'توصيل سريع وموثوق' : 'Fast & Reliable Delivery'}</span>
-            </div>
-          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { adminApi, type AdminCustomer, type ErpTenant } from "@/lib/admin-api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,14 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -40,7 +32,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminText } from "@/lib/admin-i18n";
-import { BriefcaseBusiness, CalendarDays, Copy, ExternalLink, Globe2, KeyRound, Plus, RefreshCw, Settings2, ShoppingBag, Trash2, Upload } from "lucide-react";
+import { CompanyMetrics, CompanyRegister, needsCompanyAttention } from "./company-register";
+import { CompanyDetail } from "./company-detail";
+import { BriefcaseBusiness, Copy, ExternalLink, Globe2, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "active", "suspended", "expired", "converted"];
 const ACCOUNT_GROUP_OPTIONS = [
@@ -51,16 +45,6 @@ const ACCOUNT_GROUP_OPTIONS = [
 ] as const;
 type AccountGroup = "trial" | "contracted" | "other";
 type AccountGroupFilter = "all" | AccountGroup;
-const ACCOUNT_GROUP_LABELS: Record<AccountGroup, string> = {
-  trial: "Trial account",
-  contracted: "Contracted account",
-  other: "Other account",
-};
-const ACCOUNT_GROUP_STYLES: Record<AccountGroup, string> = {
-  trial: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  contracted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  other: "bg-muted text-muted-foreground",
-};
 const FEATURE_OPTIONS = [
   { key: "dashboard", label: "Dashboard", description: "Company overview and KPIs" },
   { key: "orders", label: "Sales and orders", description: "POS, sales orders, returns, and online orders" },
@@ -81,13 +65,6 @@ const FEATURE_OPTIONS = [
   { key: "web_store", label: "Web Store", description: "Customer-facing online store" },
 ] as const;
 
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  suspended: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  expired: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  converted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-};
 
 function getAccountGroup(
   tenant: Pick<ErpTenant, "status" | "trialStartedAt" | "trialEndsAt" | "contractPeriod">,
@@ -137,7 +114,20 @@ function formatStoreUsage(
 }
 
 export default function AdminErp() {
+  const searchParams = useSearch();
+  const [, navigate] = useLocation();
   const [tenants, setTenants] = useState<ErpTenant[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [companySearch, setCompanySearch] = useState("");
+  const [metricFilter, setMetricFilter] = useState("all");
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    const company = Number(params.get("company"));
+    setSelectedCompanyId(Number.isSafeInteger(company) && company > 0 ? company : null);
+    const focus = params.get("focus");
+    if (focus && ["all", "active", "trial", "attention"].includes(focus)) setMetricFilter(focus);
+  }, [searchParams]);
   const [accountGroupFilter, setAccountGroupFilter] = useState<AccountGroupFilter>("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -213,10 +203,12 @@ export default function AdminErp() {
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const result = await adminApi.listErpTenants();
       setTenants(result.tenants);
     } catch (error) {
+      setLoadError((error as Error).message);
       toast({ title: tAdmin("Unable to load ERP accounts"), description: (error as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
@@ -259,10 +251,16 @@ export default function AdminErp() {
   const visibleTenants = useMemo(
     () => tenants.filter((tenant) =>
       (accountGroupFilter === "all" || getAccountGroup(tenant) === accountGroupFilter) &&
-      (statusFilter === "all" || tenant.status === statusFilter)
+      (statusFilter === "all" || tenant.status === statusFilter) &&
+      (metricFilter === "all" ||
+        (metricFilter === "active" && ["active", "converted"].includes(tenant.status)) ||
+        (metricFilter === "trial" && getAccountGroup(tenant) === "trial") ||
+        (metricFilter === "attention" && needsCompanyAttention(tenant))) &&
+      (!companySearch.trim() || `${tenant.companyName} ${tenant.ownerEmail ?? ""} ${tenant.ownerFirstName ?? ""} ${tenant.ownerLastName ?? ""} ${tenant.hostname ?? ""} ${tenant.id}`.toLocaleLowerCase().includes(companySearch.trim().toLocaleLowerCase()))
     ),
-    [accountGroupFilter, statusFilter, tenants],
+    [accountGroupFilter, statusFilter, metricFilter, companySearch, tenants],
   );
+  const selectedCompany = tenants.find(tenant => tenant.id === selectedCompanyId);
 
   async function updateStatus(tenant: ErpTenant, status: string) {
     if (status === "converted") {
@@ -319,7 +317,7 @@ export default function AdminErp() {
     tenant: ErpTenant,
     productCatalogMode: "separate" | "shared",
   ) {
-    if (tenant.productCatalogMode === productCatalogMode) return;
+    if ((tenant.productCatalogMode ?? "separate") === productCatalogMode) return true;
     try {
       const updated = await adminApi.updateErpTenant(tenant.id, { productCatalogMode });
       setTenants((current) => current.map((item) => item.id === tenant.id ? updated : item));
@@ -327,12 +325,14 @@ export default function AdminErp() {
         title: tAdmin("Product catalog setting saved"),
         description: tAdmin("This applies to new products; existing products stay unchanged."),
       });
+      return true;
     } catch (error) {
       toast({
         title: tAdmin("Could not save product catalog setting"),
         description: error instanceof Error ? error.message : tAdmin("Please try again."),
         variant: "destructive",
       });
+      return false;
     }
   }
 
@@ -583,19 +583,19 @@ export default function AdminErp() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 console-erp">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <BriefcaseBusiness className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">{tAdmin("ERP Control")}</h1>
+            <h1 className="text-2xl font-bold">{tAdmin("ERP Companies")}</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {tAdmin("Control companies, trials, access, and lifecycle from one place.")}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => void loadTenants()} disabled={loading} aria-label="Refresh">
+          <Button variant="outline" size="icon" onClick={() => void loadTenants()} disabled={loading} aria-label={tAdmin("Refresh")}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -662,236 +662,41 @@ export default function AdminErp() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {ACCOUNT_GROUP_OPTIONS.map((group) => (
-          <button
-            key={group.value}
-            type="button"
-            aria-pressed={accountGroupFilter === group.value}
-            className={`rounded-xl border bg-card p-4 text-left transition hover:border-primary/50 ${
-              accountGroupFilter === group.value ? "border-primary ring-1 ring-primary/20" : ""
-            }`}
-            onClick={() => {
-              setAccountGroupFilter(group.value);
-              setStatusFilter("all");
-            }}
-          >
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{tAdmin(group.label)}</p>
-            <p className="mt-2 text-2xl font-semibold">{accountGroupCounts[group.value]}</p>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex justify-end">
+      {!selectedCompany && <>
+      <CompanyMetrics tenants={tenants} selected={metricFilter} onSelect={filter => { setMetricFilter(filter); setStatusFilter("all"); setAccountGroupFilter("all"); }} />
+      <div className="console-toolbar">
+        <Input value={companySearch} onChange={event => setCompanySearch(event.target.value)} placeholder={tAdmin("Search companies")} aria-label={tAdmin("Search companies")} data-testid="input-company-search" />
+        <Select value={accountGroupFilter} onValueChange={value => setAccountGroupFilter(value as AccountGroupFilter)}>
+          <SelectTrigger aria-label={tAdmin("All groups")} className="w-48"><SelectValue /></SelectTrigger>
+          <SelectContent>{ACCOUNT_GROUP_OPTIONS.map(group => <SelectItem key={group.value} value={group.value}>{tAdmin(group.label)} ({accountGroupCounts[group.value]})</SelectItem>)}</SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-44" aria-label={tAdmin("All statuses")}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{tAdmin("All statuses")}</SelectItem>
             {STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{tAdmin(status)}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
-
-      <div className="rounded-xl border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tAdmin("Company")}</TableHead>
-              <TableHead>{tAdmin("Owner")}</TableHead>
-              <TableHead>{tAdmin("Status")}</TableHead>
-              <TableHead>{tAdmin("Company domain")}</TableHead>
-              <TableHead>{tAdmin("Web Store")}</TableHead>
-              <TableHead>{tAdmin("Contract")}</TableHead>
-              <TableHead>{tAdmin("Features")}</TableHead>
-             <TableHead>{tAdmin("Trial ends")}</TableHead>
-              <TableHead>{tAdmin("Created")}</TableHead>
-              <TableHead className="text-right">{tAdmin("Access")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-             {loading ? (
-                <TableRow><TableCell colSpan={10} className="py-10 text-center text-muted-foreground">{tAdmin("Loading ERP accounts...")}</TableCell></TableRow>
-             ) : visibleTenants.length === 0 ? (
-                 <TableRow><TableCell colSpan={10} className="py-10 text-center text-muted-foreground">{tAdmin("No ERP accounts match the selected filters.")}</TableCell></TableRow>
-             ) : visibleTenants.map((tenant) => (
-              <TableRow key={tenant.id}>
-                <TableCell>
-                  <div className="font-medium">{tenant.companyName}</div>
-                  <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
-                  <div className="mt-2 flex flex-col items-start gap-1">
-                    <label htmlFor={`catalog-mode-${tenant.id}`} className="text-xs text-muted-foreground">
-                      {tAdmin("Product catalog")}
-                    </label>
-                    <select
-                      id={`catalog-mode-${tenant.id}`}
-                      value={tenant.productCatalogMode ?? "separate"}
-                      onChange={(event) => void updateProductCatalogMode(
-                        tenant,
-                        event.target.value as "separate" | "shared",
-                      )}
-                      title={tAdmin("This applies to new products; existing products stay unchanged.")}
-                      className="h-8 max-w-56 rounded-md border bg-background px-2 text-xs"
-                    >
-                      <option value="separate">{tAdmin("Separate products by store")}</option>
-                      <option value="shared">{tAdmin("Share products across stores")}</option>
-                    </select>
-                  </div>
-                  {tenant.dataImportStatus === "completed" && (
-                    <p className="mt-1 text-xs text-green-700 dark:text-green-400" data-testid={`status-import-completed-${tenant.id}`}>
-                      {tAdmin("Imported")}: {tenant.dataImportSummary?.tableCount ?? 0} {tAdmin("tables")}
-                    </p>
-                  )}
-                  {tenant.dataImportStatus === "running" && (
-                    <p className="mt-1 text-xs text-muted-foreground" data-testid={`status-import-running-${tenant.id}`}>
-                      {tAdmin("Backup import in progress")}
-                    </p>
-                  )}
-                  {tenant.dataImportStatus === "failed" && tenant.dataImportSummary && (
-                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`status-import-retained-${tenant.id}`}>
-                      {tAdmin("Imported data was retained; review required")}
-                    </p>
-                  )}
-                  {tenant.dataImportStatus === "failed" &&
-                    !tenant.dataImportSummary &&
-                    tenant.dataImportError?.includes("must be checked before another upload") && (
-                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`status-import-review-${tenant.id}`}>
-                      {tAdmin("Import status needs review before retry")}
-                    </p>
-                  )}
-                  {(tenant.dataImportStatus === "awaiting_backup" ||
-                    (tenant.dataImportStatus === "failed" &&
-                     !tenant.dataImportSummary &&
-                     !tenant.dataImportError?.includes("must be checked before another upload"))) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => openBackupImport(tenant)}
-                      data-testid={`button-import-backup-${tenant.id}`}
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      {tAdmin(tenant.dataImportStatus === "failed" ? "Retry backup import" : "Import backup")}
-                    </Button>
-                  )}
-                </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      className="h-auto justify-start px-2 py-1 text-left"
-                      onClick={() => openContractEditor(tenant)}
-                    >
-                      <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
-                      <span>
-                        <span className="block text-sm">
-                          {tenant.contractPeriod
-                            ? tAdmin("Manage contract")
-                            : tAdmin("Set contract")}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {tenant.contractPeriod
-                            ? `${tAdmin(tenant.contractPeriod)}${tenant.contractEndsAt ? ` · ${tAdmin("Expires")} ${formatDate(tenant.contractEndsAt)}` : ""}`
-                            : tAdmin("No contract set")}
-                        </span>
-                      </span>
-                    </Button>
-                  </TableCell>
-                <TableCell>
-                   <div>{[tenant.ownerFirstName, tenant.ownerLastName].filter(Boolean).join(" ") || "—"}</div>
-                   <div className="text-xs text-muted-foreground">{tenant.ownerEmail || `${tAdmin("User")} #${tenant.ownerUserId}`}</div>
-                   <Button
-                     variant="outline"
-                     size="sm"
-                     className="mt-2"
-                     onClick={() => { setOwnerPassword(""); setConfirmOwnerPassword(""); setPasswordTenant(tenant); }}
-                     data-testid={`button-owner-password-${tenant.id}`}
-                   >
-                     <KeyRound className="mr-2 h-4 w-4" />
-                     {tAdmin("Change owner password")}
-                   </Button>
-                </TableCell>
-                 <TableCell>
-                   <div className="flex flex-col items-start gap-1">
-                     <Badge className={ACCOUNT_GROUP_STYLES[getAccountGroup(tenant)]}>
-                       {tAdmin(ACCOUNT_GROUP_LABELS[getAccountGroup(tenant)])}
-                     </Badge>
-                     <Badge className={STATUS_STYLES[tenant.status] ?? ""}>{tAdmin(tenant.status)}</Badge>
-                   </div>
-                 </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    className="h-auto justify-start px-2 py-1 text-left"
-                    onClick={() => openDomainEditor(tenant)}
-                  >
-                    <Globe2 className="mr-2 h-4 w-4" />
-                    <span>
-                       <span className="block text-sm">{tenant.hostname ?? tAdmin("Assign domain")}</span>
-                      <span className="block text-xs text-muted-foreground">
-                         {tenant.hostname ? tAdmin(tenant.domainStatus) : tAdmin("unassigned")}
-                      </span>
-                    </span>
-                  </Button>
-                </TableCell>
-                 <TableCell>
-                   <Button
-                     variant="ghost"
-                     className="h-auto justify-start px-2 py-1 text-left"
-                     onClick={() => openWebStoreEditor(tenant)}
-                   >
-                     <ShoppingBag className="mr-2 h-4 w-4" />
-                     <span>
-                       <span className="block text-sm">
-                         {tenant.webStoreHostname ?? tAdmin("Configure Web Store")}
-                       </span>
-                       <span className="block text-xs text-muted-foreground">
-                         {tAdmin(tenant.webStoreStatus === "active" ? "Published" : "Blocked")}
-                         {tenant.webStoreHostname ? ` · ${tAdmin(tenant.webStoreDomainStatus)}` : ""}
-                       </span>
-                     </span>
-                   </Button>
-                 </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        className="h-auto justify-start px-2 py-1 text-left"
-                        onClick={() => openFeatureEditor(tenant)}
-                      >
-                        <Settings2 className="mr-2 h-4 w-4" />
-                        <span>
-                          <span className="block text-sm">{tAdmin("Manage features")}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {FEATURE_OPTIONS.filter(({ key }) => tenant.featureFlags?.[key] !== false).length}/{FEATURE_OPTIONS.length} {tAdmin("enabled")} · {formatStoreUsage(tenant, tAdmin)}
-                          </span>
-                        </span>
-                      </Button>
-                      {tenant.currentStores == null && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => void refreshStoreCount(tenant)}
-                          disabled={refreshingStoreCountId === tenant.id}
-                          aria-label={tAdmin("Retry store count")}
-                          title={tAdmin("Retry store count")}
-                        >
-                          <RefreshCw className={`h-4 w-4 ${refreshingStoreCountId === tenant.id ? "animate-spin" : ""}`} />
-                        </Button>
-                      )}
-                    </div>
-                 </TableCell>
-                <TableCell>{formatDate(tenant.trialEndsAt)}</TableCell>
-                <TableCell>{formatDate(tenant.createdAt)}</TableCell>
-                <TableCell className="text-right">
-                  <Select value={tenant.status} onValueChange={(value) => void updateStatus(tenant, value)}>
-                    <SelectTrigger className="ml-auto w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent>{STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
-                  </Select>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      {loadError ? <div role="alert" className="console-empty"><p>{tAdmin("Unable to load ERP accounts")}</p><p className="text-sm text-muted-foreground">{loadError}</p><Button variant="outline" onClick={() => void loadTenants()}>{tAdmin("Refresh")}</Button></div>
+        : loading ? <div className="console-empty" role="status">{tAdmin("Loading ERP accounts...")}</div>
+        : <CompanyRegister tenants={visibleTenants} allTenants={tenants} onOpen={tenant => navigate(`/admin/erp?company=${tenant.id}`)} />}
+      {!loading && !loadError && !visibleTenants.length && <Button variant="outline" onClick={() => { setCompanySearch(""); setStatusFilter("all"); setAccountGroupFilter("all"); setMetricFilter("all"); }}>{tAdmin("Clear filters")}</Button>}
+      </>}
+      {selectedCompany && <CompanyDetail key={selectedCompany.id} tenant={selectedCompany} features={FEATURE_OPTIONS}
+        ownerCount={tenants.filter(tenant => tenant.ownerUserId === selectedCompany.ownerUserId).length}
+        refreshing={refreshingStoreCountId === selectedCompany.id}
+        onBack={() => navigate("/admin/erp")}
+        onContract={() => openContractEditor(selectedCompany)}
+        onPassword={() => { setOwnerPassword(""); setConfirmOwnerPassword(""); setPasswordTenant(selectedCompany); }}
+        onDomain={() => openDomainEditor(selectedCompany)}
+        onWebStore={() => openWebStoreEditor(selectedCompany)}
+        onFeatures={() => openFeatureEditor(selectedCompany)}
+        onRefresh={() => void refreshStoreCount(selectedCompany)}
+        onImport={() => openBackupImport(selectedCompany)}
+        onStatus={status => updateStatus(selectedCompany, status)}
+        onCatalog={mode => updateProductCatalogMode(selectedCompany, mode)}
+      />}
 
       <Dialog
         open={Boolean(passwordTenant)}

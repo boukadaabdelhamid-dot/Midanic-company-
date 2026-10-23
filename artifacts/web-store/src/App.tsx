@@ -49,7 +49,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 
 function Router() {
   return (
-    <div className="min-h-[100dvh] flex flex-col">
+    <div className="store-app min-h-[100dvh] flex flex-col">
       <Navbar />
       <main className="flex-1 flex flex-col">
         <Switch>
