@@ -10,13 +10,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { useLang } from "@/hooks/use-lang";
+import { useStoreContext } from "@/hooks/use-store";
 import { usePermissions } from "@/hooks/use-permissions";
+import { buildExpenseReportCsv, buildExpenseReportPrintHtml, getExpenseCategoryLabel } from "@/lib/expense-report-export";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, Legend,
 } from "recharts";
-import { Package, Users, Truck, TrendingUp, TrendingDown, CalendarDays } from "lucide-react";
+import { Package, Users, Truck, TrendingUp, TrendingDown, CalendarDays, Download, Printer } from "lucide-react";
 
 const TODAY = new Date().toISOString().split("T")[0];
 const MONTH_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -55,11 +58,12 @@ export default function Reports() {
   const currency = lang === "ar" ? "دج" : "DA";
   const { can } = usePermissions();
   const canViewProfit = can("products", "view_purchase_price");
+  const { currentStoreId, stores } = useStoreContext();
 
   const [from, setFrom] = useState(MONTH_AGO);
   const [to, setTo] = useState(TODAY);
   const [activePreset, setActivePreset] = useState<number | null>(30);
-  const [chargePeriod, setChargePeriod] = useState<{ month: string; from: string; to: string } | null>(null);
+  const [chargePeriod, setChargePeriod] = useState<{ month: string; from: string; to: string; storeName: string } | null>(null);
   const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
 
   const applyPreset = (days: number) => {
@@ -85,12 +89,47 @@ export default function Reports() {
     if (!year || !monthNumber || monthNumber < 1 || monthNumber > 12) return;
     const monthStart = `${month}-01`;
     const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+    const store = stores.find((item) => item.id === currentStoreId);
     setChargePeriod({
       month,
       from: from > monthStart ? from : monthStart,
       to: to < monthEnd ? to : monthEnd,
+      storeName: (lang === "ar" ? store?.nameAr || store?.nameEn : store?.nameEn) || String(currentStoreId ?? "—"),
     });
     setChargeDialogOpen(true);
+  };
+
+  const canExportExpenses = !!chargePeriod && expenseDetails !== undefined &&
+    !loadingExpenseDetails && !expenseDetailsError;
+
+  const downloadExpenses = () => {
+    if (!canExportExpenses || !chargePeriod || !expenseDetails) return;
+    const csv = buildExpenseReportCsv({ ...chargePeriod, lang, items: expenseDetails });
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `expenses-${chargePeriod.from}-${chargePeriod.to}-${lang}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const printExpenses = () => {
+    if (!canExportExpenses || !chargePeriod || !expenseDetails) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.alert(t3(
+        "Autorisez les fenêtres contextuelles pour imprimer les charges.",
+        "يرجى السماح بالنوافذ المنبثقة لطباعة المصاريف.",
+        "Allow pop-ups to print expenses.",
+      ));
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(buildExpenseReportPrintHtml({ ...chargePeriod, lang, items: expenseDetails }));
+    printWindow.document.close();
   };
 
   const productRows = (products ?? []) as {
@@ -604,6 +643,17 @@ export default function Reports() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={!canExportExpenses} onClick={downloadExpenses}>
+              <Download className="h-4 w-4 me-2" />
+              {t3("Télécharger CSV", "تنزيل CSV", "Download CSV")}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={!canExportExpenses} onClick={printExpenses}>
+              <Printer className="h-4 w-4 me-2" />
+              {t3("Imprimer / PDF", "طباعة / PDF", "Print / PDF")}
+            </Button>
+          </div>
+
           {expenseDetailsError ? (
             <p className="py-8 text-center text-sm text-destructive">
               {t3("Impossible de charger les charges.", "تعذر تحميل المصاريف.", "Could not load expenses.")}
@@ -636,18 +686,10 @@ export default function Reports() {
                   </thead>
                   <tbody>
                     {(expenseDetails ?? []).map((expense) => {
-                      const categories: Record<string, [string, string, string]> = {
-                        salary: ["Salaire", "راتب", "Salary"],
-                        rent: ["Loyer", "إيجار", "Rent"],
-                        utilities: ["Services publics", "مرافق", "Utilities"],
-                        marketing: ["Marketing", "تسويق", "Marketing"],
-                        other: ["Autre", "أخرى", "Other"],
-                      };
-                      const category = categories[expense.category];
                       return (
                         <tr key={expense.id} className="border-b last:border-0">
                           <td className="whitespace-nowrap px-3 py-2.5">{expense.createdAt.slice(0, 10)}</td>
-                          <td className="px-3 py-2.5">{category ? t3(...category) : expense.category}</td>
+                          <td className="px-3 py-2.5">{getExpenseCategoryLabel(expense.category, lang)}</td>
                           <td className="max-w-sm px-3 py-2.5">{expense.description || "—"}</td>
                           <td className="px-3 py-2.5 text-muted-foreground">{expense.reference || "—"}</td>
                           <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium text-red-600">
