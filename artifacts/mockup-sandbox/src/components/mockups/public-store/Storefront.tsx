@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import "./_group.css";
 import "./storefront.css";
 import { PRODUCTS, CATEGORIES, STORE, type Product } from "./_shared/fixtures";
+import { CategoryNavigation } from "./_shared/CategoryNavigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -124,6 +125,7 @@ export function Storefront() {
   };
 
   const scrollToProducts = () => document.getElementById("store-products")?.scrollIntoView({ behavior: "smooth" });
+  const scrollToCategories = () => document.getElementById("store-categories")?.scrollIntoView({ behavior: "smooth" });
 
   return (
     <main className="store-prototype midanic-storefront" dir={dir}>
@@ -137,7 +139,7 @@ export function Storefront() {
         </a>
         <nav className="ms-nav" aria-label={isAr ? "التنقل الرئيسي" : "Main navigation"}>
           <button className="ms-nav-link ms-nav-active" onClick={scrollToProducts}>{isAr ? "المنتجات" : "Products"}</button>
-          <button className="ms-nav-link" onClick={() => { setCategory(null); scrollToProducts(); }}>{copy.categories}</button>
+          <button className="ms-nav-link" onClick={scrollToCategories}>{copy.categories}</button>
         </nav>
         <div className="ms-actions">
           <button className="ms-icon-btn ms-language" onClick={() => setLang(isAr ? "en" : "ar")} aria-label={copy.language}>
@@ -172,6 +174,15 @@ export function Storefront() {
         <div className="ms-hero-caption"><span>01</span><i />{isAr ? "عناية مختارة بعناية" : "A considered selection"}</div>
       </section>
 
+      <CategoryNavigation
+        isAr={isAr}
+        selected={category}
+        onSelect={(categoryId) => {
+          setCategory(categoryId);
+          scrollToProducts();
+        }}
+      />
+
       <section className="ms-collection" id="store-products">
         <div className="ms-section-heading">
           <div>
@@ -179,16 +190,15 @@ export function Storefront() {
             <h2>{copy.collection}</h2>
             <p>{copy.subhead}</p>
           </div>
-          <div className="ms-product-count"><strong>{shownProducts.length.toLocaleString(isAr ? "ar-DZ" : "en-US")}</strong><span>{copy.count}</span></div>
+          <div className="ms-product-count" role="status" aria-live="polite"><strong>{shownProducts.length.toLocaleString(isAr ? "ar-DZ" : "en-US")}</strong><span>{copy.count}</span></div>
         </div>
         <div className="ms-tools">
-          <div className="ms-category-row" aria-label={copy.categories}>
-            <button className={`ms-category-chip ${category === null ? "selected" : ""}`} onClick={() => setCategory(null)}>{copy.all}</button>
-            {CATEGORIES.map((item) => (
-              <button key={item.id} className={`ms-category-chip ${category === item.id ? "selected" : ""}`} onClick={() => setCategory(category === item.id ? null : item.id)}>
-                {isAr ? item.nameAr : item.nameFr}
-              </button>
-            ))}
+          <div className="ms-category-selection">
+            <span>{category === null ? copy.all : categoryName(category)}</span>
+            <button type="button" onClick={scrollToCategories}>
+              {isAr ? "تغيير الفئة" : "Change category"}<ChevronDown size={14} />
+            </button>
+            {category !== null && <button type="button" onClick={() => setCategory(null)}>{copy.all}</button>}
           </div>
           <label className="ms-search">
             <Search size={18} />
