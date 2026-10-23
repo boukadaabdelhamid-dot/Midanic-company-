@@ -30,6 +30,7 @@ export function hasCompleteRequestAnswers(
     }
     if (field.required && !value.trim()) return false;
     if (field.type === "number" && value && !/^\d+$/.test(value)) return false;
+    if (field.key === "store_count" && value && (Number(value) < 1 || Number(value) > 50)) return false;
     if (
       field.type === "select" &&
       value &&
@@ -121,7 +122,8 @@ export function ProductRequestFields({
               <Input
                 id={`request-field-${field.key}`}
                 type={field.type === "number" ? "number" : "text"}
-                min={field.type === "number" ? 0 : undefined}
+                min={field.key === "store_count" ? 1 : field.type === "number" ? 0 : undefined}
+                max={field.key === "store_count" ? 50 : undefined}
                 step={field.type === "number" ? 1 : undefined}
                 value={typeof value === "string" ? value : ""}
                 onChange={(event) => onChange(field.key, event.target.value)}

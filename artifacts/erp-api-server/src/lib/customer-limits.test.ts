@@ -199,7 +199,7 @@ function jsonHeaders(fixture: Fixture): Record<string, string> {
   return { ...tenantHeaders(fixture), "Content-Type": "application/json" };
 }
 
-integrationTest("maxStores blocks a new active store at the Platform limit", async () => {
+integrationTest("company owners cannot create stores outside the initial ERP setup", async () => {
   const previousSecret = process.env["PLATFORM_SERVICE_SECRET"];
   process.env["PLATFORM_SERVICE_SECRET"] = "customer-limits-test-secret";
   const fixture = await seedFixture();
@@ -221,10 +221,8 @@ integrationTest("maxStores blocks a new active store at the Platform limit", asy
       }),
     });
     const body = await jsonResponse(response);
-    assert.equal(response.status, 409);
-    assert.equal(body.code, "STORE_LIMIT_REACHED");
-    assert.equal(body.maxStores, fixture.activeStoreCount);
-    assert.equal(body.currentStores, fixture.activeStoreCount);
+    assert.equal(response.status, 403);
+    assert.equal(body.code, "COMPANY_STORES_PRECREATED");
   } finally {
     await closeServer(server);
     restoreFetch();

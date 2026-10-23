@@ -27,9 +27,9 @@ export const defaultErpRequestFormFields: ProductRequestField[] = [
   {
     key: "store_count",
     label: {
-      en: "How many stores do you have?",
-      fr: "Combien de magasins avez-vous ?",
-      ar: "كم عدد المتاجر لديكم؟",
+      en: "How many stores should we set up?",
+      fr: "Combien de magasins devons-nous configurer ?",
+      ar: "كم متجرًا تريد أن نجهز لك؟",
     },
     type: "number",
     required: true,

@@ -1205,6 +1205,47 @@ function initializeTenantDatabase(
   return job;
 }
 
+async function ensureInitialTenantStores(
+  tenantId: number,
+  databaseName: string,
+  requestedCount: number,
+): Promise<void> {
+  const tenantPool = getTenantDatabasePool(databaseName);
+  const client = await tenantPool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: existingStores } = await client.query<{ id: number; slug: string }>(
+      "SELECT id, slug FROM stores WHERE is_active = TRUE ORDER BY id",
+    );
+    if (existingStores.length === 0) {
+      throw new Error("Cannot provision company stores because the initial store is missing");
+    }
+
+    await client.query(
+      "UPDATE stores SET platform_tenant_id = $1 WHERE is_active = TRUE",
+      [tenantId],
+    );
+    await client.query(
+      "UPDATE stores SET name_ar = $1, name_en = $2 WHERE id = $3",
+      ["متجر 1", "Store 1", existingStores[0]!.id],
+    );
+
+    for (let storeNumber = existingStores.length + 1; storeNumber <= requestedCount; storeNumber++) {
+      await client.query(
+        `INSERT INTO stores (platform_tenant_id, name_ar, name_en, slug, is_active)
+         VALUES ($1, $2, $3, $4, TRUE)`,
+        [tenantId, `متجر ${storeNumber}`, `Store ${storeNumber}`, `store-${storeNumber}`],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function synchronizeReadyTenantDatabases(): Promise<void> {
   let tenants: Awaited<ReturnType<typeof listReadyTenantDatabases>> | null = null;
   try {
@@ -1389,9 +1430,20 @@ app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
     ? req.body.databaseName
     : "";
   const deferInitialization = req.body?.deferInitialization === true;
+  const rawInitialStoreCount = req.body?.initialStoreCount;
+  const initialStoreCount = rawInitialStoreCount === undefined
+    ? undefined
+    : Number(rawInitialStoreCount);
   if (!Number.isInteger(tenantId) || tenantId <= 0 ||
       databaseName !== `erp_tenant_${tenantId}`) {
     res.status(400).json({ error: "Invalid tenant database provisioning payload" });
+    return;
+  }
+  if (
+    initialStoreCount !== undefined &&
+    (!Number.isSafeInteger(initialStoreCount) || initialStoreCount < 1 || initialStoreCount > 50)
+  ) {
+    res.status(400).json({ error: "initialStoreCount must be an integer from 1 to 50" });
     return;
   }
 
@@ -1402,6 +1454,9 @@ app.post("/api/internal/erp/provision", async (req, res): Promise<void> => {
       return;
     }
     await initializeTenantDatabase(tenantId, databaseName, true);
+    if (initialStoreCount !== undefined) {
+      await ensureInitialTenantStores(tenantId, databaseName, initialStoreCount);
+    }
     res.json({ tenantId, databaseName, databaseStatus: "ready" });
   } catch (error) {
     logger.error({ err: error, tenantId, databaseName }, "ERP tenant provisioning failed");

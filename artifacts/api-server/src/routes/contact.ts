@@ -94,6 +94,12 @@ function validateCustomAnswers(
       if (field.type === "number" && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) {
         return { error: `Enter a whole number for: ${field.label.en}` };
       }
+      if (
+        field.key === "store_count" &&
+        (Number(value) < 1 || Number(value) > 50)
+      ) {
+        return { error: "Choose between 1 and 50 stores" };
+      }
       if ((field.type === "select") && !field.options?.some((option) => option.value === value)) {
         return { error: `Invalid choice for: ${field.label.en}` };
       }

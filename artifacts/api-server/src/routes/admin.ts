@@ -486,6 +486,15 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
   const requestedCatalogMode =
     matchingRequest?.customAnswers?.["product_catalog_mode"]?.value;
   const productCatalogMode = requestedCatalogMode === "shared" ? "shared" : "separate";
+  const requestedStoreCountAnswer =
+    matchingRequest?.customAnswers?.["store_count"]?.value;
+  const parsedStoreCount = typeof requestedStoreCountAnswer === "string"
+    ? Number(requestedStoreCountAnswer.trim())
+    : Number.NaN;
+  const initialStoreCount =
+    Number.isSafeInteger(parsedStoreCount) && parsedStoreCount >= 1 && parsedStoreCount <= 50
+      ? parsedStoreCount
+      : 1;
 
   try {
     const [tenant] = await db
@@ -501,10 +510,23 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
         productCatalogMode,
       })
       .returning();
-    await db
-      .insert(customerEntitlementsTable)
-      .values({ userId: ownerUserId, maxStores: 1 })
-      .onConflictDoNothing();
+    const [existingEntitlement] = await db
+      .select({ maxStores: customerEntitlementsTable.maxStores })
+      .from(customerEntitlementsTable)
+      .where(eq(customerEntitlementsTable.userId, ownerUserId))
+      .limit(1);
+    if (!existingEntitlement) {
+      await db.insert(customerEntitlementsTable)
+        .values({ userId: ownerUserId, maxStores: initialStoreCount })
+        .onConflictDoNothing();
+    } else if (
+      existingEntitlement.maxStores !== null &&
+      existingEntitlement.maxStores < initialStoreCount
+    ) {
+      await db.update(customerEntitlementsTable)
+        .set({ maxStores: initialStoreCount })
+        .where(eq(customerEntitlementsTable.userId, ownerUserId));
+    }
 
     let provisionedTenant = tenant;
     [provisionedTenant] = await db
@@ -519,6 +541,7 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
     try {
       const provisioning = await provisionErpTenantDatabase(tenant.id, {
         deferInitialization: importExistingData,
+        initialStoreCount,
       });
       [provisionedTenant] = await db
         .update(erpTenantsTable)

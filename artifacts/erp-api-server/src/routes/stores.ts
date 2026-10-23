@@ -119,6 +119,13 @@ router.get("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthRequ
 });
 
 router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
+  if (req.user!.platformTenantId !== undefined) {
+    res.status(403).json({
+      error: "Company stores are created during ERP setup; the owner can rename existing stores only.",
+      code: "COMPANY_STORES_PRECREATED",
+    });
+    return;
+  }
   try {
     const { nameAr, nameEn, slug, isActive, address, phone, logoUrl, tvaRate, showTvaByDefault, nif, rc, ai } = req.body || {};
     if (!nameAr || !nameEn || !slug) {
@@ -174,6 +181,25 @@ router.patch("/erp/stores/:id", authenticate, requireTenantAdmin, async (req: Au
   try {
     const id = pid(req, "id");
     const b = req.body || {};
+    if (req.user!.platformTenantId !== undefined) {
+      const unsupportedFields = Object.keys(b).filter(
+        (key) => key !== "nameAr" && key !== "nameEn",
+      );
+      if (unsupportedFields.length > 0) {
+        res.status(403).json({
+          error: "Company owners can only rename their pre-created stores.",
+          code: "STORE_RENAME_ONLY",
+        });
+        return;
+      }
+      if (
+        (b.nameAr !== undefined && (typeof b.nameAr !== "string" || !b.nameAr.trim())) ||
+        (b.nameEn !== undefined && (typeof b.nameEn !== "string" || !b.nameEn.trim()))
+      ) {
+        res.status(400).json({ error: "Store names must be non-empty text" });
+        return;
+      }
+    }
     const update: Record<string, unknown> = {};
     if (b.nameAr !== undefined) update["nameAr"] = b.nameAr;
     if (b.nameEn !== undefined) update["nameEn"] = b.nameEn;
@@ -209,6 +235,13 @@ router.patch("/erp/stores/:id", authenticate, requireTenantAdmin, async (req: Au
 });
 
 router.delete("/erp/stores/:id", authenticate, requireTenantAdmin, async (req: AuthRequest, res) => {
+  if (req.user!.platformTenantId !== undefined) {
+    res.status(403).json({
+      error: "Company stores cannot be deleted by the owner.",
+      code: "COMPANY_STORES_PRECREATED",
+    });
+    return;
+  }
   try {
     const id = pid(req, "id");
     const [ownedStore] = await db.select({ id: schema.storesTable.id })

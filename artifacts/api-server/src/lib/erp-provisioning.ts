@@ -32,7 +32,7 @@ function getErpApiUrl(): string {
 
 export async function provisionErpTenantDatabase(
   tenantId: number,
-  options: { deferInitialization?: boolean } = {},
+  options: { deferInitialization?: boolean; initialStoreCount?: number } = {},
 ): Promise<ProvisionResponse> {
   const databaseName = getTenantDatabaseName(tenantId);
   const response = await fetch(`${getErpApiUrl()}/api/internal/erp/provision`, {
@@ -45,6 +45,9 @@ export async function provisionErpTenantDatabase(
       tenantId,
       databaseName,
       deferInitialization: options.deferInitialization === true,
+      ...(options.initialStoreCount !== undefined
+        ? { initialStoreCount: options.initialStoreCount }
+        : {}),
     }),
   });
 

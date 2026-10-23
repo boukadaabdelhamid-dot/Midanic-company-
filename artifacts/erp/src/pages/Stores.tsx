@@ -6,6 +6,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLang } from "@/hooks/use-lang";
 import { useStoreContext } from "@/hooks/use-store";
+import { useMe } from "@/hooks/use-me";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,8 @@ export default function Stores() {
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { currentStoreId, setStores } = useStoreContext();
   const { data: stores, isLoading } = useGetErpStores();
+  const { role, isLoading: isUserLoading } = useMe();
+  const isPlatformCompany = role === "tenant_admin";
   const create = useCreateErpStore();
   const update = useUpdateErpStore();
   const del = useDeleteErpStore();
@@ -53,22 +56,30 @@ export default function Stores() {
 
   const handleSave = () => {
     setError(null);
-    if (!form.nameAr.trim() || !form.nameEn.trim() || (!form.id && !form.slug.trim())) {
-      setError(t("Nom AR, EN et slug requis", "الاسم بالعربية والفرنسية والمعرف مطلوبة"));
+    if (isPlatformCompany && !form.id) {
+      setError(t("Les magasins sont créés lors de la configuration.", "تُنشأ المتاجر عند إعداد الشركة."));
       return;
     }
-    const payload = {
-      nameAr: form.nameAr.trim(), nameEn: form.nameEn.trim(),
-      isActive: form.isActive,
-      address: form.address.trim() || undefined,
-      phone: form.phone.trim() || undefined,
-      logoUrl: form.logoUrl.trim() || undefined,
-      tvaRate: form.tvaRate.trim() || "19",
-      showTvaByDefault: form.showTvaByDefault,
-      nif: form.nif.trim() || undefined,
-      rc: form.rc.trim() || undefined,
-      ai: form.ai.trim() || undefined,
-    };
+    if (!form.nameAr.trim() || !form.nameEn.trim() || (!form.id && !form.slug.trim())) {
+      setError(isPlatformCompany
+        ? t("Les noms en arabe et en anglais sont requis", "الاسم بالعربية والإنجليزية مطلوب")
+        : t("Nom AR, EN et slug requis", "الاسم بالعربية والفرنسية والمعرف مطلوبة"));
+      return;
+    }
+    const payload = isPlatformCompany
+      ? { nameAr: form.nameAr.trim(), nameEn: form.nameEn.trim() }
+      : {
+          nameAr: form.nameAr.trim(), nameEn: form.nameEn.trim(),
+          isActive: form.isActive,
+          address: form.address.trim() || undefined,
+          phone: form.phone.trim() || undefined,
+          logoUrl: form.logoUrl.trim() || undefined,
+          tvaRate: form.tvaRate.trim() || "19",
+          showTvaByDefault: form.showTvaByDefault,
+          nif: form.nif.trim() || undefined,
+          rc: form.rc.trim() || undefined,
+          ai: form.ai.trim() || undefined,
+        };
     if (form.id) {
       update.mutate({ id: form.id, data: payload }, {
         onSuccess: () => { invalidate(); setOpen(false); setForm(empty); },
@@ -112,13 +123,17 @@ export default function Stores() {
             {t("Magasins", "المتاجر")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {t("Gérer vos points de vente", "إدارة نقاط البيع")}
+            {isPlatformCompany
+              ? t("Renommer les magasins de votre entreprise", "يمكنك تسمية متاجر شركتك")
+              : t("Gérer vos points de vente", "إدارة نقاط البيع")}
           </p>
         </div>
-        <Button onClick={() => { setForm(empty); setError(null); setOpen(true); }} data-testid="button-new-store">
-          <Plus className="h-4 w-4 mr-2" />
-          {t("Nouveau", "جديد")}
-        </Button>
+        {stores !== undefined && !isLoading && !isUserLoading && !isPlatformCompany && (
+          <Button onClick={() => { setForm(empty); setError(null); setOpen(true); }} data-testid="button-new-store">
+            <Plus className="h-4 w-4 mr-2" />
+            {t("Nouveau", "جديد")}
+          </Button>
+        )}
       </div>
 
       <Card className="border shadow-sm">
@@ -162,14 +177,16 @@ export default function Stores() {
                           data-testid={`btn-edit-store-${s.id}`}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="sm" variant="ghost"
-                          className="h-7 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-40"
-                          onClick={() => handleDelete(s.id, s.nameEn, (s as { itemCount?: number }).itemCount ?? 0)}
-                          disabled={((s as { itemCount?: number }).itemCount ?? 0) > 0}
-                          title={((s as { itemCount?: number }).itemCount ?? 0) > 0 ? t("Magasin non vide", "المتجر يحتوي على بيانات") : t("Supprimer", "حذف")}
-                          data-testid={`btn-delete-store-${s.id}`}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {!isPlatformCompany && (
+                          <Button size="sm" variant="ghost"
+                            className="h-7 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-40"
+                            onClick={() => handleDelete(s.id, s.nameEn, (s as { itemCount?: number }).itemCount ?? 0)}
+                            disabled={((s as { itemCount?: number }).itemCount ?? 0) > 0}
+                            title={((s as { itemCount?: number }).itemCount ?? 0) > 0 ? t("Magasin non vide", "المتجر يحتوي على بيانات") : t("Supprimer", "حذف")}
+                            data-testid={`btn-delete-store-${s.id}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -186,7 +203,9 @@ export default function Stores() {
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{form.id ? t("Modifier magasin", "تعديل المتجر") : t("Nouveau magasin", "متجر جديد")}</DialogTitle>
+            <DialogTitle>{isPlatformCompany
+              ? t("Renommer le magasin", "تسمية المتجر")
+              : form.id ? t("Modifier magasin", "تعديل المتجر") : t("Nouveau magasin", "متجر جديد")}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -197,45 +216,45 @@ export default function Stores() {
               <Label dir="rtl">{t("Nom AR *", "اسم المتجر بالعربية *")}</Label>
               <Input dir="rtl" value={form.nameAr} onChange={(e) => setForm({ ...form, nameAr: e.target.value })} data-testid="input-store-name-ar" />
             </div>
-            {!form.id && (
+            {!isPlatformCompany && !form.id && (
               <div className="col-span-2">
                 <Label>Slug * (a-z, 0-9, -)</Label>
                 <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="principal" data-testid="input-store-slug" />
               </div>
             )}
-            <div className="col-span-2">
+            {!isPlatformCompany && <div className="col-span-2">
               <Label>{t("Adresse", "العنوان")}</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} data-testid="input-store-address" />
-            </div>
-            <div>
+            </div>}
+            {!isPlatformCompany && <div>
               <Label>{t("Téléphone", "الهاتف")}</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} data-testid="input-store-phone" />
-            </div>
-            <div>
+            </div>}
+            {!isPlatformCompany && <div>
               <Label>Logo URL</Label>
               <Input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} placeholder="https://..." data-testid="input-store-logo" />
-            </div>
-            <div><Label>NIF</Label><Input value={form.nif} onChange={(e) => setForm({ ...form, nif: e.target.value })} data-testid="input-store-nif" /></div>
-            <div><Label>RC</Label><Input value={form.rc} onChange={(e) => setForm({ ...form, rc: e.target.value })} data-testid="input-store-rc" /></div>
-            <div>
+            </div>}
+            {!isPlatformCompany && <div><Label>NIF</Label><Input value={form.nif} onChange={(e) => setForm({ ...form, nif: e.target.value })} data-testid="input-store-nif" /></div>}
+            {!isPlatformCompany && <div><Label>RC</Label><Input value={form.rc} onChange={(e) => setForm({ ...form, rc: e.target.value })} data-testid="input-store-rc" /></div>}
+            {!isPlatformCompany && <div>
               <Label>{t("AI / Article d'imposition", "المادة الضريبية")}</Label>
               <Input value={form.ai} onChange={(e) => setForm({ ...form, ai: e.target.value })} data-testid="input-store-ai" />
-            </div>
-            <div>
+            </div>}
+            {!isPlatformCompany && <div>
               <Label>{t("Taux TVA (%)", "نسبة TVA (%)")}</Label>
               <Input type="number" step="0.01" min="0" value={form.tvaRate} onChange={(e) => setForm({ ...form, tvaRate: e.target.value })} data-testid="input-store-tva" />
-            </div>
-            <div className="col-span-2 flex items-center justify-between border rounded-md px-3 py-2 bg-slate-50">
+            </div>}
+            {!isPlatformCompany && <div className="col-span-2 flex items-center justify-between border rounded-md px-3 py-2 bg-slate-50">
               <div>
                 <Label className="cursor-pointer">{t("Assujetti à la TVA par défaut", "خاضع للضريبة افتراضياً")}</Label>
                 <p className="text-xs text-muted-foreground">{t("Affichera HT/TVA/TTC sur les factures", "سيُظهر HT/TVA/TTC على الفواتير")}</p>
               </div>
               <Switch checked={form.showTvaByDefault} onCheckedChange={(v) => setForm({ ...form, showTvaByDefault: v })} data-testid="switch-store-tva-default" />
-            </div>
-            <label className="col-span-2 flex items-center gap-2 text-sm">
+            </div>}
+            {!isPlatformCompany && <label className="col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} data-testid="input-store-active" />
               <span>{t("Actif", "نشط")}</span>
-            </label>
+            </label>}
             {error && <p className="col-span-2 text-sm text-red-600">{error}</p>}
           </div>
           <DialogFooter>
