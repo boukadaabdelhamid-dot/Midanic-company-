@@ -150,6 +150,40 @@
   --sidebar-accent-border: hsl(219 53% 28%);
 }
 
+/* A distinct, factory-only shell identity. Store navigation retains the
+   existing Midanic navy palette; these tokens are applied only in factory mode. */
+.erp-factory-shell {
+  --sidebar: 158 22% 17%;
+  --sidebar-foreground: 42 35% 94%;
+  --sidebar-border: 158 22% 13%;
+  --sidebar-primary: 39 54% 62%;
+  --sidebar-primary-foreground: 158 22% 16%;
+  --sidebar-accent: 158 20% 25%;
+  --sidebar-accent-foreground: 42 35% 95%;
+  --sidebar-ring: 39 54% 62%;
+  --sidebar-primary-border: hsl(39 54% 56%);
+  --sidebar-accent-border: hsl(158 20% 30%);
+}
+
+.erp-factory-mode {
+  --background: 43 29% 96%;
+  --foreground: 158 22% 17%;
+  --border: 42 17% 84%;
+  --card: 0 0% 100%;
+  --card-foreground: 158 22% 17%;
+  --card-border: 42 17% 84%;
+  --primary: 158 22% 28%;
+  --primary-foreground: 42 35% 96%;
+  --secondary: 42 23% 90%;
+  --secondary-foreground: 158 22% 17%;
+  --muted: 43 16% 92%;
+  --muted-foreground: 158 12% 42%;
+  --accent: 43 40% 89%;
+  --accent-foreground: 158 22% 22%;
+  --input: 42 17% 81%;
+  --ring: 39 54% 56%;
+}
+
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);

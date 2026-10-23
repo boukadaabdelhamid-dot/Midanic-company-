@@ -116,6 +116,7 @@ const COLLAPSE_KEY = "midanic.erp.sidebarCollapsed";
 
 function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
   const { lang } = useLang();
+  const productionLabel = lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Production unit" : "Unité de production";
   const { user } = useMe();
   const { currentStoreId, stores: ctxStores, setStores, setCurrentStoreId } = useStoreContext();
   const { data: accessibleStores } = useGetErpStoresMine();
@@ -179,16 +180,23 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
 
   if (stores.length === 1) {
     if (collapsed) return null;
+    const UnitIcon = current?.kind === "factory" ? Factory : StoreIcon;
     return (
       <div className="px-3 py-2 border-b border-sidebar-border">
-        <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
-          <StoreIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate" title={current?.nameEn}>{current?.nameEn}</span>
+        <div className={cn("flex items-center gap-2 text-xs text-sidebar-foreground/70", current?.kind === "factory" && "rounded-xl border border-emerald-200/20 bg-emerald-950/20 px-2.5 py-2")}>
+          {current?.kind === "factory"
+            ? <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#c28b45] text-[#263b35]"><UnitIcon className="h-3.5 w-3.5" /></span>
+            : <UnitIcon className="h-3.5 w-3.5 shrink-0" />}
+          <span className="min-w-0">
+            {current?.kind === "factory" && <span className="block text-[9px] font-bold uppercase tracking-[.14em] text-[#d5b47e]">{productionLabel}</span>}
+            <span className="block truncate font-medium" title={current?.nameEn}>{current?.nameEn}</span>
+          </span>
         </div>
       </div>
     );
   }
 
+  const CurrentIcon = current?.kind === "factory" ? Factory : StoreIcon;
   return (
     <div className={cn("relative border-b border-sidebar-border", collapsed ? "py-2 flex justify-center" : "p-2")}>
       <button
@@ -201,10 +209,14 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
         title={collapsed ? current?.nameEn : undefined}
         data-testid="button-store-switcher"
       >
-        <StoreIcon className="h-4 w-4 shrink-0 text-primary" />
+        {current?.kind === "factory"
+          ? <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#c28b45] text-[#263b35]"><CurrentIcon className="h-4 w-4" /></span>
+          : <CurrentIcon className="h-4 w-4 shrink-0 text-primary" />}
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">{useLang.translate(lang, "Magasin", "المتجر")}</div>
+            <div className={cn("text-[10px] uppercase tracking-wide", current?.kind === "factory" ? "font-bold tracking-[.14em] text-[#d5b47e]" : "text-sidebar-foreground/50")}>
+              {current?.kind === "factory" ? productionLabel : useLang.translate(lang, "Magasin", "المتجر")}
+            </div>
             <div className="text-sm font-medium truncate">{current?.nameEn ?? "—"}</div>
           </div>
         )}
@@ -223,7 +235,11 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
               className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent"
               data-testid={`switch-store-${s.id}`}
             >
-              {s.id === currentStoreId ? <Check className="h-3.5 w-3.5 text-primary" /> : <span className="w-3.5" />}
+              {s.kind === "factory"
+                ? s.id === currentStoreId
+                  ? <Check className="h-3.5 w-3.5 shrink-0 text-[#9a6b2f]" />
+                  : <Factory className="h-3.5 w-3.5 shrink-0 text-[#9a6b2f]" />
+                : s.id === currentStoreId ? <Check className="h-3.5 w-3.5 text-primary" /> : <span className="w-3.5" />}
               <div className="flex-1 min-w-0 text-left">
                 <div className="truncate">{s.nameEn}</div>
                 <div className="text-xs text-muted-foreground truncate" dir={lang === "ar" ? "rtl" : "ltr"}>
@@ -290,6 +306,8 @@ export function Sidebar() {
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const { currentStoreId, stores } = useStoreContext();
   const currentStore = stores.find((store) => store.id === currentStoreId);
+  const isFactory = currentStore?.kind === "factory";
+  const productionLabel = lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Production unit" : "Unité de production";
   const userId = (user as { id?: number | string } | null)?.id ?? null;
   const { can } = usePermissions();
   const visibleEntries = navEntries.filter((it) => {
@@ -459,6 +477,7 @@ export function Sidebar() {
 
           const { href, icon: Icon, labelEn, labelAr, badge } = entry;
           const active = location === href || location.startsWith(href + "/");
+          const productionNav = href === "/manufacturing" && isFactory;
           const badgeCount = badge === "online-orders-pending" ? onlineOrdersPending
             : badge === "alerts-count" ? alertsCount
             : 0;
@@ -470,13 +489,19 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center rounded-md text-sm font-medium transition-colors cursor-pointer relative",
                   isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
-                  active
+                  productionNav && active
+                    ? "rounded-xl border border-[#d1a25d]/35 bg-[#294940] text-[#f5e9d2] shadow-sm"
+                    : active
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                    : productionNav
+                      ? "rounded-xl text-[#d9c7a8] hover:bg-[#294940]/70 hover:text-[#f4e9d7]"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 )}
               >
                 <div className="relative shrink-0">
-                  <Icon className="h-4 w-4" />
+                  {productionNav
+                    ? <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#c28b45] text-[#263b35]"><Icon className="h-4 w-4" /></span>
+                    : <Icon className="h-4 w-4" />}
                   {isCollapsed && badgeCount > 0 && (
                     <span
                       className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
@@ -551,7 +576,7 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-14 bg-sidebar flex items-center px-4 border-b border-sidebar-border">
+      <div className={cn("lg:hidden fixed top-0 left-0 right-0 z-50 h-14 bg-sidebar flex items-center px-4 border-b border-sidebar-border", isFactory && "erp-factory-shell")}>
         <Button
           variant="ghost"
           size="icon"
@@ -563,6 +588,11 @@ export function Sidebar() {
         </Button>
         <img src={logoPath} alt="Midanic" className="h-7 w-auto" />
         <span className="ml-2 font-bold text-sidebar-foreground text-sm">Midanic ERP</span>
+        {isFactory && (
+          <span className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-[#d1a25d]/35 bg-[#294940] px-2 py-1 text-[10px] font-semibold text-[#f0dfbf]" data-testid="text-mobile-unit-kind">
+            <Factory className="h-3.5 w-3.5 text-[#d4a356]" />{productionLabel}
+          </span>
+        )}
       </div>
 
       {/* Mobile overlay */}
@@ -576,6 +606,7 @@ export function Sidebar() {
       {/* Mobile sidebar — always expanded for readability */}
       <div className={cn(
         "lg:hidden fixed top-14 left-0 bottom-0 z-50 w-64 bg-sidebar transition-transform",
+        isFactory && "erp-factory-shell",
         open ? "translate-x-0" : "-translate-x-full"
       )}>
         {renderContent(false)}
@@ -585,6 +616,7 @@ export function Sidebar() {
       <div
         className={cn(
           "hidden lg:flex lg:flex-col lg:shrink-0 bg-sidebar h-screen sticky top-0 relative transition-[width] duration-200",
+          isFactory && "erp-factory-shell",
           collapsed ? "lg:w-16" : "lg:w-60"
         )}
       >

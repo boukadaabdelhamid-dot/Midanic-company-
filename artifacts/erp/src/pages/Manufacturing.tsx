@@ -262,17 +262,17 @@ export default function Manufacturing() {
         <div className="absolute inset-y-0 right-0 hidden w-[34%] border-l border-[#e3e0d5] bg-[linear-gradient(135deg,transparent_49%,rgba(27,48,87,.045)_50%,transparent_51%)] bg-[length:18px_18px] md:block" />
         <div className="relative flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#c9d4cf] bg-[#eef4ef] px-3 py-1 text-[11px] font-semibold uppercase tracking-[.14em] text-[#386a54]">
-              <Factory className="h-3.5 w-3.5" /> {lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Factory unit" : "Unité de production"}
+            <div className="mb-3 inline-flex items-center gap-2 rounded-lg rounded-s-sm border border-[#c9d4cf] border-s-4 border-s-[#c28b45] bg-[#eef4ef] px-3 py-1 text-[11px] font-bold uppercase tracking-[.14em] text-[#365b4b]">
+              <Factory className="h-3.5 w-3.5" /> {lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Production unit" : "Unité de production"}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#1b3057] sm:text-[32px]">{t("title")}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-[#29483f] sm:text-[32px]">{t("title")}</h1>
             <p className="mt-1.5 max-w-xl text-sm text-[#667284]">{t("subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="border-[#ccd3d0] bg-[#fffefa] text-[#1b3057] hover:bg-[#f0f3ef]" onClick={() => openRecipe()} disabled={!can("manufacturing", "create")} data-testid="button-new-recipe">
+            <Button variant="outline" className="border-[#ccd3d0] bg-[#fffefa] text-[#29483f] hover:bg-[#f0f3ef]" onClick={() => openRecipe()} disabled={!can("manufacturing", "create")} data-testid="button-new-recipe">
               <Beaker className="me-2 h-4 w-4" />{t("newRecipe")}
             </Button>
-            <Button className="bg-[#1b3057] text-white hover:bg-[#263f6b]" onClick={() => { setOrderError(""); setOrderOpen(true); }} disabled={!activeRecipes.length || !can("manufacturing", "create")} data-testid="button-new-production-order">
+            <Button className="bg-[#29483f] text-white hover:bg-[#365b4b]" onClick={() => { setOrderError(""); setOrderOpen(true); }} disabled={!activeRecipes.length || !can("manufacturing", "create")} data-testid="button-new-production-order">
               <Plus className="me-2 h-4 w-4" />{t("newOrder")}
             </Button>
           </div>
@@ -291,7 +291,7 @@ export default function Manufacturing() {
           {(["recipes", "orders", "history"] as const).map((item) => {
             const Icon = item === "recipes" ? Beaker : item === "orders" ? ClipboardList : History;
             return <button key={item} type="button" data-testid={`tab-manufacturing-${item}`} onClick={() => { setTab(item); setActionError(""); }}
-              className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${tab === item ? "border-[#1b3057] text-[#1b3057]" : "border-transparent text-[#7b8490] hover:text-[#344661]"}`}>
+              className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${tab === item ? "border-[#29483f] text-[#29483f]" : "border-transparent text-[#7b8490] hover:text-[#365b4b]"}`}>
               <Icon className="h-4 w-4" />{t(item)}
               {item === "orders" && plannedOrders.length > 0 && <span className="rounded-full bg-[#e9edf1] px-1.5 py-0.5 text-[10px] tabular-nums">{plannedOrders.length}</span>}
             </button>;
@@ -331,7 +331,7 @@ export default function Manufacturing() {
           <div className="flex flex-col justify-between gap-3 border-b border-[#e4e5df] bg-[#fbfaf6] px-4 py-4 sm:flex-row sm:items-center sm:px-5">
             <div><h2 className="font-semibold text-[#253b5c]">{tab === "history" ? t("traceLog") : t("orderQueue")}</h2><p className="mt-0.5 text-xs text-[#7b8490]">{tab === "history" ? t("historyHint") : t("scaleHint")}</p></div>
             <div className="flex flex-wrap gap-1 rounded-md border border-[#e0e2dc] bg-white p-1">
-              {(["all", "planned", "completed", "cancelled"] as const).map((status) => <button type="button" key={status} onClick={() => setFilter(status)} className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${filter === status ? "bg-[#1b3057] text-white" : "text-[#687487] hover:bg-[#f1f3ef]"}`}>{status === "all" ? t("all") : translatedStatus(status)}</button>)}
+              {(["all", "planned", "completed", "cancelled"] as const).map((status) => <button type="button" key={status} onClick={() => setFilter(status)} className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${filter === status ? "bg-[#29483f] text-white" : "text-[#687487] hover:bg-[#f1f3ef]"}`}>{status === "all" ? t("all") : translatedStatus(status)}</button>)}
             </div>
           </div>
           {visibleOrders.length === 0 ? <Empty icon={ClipboardList} title={t("noOrders")} body={tab === "history" ? t("historyHint") : t("newOrder")} /> : (
@@ -344,12 +344,12 @@ export default function Manufacturing() {
 
       <Dialog open={recipeOpen} onOpenChange={setRecipeOpen}>
         <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl" dir={lang === "ar" ? "rtl" : "ltr"}>
-          <DialogHeader><DialogTitle className="text-[#1b3057]">{editing ? t("editRecipe") : t("newRecipe")}</DialogTitle><DialogDescription>{t("scaleHint")}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#29483f]">{editing ? t("editRecipe") : t("newRecipe")}</DialogTitle><DialogDescription>{t("scaleHint")}</DialogDescription></DialogHeader>
           <div className="space-y-5 py-2">
             {!editing && <div className="space-y-2"><Label>{t("product")}</Label><select value={recipeDraft.outputProductId} onChange={(e) => setRecipeDraft({ ...recipeDraft, outputProductId: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="select-recipe-output"><option value="">{t("selectProduct")}</option>{products.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>}
             <div className="space-y-2"><Label>{t("yield")}</Label><Input type="number" min="0.001" step="any" value={recipeDraft.yieldQuantity} onChange={(e) => setRecipeDraft({ ...recipeDraft, yieldQuantity: e.target.value })} data-testid="input-recipe-yield" /></div>
             <div className="space-y-3">
-              <div className="flex items-center justify-between"><Label>{t("component")}</Label>{addableProducts.length > 0 && <button type="button" onClick={() => setRecipeDraft({ ...recipeDraft, items: [...recipeDraft.items, { productId: addableProducts[0].id, quantity: "1" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#315d80] hover:text-[#1b3057]"><Plus className="h-3.5 w-3.5" />{t("addMaterial")}</button>}</div>
+              <div className="flex items-center justify-between"><Label>{t("component")}</Label>{addableProducts.length > 0 && <button type="button" onClick={() => setRecipeDraft({ ...recipeDraft, items: [...recipeDraft.items, { productId: addableProducts[0].id, quantity: "1" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#426b5f] hover:text-[#29483f]"><Plus className="h-3.5 w-3.5" />{t("addMaterial")}</button>}</div>
               {recipeDraft.items.map((item, index) => <div key={`${item.productId}-${index}`} className="grid grid-cols-[1fr_110px_34px] items-end gap-2 rounded-md border border-[#e6e7e1] bg-[#fcfcf9] p-2">
                 <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">{t("productSearch")}</Label><select value={item.productId} onChange={(e) => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.map((it, i) => i === index ? { ...it, productId: Number(e.target.value) } : it) })} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">{products.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>
                 <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">{t("quantity")}</Label><Input type="number" min="0.001" step="any" value={item.quantity} onChange={(e) => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.map((it, i) => i === index ? { ...it, quantity: e.target.value } : it) })} /></div>
@@ -360,13 +360,13 @@ export default function Manufacturing() {
             <div className="space-y-2"><Label>{t("instructions")}</Label><textarea value={recipeDraft.instructions} onChange={(e) => setRecipeDraft({ ...recipeDraft, instructions: e.target.value })} rows={3} className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
             {recipeError && <p role="alert" className="text-sm text-destructive">{recipeError}</p>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setRecipeOpen(false)}>{t("close")}</Button><Button onClick={submitRecipe} disabled={recipeMutation.isPending} className="bg-[#1b3057] hover:bg-[#263f6b]" data-testid="button-save-recipe">{recipeMutation.isPending ? "…" : t("saveRecipe")}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setRecipeOpen(false)}>{t("close")}</Button><Button onClick={submitRecipe} disabled={recipeMutation.isPending} className="bg-[#29483f] hover:bg-[#365b4b]" data-testid="button-save-recipe">{recipeMutation.isPending ? "…" : t("saveRecipe")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={orderOpen} onOpenChange={setOrderOpen}>
         <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-xl" dir={lang === "ar" ? "rtl" : "ltr"}>
-          <DialogHeader><DialogTitle className="text-[#1b3057]">{t("planTitle")}</DialogTitle><DialogDescription>{t("noReservation")} {t("scaleHint")}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#29483f]">{t("planTitle")}</DialogTitle><DialogDescription>{t("noReservation")} {t("scaleHint")}</DialogDescription></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2"><Label>{t("recipes")}</Label><select value={orderRecipe} onChange={(e) => { setOrderRecipe(e.target.value); setOrderError(""); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="select-order-recipe"><option value="">{t("chooseRecipe")}</option>{activeRecipes.map((r) => <option value={r.id} key={r.id}>{name(r.outputNameEn, r.outputNameAr)} · {t("yield")} {prettyNumber(r.yieldQuantity, lang)}</option>)}</select></div>
             <div className="space-y-2"><Label>{t("plannedQuantity")}</Label><Input type="number" min="0.001" step="any" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} data-testid="input-order-quantity" /></div>
@@ -380,13 +380,13 @@ export default function Manufacturing() {
             <p className="text-xs leading-relaxed text-[#687487]">{t("completionNote")}</p>
             {orderError && <p role="alert" className="text-sm text-destructive">{orderError}</p>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setOrderOpen(false)}>{t("close")}</Button><Button onClick={submitOrder} disabled={orderMutation.isPending} className="bg-[#1b3057] hover:bg-[#263f6b]" data-testid="button-create-order">{orderMutation.isPending ? "…" : t("createOrder")}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setOrderOpen(false)}>{t("close")}</Button><Button onClick={submitOrder} disabled={orderMutation.isPending} className="bg-[#29483f] hover:bg-[#365b4b]" data-testid="button-create-order">{orderMutation.isPending ? "…" : t("createOrder")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" dir={lang === "ar" ? "rtl" : "ltr"}>
-          {selectedOrder && <><DialogHeader><DialogTitle className="text-[#1b3057]">{t("order")} #{String(selectedOrder.id).padStart(5, "0")} · {name(selectedOrder.outputNameEn, selectedOrder.outputNameAr)}</DialogTitle><DialogDescription>{t("historyHint")}</DialogDescription></DialogHeader>
+          {selectedOrder && <><DialogHeader><DialogTitle className="text-[#29483f]">{t("order")} #{String(selectedOrder.id).padStart(5, "0")} · {name(selectedOrder.outputNameEn, selectedOrder.outputNameAr)}</DialogTitle><DialogDescription>{t("historyHint")}</DialogDescription></DialogHeader>
             <OrderDetails order={selectedOrder} lang={lang} t={t} name={name} format={prettyNumber} money={money} dateLabel={dateLabel} />
             <DialogFooter><Button variant="outline" onClick={() => setSelectedOrder(null)}>{t("close")}</Button></DialogFooter>
           </>}
@@ -396,7 +396,7 @@ export default function Manufacturing() {
       <AlertDialog open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <AlertDialogHeader><AlertDialogTitle>{confirm?.kind === "complete" ? t("complete") : t("confirmCancel")}</AlertDialogTitle><AlertDialogDescription>{confirm?.kind === "complete" ? t("confirmComplete") : `${t("order")} #${confirm?.order.id}`}</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>{t("close")}</AlertDialogCancel><AlertDialogAction className={confirm?.kind === "complete" ? "bg-[#1b3057] hover:bg-[#263f6b]" : "bg-[#a55240] hover:bg-[#8e4435]"} onClick={(e) => { e.preventDefault(); if (!confirm) return; if (confirm.kind === "complete") completeMutation.mutate(confirm.order.id); else cancelMutation.mutate(confirm.order.id); }} disabled={completeMutation.isPending || cancelMutation.isPending}>{confirm?.kind === "complete" ? t("complete") : t("cancel")}</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogFooter><AlertDialogCancel>{t("close")}</AlertDialogCancel><AlertDialogAction className={confirm?.kind === "complete" ? "bg-[#29483f] hover:bg-[#365b4b]" : "bg-[#a55240] hover:bg-[#8e4435]"} onClick={(e) => { e.preventDefault(); if (!confirm) return; if (confirm.kind === "complete") completeMutation.mutate(confirm.order.id); else cancelMutation.mutate(confirm.order.id); }} disabled={completeMutation.isPending || cancelMutation.isPending}>{confirm?.kind === "complete" ? t("complete") : t("cancel")}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </main>
@@ -410,7 +410,7 @@ function Metric({ icon: Icon, label, value, tint }: { icon: typeof Beaker; label
     blue: "bg-[#edf1f6] text-[#425d80]",
     sand: "bg-[#f4f0e7] text-[#82704c]",
   };
-  return <Card className="border-[#d9ddd6] shadow-sm"><CardContent className="flex items-center gap-3 p-3.5 sm:p-4"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${styles[tint]}`}><Icon className="h-[18px] w-[18px]" /></span><div className="min-w-0"><div className="text-xl font-bold leading-none tabular-nums text-[#1b3057]">{value}</div><div className="mt-1 truncate text-[11px] font-medium text-[#75808c] sm:text-xs">{label}</div></div></CardContent></Card>;
+  return <Card className="border-[#d9ddd6] shadow-sm"><CardContent className="flex items-center gap-3 p-3.5 sm:p-4"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${styles[tint]}`}><Icon className="h-[18px] w-[18px]" /></span><div className="min-w-0"><div className="text-xl font-bold leading-none tabular-nums text-[#29483f]">{value}</div><div className="mt-1 truncate text-[11px] font-medium text-[#75808c] sm:text-xs">{label}</div></div></CardContent></Card>;
 }
 
 function Empty({ icon: Icon, title, body }: { icon: typeof Beaker; title: string; body: string }) {
@@ -470,7 +470,7 @@ function OrderRow({ order, lang, t, name, format, money, statusLabel, statusClas
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" className="h-8 border-[#d9ddd8] text-[#40536d]" onClick={onDetails} data-testid={`button-order-details-${order.id}`}>{tab === "history" ? t("details") : t("details")}</Button>
           {order.status === "planned" && <>
-            <Button size="sm" className="h-8 bg-[#1b3057] hover:bg-[#263f6b]" disabled={!canComplete} onClick={onComplete} data-testid={`button-complete-order-${order.id}`}><Check className="me-1.5 h-3.5 w-3.5" />{t("complete")}</Button>
+            <Button size="sm" className="h-8 bg-[#29483f] hover:bg-[#365b4b]" disabled={!canComplete} onClick={onComplete} data-testid={`button-complete-order-${order.id}`}><Check className="me-1.5 h-3.5 w-3.5" />{t("complete")}</Button>
             <Button size="sm" variant="ghost" className="h-8 text-[#985c4d]" onClick={onCancel} data-testid={`button-cancel-order-${order.id}`}>{t("cancel")}</Button>
           </>}
         </div>

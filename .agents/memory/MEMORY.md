@@ -39,3 +39,4 @@
 - [Wholesale sale units](wholesale-sale-units.md) — product unit sales are configurable per item and currently apply only to Bon de vente, with inventory stored in base pieces.
 - [Shared product catalogs](shared-product-catalog.md) — shared mode copies new product data and prices across active stores; stock stays local and existing products are not backfilled.
 - [ERP store setup](erp-store-setup.md) — provision the requested stores at onboarding; company owners can rename, but not create or delete, and existing stores remain untouched.
+- [Production unit identity](production-unit-visual-identity.md) — production units should have a distinct visual identity from ordinary stores.
