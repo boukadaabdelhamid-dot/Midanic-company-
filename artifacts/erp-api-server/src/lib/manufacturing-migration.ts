@@ -33,6 +33,27 @@ export async function runManufacturingMigration(targetPool: Pool): Promise<void>
       ON "erp"."manufacturing_recipes" ("store_id", "output_product_id")
   `);
   await targetPool.query(`
+    ALTER TABLE "erp"."products"
+      ADD COLUMN IF NOT EXISTS "manufacturing_role" text NOT NULL DEFAULT 'raw_material'
+  `);
+  await targetPool.query(`
+    UPDATE "erp"."products" p
+       SET "manufacturing_role" = 'finished_good'
+     WHERE EXISTS (
+       SELECT 1 FROM "erp"."manufacturing_recipes" r
+        WHERE r."output_product_id" = p."id"
+          AND r."store_id" = p."store_id"
+     )
+  `);
+  await targetPool.query(`
+    DO $$ BEGIN
+      ALTER TABLE "erp"."products"
+        ADD CONSTRAINT "products_manufacturing_role_check"
+        CHECK ("manufacturing_role" IN ('raw_material', 'finished_good'));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await targetPool.query(`
     CREATE INDEX IF NOT EXISTS "manufacturing_recipes_store_active_idx"
       ON "erp"."manufacturing_recipes" ("store_id", "is_active")
   `);

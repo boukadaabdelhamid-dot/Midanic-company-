@@ -94,14 +94,23 @@ async function validateProductsInStore(
   if (new Set(ids).size !== ids.length || ids.includes(outputProductId)) {
     throw new ManufacturingError("Each material must be unique and different from the finished product");
   }
-  const products = await db.select({ id: schema.productsTable.id })
+  const productRoles = await db.select({
+    id: schema.productsTable.id,
+    role: schema.productsTable.manufacturingRole,
+  })
     .from(schema.productsTable)
     .where(and(
       eq(schema.productsTable.storeId, storeId),
       inArray(schema.productsTable.id, [...ids, outputProductId]),
     ));
-  if (products.length !== ids.length + 1) {
+  if (productRoles.length !== ids.length + 1) {
     throw new ManufacturingError("Select products that belong to this production unit");
+  }
+  if (productRoles.find((product) => product.id === outputProductId)?.role !== "finished_good") {
+    throw new ManufacturingError("The recipe output must be classified as a finished good");
+  }
+  if (productRoles.some((product) => ids.includes(product.id) && product.role !== "raw_material")) {
+    throw new ManufacturingError("Recipe materials must be classified as raw materials");
   }
 }
 
@@ -121,6 +130,7 @@ router.get(
         reference: schema.productsTable.reference,
         stock: schema.productsTable.stock,
         costPrice: schema.productsTable.costPrice,
+        manufacturingRole: schema.productsTable.manufacturingRole,
       })
         .from(schema.productsTable)
         .where(and(

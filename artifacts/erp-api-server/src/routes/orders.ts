@@ -17,6 +17,23 @@ import { mutateCustomerBalance } from "../lib/balance-sync";
 const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number =>
   parseInt(req.params[key] as string);
+const requireNonFactoryStore: import("express").RequestHandler = async (req, res, next) => {
+  try {
+    const storeId = (req as AuthRequest).currentStoreId;
+    if (!storeId) { next(); return; }
+    const [store] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, storeId))
+      .limit(1);
+    if (store?.kind === "factory") {
+      res.status(403).json({ error: "Quick sale is unavailable in the production unit" });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
 
 router.get("/admin/low-stock", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
@@ -294,7 +311,7 @@ router.get("/admin/orders", authenticate, requireStaff, requireStore, requirePer
 // accounting transactions, caisse credit and WebSocket broadcasts.
 
 // POST /erp/pos/drafts — save current POS cart as a draft
-router.post("/erp/pos/drafts", authenticate, requireStaff, requireStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
+router.post("/erp/pos/drafts", authenticate, requireStaff, requireStore, requireNonFactoryStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const sellerUserId = req.user!.id;
@@ -337,7 +354,7 @@ router.post("/erp/pos/drafts", authenticate, requireStaff, requireStore, require
 });
 
 // GET /erp/pos/drafts — list all drafts for this store (with their items)
-router.get("/erp/pos/drafts", authenticate, requireStaff, requireStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
+router.get("/erp/pos/drafts", authenticate, requireStaff, requireStore, requireNonFactoryStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const drafts = await db.select().from(schema.ordersTable)
@@ -364,7 +381,7 @@ router.get("/erp/pos/drafts", authenticate, requireStaff, requireStore, requireP
 });
 
 // DELETE /erp/pos/drafts/:id — discard a draft and its items
-router.delete("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
+router.delete("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, requireNonFactoryStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const draftId = pid(req, "id");
@@ -384,7 +401,7 @@ router.delete("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, r
 });
 
 // PUT /erp/pos/drafts/:id — replace items of an existing draft (update in-place)
-router.put("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
+router.put("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, requireNonFactoryStore, requirePermission("orders", "view"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const draftId = pid(req, "id");
@@ -443,7 +460,7 @@ router.put("/erp/pos/drafts/:id", authenticate, requireStaff, requireStore, requ
 // accounting transaction, caisse credit, and WebSocket broadcasts.
 // The draft order row is updated in-place (status: draft → pending),
 // so the order ID is preserved.
-router.post("/erp/pos/drafts/:id/confirm", authenticate, requireStaff, requireStore, requirePermission("caisse", "create"), async (req: AuthRequest, res) => {
+router.post("/erp/pos/drafts/:id/confirm", authenticate, requireStaff, requireStore, requireNonFactoryStore, requirePermission("caisse", "create"), async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
     const draftId = pid(req, "id");

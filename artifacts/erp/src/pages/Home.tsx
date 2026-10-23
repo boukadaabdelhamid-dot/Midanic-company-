@@ -63,15 +63,20 @@ export default function Home() {
   const [, navigate] = useLocation();
   const { lang } = useLang();
   const { isAdmin } = useMe();
+  const { currentStoreId, stores } = useStoreContext();
+  const isFactory = stores.find((store) => store.id === currentStoreId)?.kind === "factory";
   const { can } = usePermissions();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
 
   const canViewAlerts = isAdmin || can("inventory", "view");
-  const { data: alertsData } = useAlertsCount(canViewAlerts);
+  const { data: alertsData } = useAlertsCount(canViewAlerts && !isFactory);
 
   const visibleModules = isAdmin
     ? modules
     : modules.filter((m) => can(m.section, "view"));
+  const factoryVisibleModules = isFactory
+    ? visibleModules.filter((module) => module.href !== "/orders")
+    : visibleModules;
 
   const missing = alertsData?.crossStoreMissing ?? 0;
   const slow    = alertsData?.slowMovers ?? 0;
@@ -137,7 +142,7 @@ export default function Home() {
 
         {/* Module grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-10">
-          {visibleModules.map(({ labelFr, labelAr, href, icon: Icon, color }) => (
+          {factoryVisibleModules.map(({ labelFr, labelAr, href, icon: Icon, color }) => (
             <button
               key={href}
               onClick={() => navigate(href)}

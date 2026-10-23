@@ -86,10 +86,12 @@ function ProtectedRoute({
   component: Component,
   adminOnly = false,
   section,
+  nonFactoryOnly = false,
 }: {
   component: React.ComponentType;
   adminOnly?: boolean;
   section?: PermSection;
+  nonFactoryOnly?: boolean;
 }) {
   const { token, logout } = useAuth();
   const { currentStoreId, stores } = useStoreContext();
@@ -105,6 +107,9 @@ function ProtectedRoute({
     ? stores
     : (user as { stores?: Array<{ id: number; kind?: "store" | "factory" }> } | null)?.stores ?? [];
   if (!currentStoreId && storeList.length > 0) return <Redirect to="/select-store" />;
+  if (nonFactoryOnly && storeList.find((store) => store.id === currentStoreId)?.kind === "factory") {
+    return <Redirect to="/sale-orders" />;
+  }
   if (
     section === "manufacturing" &&
     storeList.find((store) => store.id === currentStoreId)?.kind !== "factory"
@@ -209,7 +214,7 @@ function Router() {
         <ProtectedRoute component={Dashboard} section="dashboard" />
       </Route>
       <Route path="/orders">
-        <ProtectedRoute component={Orders} section="orders" />
+        <ProtectedRoute component={Orders} section="orders" nonFactoryOnly />
       </Route>
       <Route path="/sale-orders">
         <ProtectedRoute component={SaleOrders} section="orders" />

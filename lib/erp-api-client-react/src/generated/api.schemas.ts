@@ -155,6 +155,7 @@ export interface Product {
   barcode?: string | null;
   costPrice?: string | null;
   catalogueType?: string | null;
+  manufacturingRole?: "raw_material" | "finished_good";
   brand?: string | null;
   model?: string | null;
   color?: string | null;
@@ -218,6 +219,7 @@ export interface CreateProductRequest {
   barcode?: string | null;
   costPrice?: string | null;
   catalogueType?: string | null;
+  manufacturingRole?: "raw_material" | "finished_good";
   brand?: string | null;
   model?: string | null;
   color?: string | null;
@@ -255,6 +257,7 @@ export interface UpdateProductRequest {
   barcode?: string | null;
   costPrice?: string | null;
   catalogueType?: string | null;
+  manufacturingRole?: "raw_material" | "finished_good";
   brand?: string | null;
   model?: string | null;
   color?: string | null;
@@ -2062,6 +2065,7 @@ export type GetProductsParams = {
   filterExposed?: string;
   filterActive?: string;
   filterCostPrice?: string;
+  manufacturingRole?: "raw_material" | "finished_good";
 };
 
 export type SetProductImagesBody = {

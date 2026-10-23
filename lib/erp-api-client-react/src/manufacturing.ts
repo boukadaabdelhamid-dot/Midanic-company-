@@ -8,6 +8,7 @@ export type ManufacturingProduct = {
   reference: string | null;
   stock: number;
   costPrice: string | null;
+  manufacturingRole: "raw_material" | "finished_good";
 };
 
 export type ManufacturingRecipeComponent = {

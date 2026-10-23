@@ -32,6 +32,7 @@ export const productsTable = pgTable("products", {
   color: text("color"),
   colisage: integer("colisage").default(1),
   unitSaleEnabled: boolean("unit_sale_enabled").notNull().default(false),
+  manufacturingRole: text("manufacturing_role").notNull().default("raw_material"),
   weight: numeric("weight", { precision: 10, scale: 2 }),
   priceGros: numeric("price_gros", { precision: 10, scale: 2 }),
   priceSemiGros: numeric("price_semi_gros", { precision: 10, scale: 2 }),

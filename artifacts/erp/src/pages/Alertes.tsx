@@ -214,7 +214,8 @@ export default function Alertes() {
   const { isAdmin } = useMe();
   const { can } = usePermissions();
   const canCreateTransfer = can("transfers", "create");
-  const { currentStoreId } = useStoreContext();
+  const { currentStoreId, stores } = useStoreContext();
+  const isFactory = stores.find((store) => store.id === currentStoreId)?.kind === "factory";
   const qc = useQueryClient();
 
   // Filter + sort
@@ -263,12 +264,14 @@ export default function Alertes() {
     queryKey: ["alerts-cross-store-missing"],
     queryFn: fetchCrossStoreMissing,
     staleTime: 60_000,
+    enabled: !isFactory,
   });
 
   const slowQuery = useQuery<SlowMoversResponse>({
     queryKey: ["alerts-slow-movers", slowDays],
     queryFn: () => fetchSlowMovers(slowDays),
     staleTime: 60_000,
+    enabled: !isFactory,
   });
 
   const expiryQuery = useQuery<ExpiryRow[]>({
@@ -288,8 +291,10 @@ export default function Alertes() {
 
   const isRefetching = crossQuery.isRefetching || slowQuery.isRefetching || expiryQuery.isRefetching;
   const refetchAll = () => {
-    void crossQuery.refetch();
-    void slowQuery.refetch();
+    if (!isFactory) {
+      void crossQuery.refetch();
+      void slowQuery.refetch();
+    }
     void expiryQuery.refetch();
     void qc.invalidateQueries({ queryKey: ["alerts-count"] });
   };
@@ -452,13 +457,13 @@ export default function Alertes() {
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <Tabs defaultValue="slow" className="w-full">
+      <Tabs defaultValue={isFactory ? "expiry" : "slow"} className="w-full">
 
         {/* Tab bar */}
-        <TabsList className="w-full grid grid-cols-3 mb-5 h-auto p-1">
+        <TabsList className={`w-full grid ${isFactory ? "grid-cols-1" : "grid-cols-3"} mb-5 h-auto p-1`}>
 
           {/* Tab 1: بضاعة راكدة */}
-          <TabsTrigger value="slow" className="flex items-center gap-1.5 py-2 text-xs font-semibold">
+          {!isFactory && <TabsTrigger value="slow" className="flex items-center gap-1.5 py-2 text-xs font-semibold">
             <TrendingDown className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{t("Bضاعة راكدة", "بضاعة راكدة")}</span>
             {slowCount > 0 && (
@@ -466,10 +471,10 @@ export default function Alertes() {
                 {slowCount}
               </span>
             )}
-          </TabsTrigger>
+          </TabsTrigger>}
 
           {/* Tab 2: متاح في متاجر أخرى */}
-          <TabsTrigger value="cross" className="flex items-center gap-1.5 py-2 text-xs font-semibold">
+          {!isFactory && <TabsTrigger value="cross" className="flex items-center gap-1.5 py-2 text-xs font-semibold">
             <StoreIcon className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{t("Inter-magasins", "متاجر أخرى")}</span>
             {crossCount > 0 && (
@@ -477,7 +482,7 @@ export default function Alertes() {
                 {crossCount}
               </span>
             )}
-          </TabsTrigger>
+          </TabsTrigger>}
 
           {/* Tab 3: انتهاء الصلاحية */}
           <TabsTrigger value="expiry" className="flex items-center gap-1.5 py-2 text-xs font-semibold">
@@ -493,7 +498,7 @@ export default function Alertes() {
         </TabsList>
 
         {/* ── Tab 1 content: بضاعة راكدة ─────────────────────────────── */}
-        <TabsContent value="slow" className="space-y-3 mt-0">
+        {!isFactory && <TabsContent value="slow" className="space-y-3 mt-0">
 
           {/* Header + day filter */}
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -745,10 +750,10 @@ export default function Alertes() {
               })}
             </div>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* ── Tab 2 content: متاح في متاجر أخرى ──────────────────────── */}
-        <TabsContent value="cross" className="space-y-3 mt-0">
+        {!isFactory && <TabsContent value="cross" className="space-y-3 mt-0">
           <div className="flex items-center gap-2">
             <StoreIcon className="h-4 w-4 text-blue-500" />
             <h2 className="font-semibold text-sm">
@@ -837,7 +842,7 @@ export default function Alertes() {
               })}
             </div>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* ── Tab 3 content: انتهاء الصلاحية ──────────────────────────── */}
         <TabsContent value="expiry" className="space-y-3 mt-0">

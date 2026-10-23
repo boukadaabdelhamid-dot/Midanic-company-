@@ -279,7 +279,7 @@ function useOnlineOrdersPendingCount(): number {
  * Badge count for smart alerts — sum of cross-store missing + slow movers.
  * Polls GET /erp/alerts/count every 5 minutes.
  */
-function useAlertsBadgeCount(): number {
+function useAlertsBadgeCount(enabled: boolean): number {
   const { currentStoreId } = useStoreContext();
   const { data } = useQuery<{ crossStoreMissing: number; slowMovers: number }>({
     queryKey: ["alerts-count", currentStoreId],
@@ -291,7 +291,7 @@ function useAlertsBadgeCount(): number {
       if (!res.ok) return { crossStoreMissing: 0, slowMovers: 0 };
       return res.json() as Promise<{ crossStoreMissing: number; slowMovers: number }>;
     },
-    enabled: !!currentStoreId,
+    enabled: enabled && !!currentStoreId,
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
@@ -322,7 +322,7 @@ export function Sidebar() {
     return true;
   });
   const onlineOrdersPending = useOnlineOrdersPendingCount();
-  const alertsCount = useAlertsBadgeCount();
+  const alertsCount = useAlertsBadgeCount(!isFactory);
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -382,9 +382,10 @@ export function Sidebar() {
         {visibleEntries.map((entry) => {
           if ("group" in entry) {
             const { icon: Icon, labelEn, labelAr, children } = entry;
+            const factoryChildren = children.filter((child) => !(isFactory && child.href === "/orders"));
             const visibleChildren = isAdmin
-              ? children.filter((child) => !child.section || features[featureForSection(child.section)] !== false)
-              : children.filter((child) => {
+              ? factoryChildren.filter((child) => !child.section || features[featureForSection(child.section)] !== false)
+              : factoryChildren.filter((child) => {
                   if (child.section && features[featureForSection(child.section)] === false) return false;
                   if (child.adminOnly) return false;
                   if (!child.permAction) return true;

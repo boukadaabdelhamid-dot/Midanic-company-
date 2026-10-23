@@ -173,7 +173,7 @@ type ProductForm = {
   price: string; stock: string;
   categoryId: string; imageUrl: string;
   reference: string; barcode: string;
-  costPrice: string; catalogueType: string;
+  costPrice: string; catalogueType: string; manufacturingRole: "raw_material" | "finished_good";
   brand: string; model: string; color: string;
   brandId: string; colorId: string; familyId: string;
   colisage: string; unitSaleEnabled: boolean; weight: string;
@@ -188,7 +188,7 @@ type ProductForm = {
 const emptyForm: ProductForm = {
   nameEn: "", nameAr: "", descriptionEn: "", descriptionAr: "",
   price: "", stock: "", categoryId: "", imageUrl: "",
-  reference: "", barcode: "", costPrice: "", catalogueType: "ARTICLE",
+  reference: "", barcode: "", costPrice: "", catalogueType: "ARTICLE", manufacturingRole: "raw_material",
   brand: "", model: "", color: "",
   brandId: "", colorId: "", familyId: "",
   colisage: "1", unitSaleEnabled: false, weight: "",
@@ -469,9 +469,11 @@ export default function Products() {
   const isFactoryUnit = stores.find((store) => store.id === currentStoreId)?.kind === "factory";
   const canViewPurchasePrice = can("products", "view_purchase_price");
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
+  const productionText = (fr: string, ar: string, en: string) => lang === "ar" ? ar : lang === "en" ? en : fr;
   const currency = lang === "ar" ? "دج" : "DA";
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [manufacturingRole, setManufacturingRole] = useState<"raw_material" | "finished_good">("raw_material");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<typeof EMPTY_FILTERS>(() => ({ ...EMPTY_FILTERS }));
@@ -537,6 +539,7 @@ export default function Products() {
     filterPriceSemiGros: debouncedFilters.priceSemiGros || undefined,
     filterPriceMin: debouncedFilters.priceMin || undefined,
     filterCostPrice: debouncedFilters.costPrice || undefined,
+    manufacturingRole: isFactoryUnit ? manufacturingRole : undefined,
   }, { query: { queryKey: getGetProductsQueryKey({
     page, limit: pageSize, search: debouncedSearch || undefined,
     filterName: debouncedFilters.name || undefined, filterCode: debouncedFilters.code || undefined,
@@ -553,6 +556,7 @@ export default function Products() {
     filterPrice: debouncedFilters.price || undefined, filterPriceGros: debouncedFilters.priceGros || undefined,
     filterPriceSemiGros: debouncedFilters.priceSemiGros || undefined, filterPriceMin: debouncedFilters.priceMin || undefined,
     filterCostPrice: debouncedFilters.costPrice || undefined,
+    manufacturingRole: isFactoryUnit ? manufacturingRole : undefined,
   }), placeholderData: keepPreviousData } });
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
@@ -729,6 +733,7 @@ export default function Products() {
       categoryId: String(p.categoryId ?? ""), imageUrl: p.imageUrl ?? "",
       reference: p.reference ?? "", barcode: p.barcode ?? "",
       costPrice: p.costPrice ?? "", catalogueType: p.catalogueType ?? "ARTICLE",
+      manufacturingRole: p.manufacturingRole === "finished_good" ? "finished_good" : "raw_material",
       brand: p.brand ?? "", model: p.model ?? "", color: p.color ?? "",
       brandId: pp.brandId ? String(pp.brandId) : "",
       colorId: pp.colorId ? String(pp.colorId) : "",
@@ -779,6 +784,7 @@ export default function Products() {
       reference: form.reference || null,
       barcode: form.barcode || null,
       catalogueType: form.catalogueType || "ARTICLE",
+      ...(isFactoryUnit ? { manufacturingRole: form.manufacturingRole } : {}),
       brand: resolvedBrand,
       model: form.model || null,
       color: resolvedColor,
@@ -928,6 +934,7 @@ export default function Products() {
         barcode: undefined,
         costPrice: p.costPrice ?? undefined,
         catalogueType: p.catalogueType ?? "ARTICLE",
+        manufacturingRole: p.manufacturingRole ?? "raw_material",
         brand: p.brand ?? undefined,
         model: p.model ?? undefined,
         color: p.color ?? undefined,
@@ -1028,6 +1035,28 @@ export default function Products() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        {isFactoryUnit && (
+          <div className="flex w-full items-center gap-2 rounded-lg border border-[#d8d7ce] bg-[#f7f5ed] p-2 sm:w-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant={manufacturingRole === "raw_material" ? "default" : "outline"}
+              className={manufacturingRole === "raw_material" ? "bg-[#29483f] hover:bg-[#365b4b]" : ""}
+              onClick={() => { setManufacturingRole("raw_material"); setPage(1); setSelected(new Set()); }}
+            >
+              {productionText("Matières premières", "المواد الأولية", "Raw materials")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={manufacturingRole === "finished_good" ? "default" : "outline"}
+              className={manufacturingRole === "finished_good" ? "bg-[#29483f] hover:bg-[#365b4b]" : ""}
+              onClick={() => { setManufacturingRole("finished_good"); setPage(1); setSelected(new Set()); }}
+            >
+              {productionText("Produits finis", "المنتجات الجاهزة", "Finished goods")}
+            </Button>
+          </div>
+        )}
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -1644,6 +1673,24 @@ export default function Products() {
                   <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-[#1B3057]">
                     <Package className="h-4 w-4" /> {t("Informations générales", "معلومات عامة")}
                   </h3>
+                  {isFactoryUnit && (
+                    <div className="mb-3 max-w-sm space-y-1">
+                      <Label className="text-xs font-semibold">{productionText("Type de produit de production", "تصنيف المنتج في وحدة الإنتاج", "Production product type")}</Label>
+                      <Select
+                        value={form.manufacturingRole}
+                        onValueChange={(value) => setForm((current) => ({
+                          ...current,
+                          manufacturingRole: value === "finished_good" ? "finished_good" : "raw_material",
+                        }))}
+                      >
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="raw_material">{productionText("Matière première", "مادة أولية", "Raw material")}</SelectItem>
+                          <SelectItem value="finished_good">{productionText("Produit fini prêt à vendre", "منتج جاهز للبيع", "Finished good for sale")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs mb-1 block">{t("Type d'identification", "نوع التعريف")}</Label>

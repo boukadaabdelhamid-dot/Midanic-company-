@@ -254,7 +254,9 @@ export default function Manufacturing() {
   const statusClass = (status: ManufacturingOrder["status"]) => status === "planned"
     ? "bg-[#fff3dc] text-[#875616] border-[#f1d8a8]"
     : status === "completed" ? "bg-[#e5f3ed] text-[#28664b] border-[#c4e2d3]" : "bg-[#f4e8e5] text-[#884d40] border-[#e6cbc4]";
-  const addableProducts = products.filter((p) => !recipeDraft.items.some((i) => i.productId === p.id));
+  const rawMaterials = products.filter((product) => product.manufacturingRole === "raw_material");
+  const finishedProducts = products.filter((product) => product.manufacturingRole === "finished_good");
+  const addableProducts = rawMaterials.filter((p) => !recipeDraft.items.some((i) => i.productId === p.id));
 
   return (
     <main dir={lang === "ar" ? "rtl" : "ltr"} className="mx-auto max-w-[1500px] space-y-6 pb-10">
@@ -346,12 +348,12 @@ export default function Manufacturing() {
         <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader><DialogTitle className="text-[#29483f]">{editing ? t("editRecipe") : t("newRecipe")}</DialogTitle><DialogDescription>{t("scaleHint")}</DialogDescription></DialogHeader>
           <div className="space-y-5 py-2">
-            {!editing && <div className="space-y-2"><Label>{t("product")}</Label><select value={recipeDraft.outputProductId} onChange={(e) => setRecipeDraft({ ...recipeDraft, outputProductId: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="select-recipe-output"><option value="">{t("selectProduct")}</option>{products.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>}
+            {!editing && <div className="space-y-2"><Label>{t("product")}</Label><select value={recipeDraft.outputProductId} onChange={(e) => setRecipeDraft({ ...recipeDraft, outputProductId: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="select-recipe-output"><option value="">{t("selectProduct")}</option>{finishedProducts.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>}
             <div className="space-y-2"><Label>{t("yield")}</Label><Input type="number" min="0.001" step="any" value={recipeDraft.yieldQuantity} onChange={(e) => setRecipeDraft({ ...recipeDraft, yieldQuantity: e.target.value })} data-testid="input-recipe-yield" /></div>
             <div className="space-y-3">
               <div className="flex items-center justify-between"><Label>{t("component")}</Label>{addableProducts.length > 0 && <button type="button" onClick={() => setRecipeDraft({ ...recipeDraft, items: [...recipeDraft.items, { productId: addableProducts[0].id, quantity: "1" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#426b5f] hover:text-[#29483f]"><Plus className="h-3.5 w-3.5" />{t("addMaterial")}</button>}</div>
               {recipeDraft.items.map((item, index) => <div key={`${item.productId}-${index}`} className="grid grid-cols-[1fr_110px_34px] items-end gap-2 rounded-md border border-[#e6e7e1] bg-[#fcfcf9] p-2">
-                <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">{t("productSearch")}</Label><select value={item.productId} onChange={(e) => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.map((it, i) => i === index ? { ...it, productId: Number(e.target.value) } : it) })} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">{products.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>
+                <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">{t("productSearch")}</Label><select value={item.productId} onChange={(e) => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.map((it, i) => i === index ? { ...it, productId: Number(e.target.value) } : it) })} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">{rawMaterials.map((p) => <option key={p.id} value={p.id}>{name(p.nameEn, p.nameAr)}</option>)}</select></div>
                 <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">{t("quantity")}</Label><Input type="number" min="0.001" step="any" value={item.quantity} onChange={(e) => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.map((it, i) => i === index ? { ...it, quantity: e.target.value } : it) })} /></div>
                 <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-[#a05443]" aria-label={t("removed")} onClick={() => setRecipeDraft({ ...recipeDraft, items: recipeDraft.items.filter((_, i) => i !== index) })}><X className="h-4 w-4" /></Button>
               </div>)}

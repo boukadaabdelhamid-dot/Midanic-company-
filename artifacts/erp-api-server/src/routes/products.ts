@@ -407,11 +407,15 @@ router.get(
       filterColor, filterColisage, filterWeight, filterCatalogue1, filterCatalogue2, filterCatalogue3,
       filterCatalogue4, filterCatalogue5, filterCatalogue6, filterCreatedAt, filterExposed,
       filterActive, filterPrice, filterPriceGros, filterPriceSemiGros, filterPriceMin, filterCostPrice,
+      manufacturingRole,
     } = req.query as Record<string, string | undefined>;
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageLimit = Math.max(1, parseInt(limit, 10) || 50);
     const offset = (pageNumber - 1) * pageLimit;
     const conditions = [eq(schema.productsTable.storeId, storeId)];
+    if (manufacturingRole === "raw_material" || manufacturingRole === "finished_good") {
+      conditions.push(eq(schema.productsTable.manufacturingRole, manufacturingRole));
+    }
     const exposedOnly = getProductExposureFilter(req.user?.role, filterExposed);
     if (exposedOnly !== undefined) {
       conditions.push(eq(schema.productsTable.isExposed, exposedOnly));
@@ -667,6 +671,7 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
     const {
       nameAr, nameEn, descriptionAr, descriptionEn, price, imageUrl, stock, categoryId,
       reference, barcode, costPrice, catalogueType,
+      manufacturingRole,
       brand, model, color, colisage, unitSaleEnabled, weight,
       priceGros, priceSemiGros, priceMin,
       catalogue1, catalogue2, catalogue3, catalogue4, catalogue5, catalogue6,
@@ -717,6 +722,17 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       .from(schema.storesTable)
       .where(eq(schema.storesTable.id, storeId))
       .limit(1);
+    if (manufacturingRole !== undefined && !["raw_material", "finished_good"].includes(manufacturingRole)) {
+      res.status(400).json({ error: "Invalid manufacturingRole" });
+      return;
+    }
+    if (sourceStore?.kind !== "factory" && manufacturingRole === "finished_good") {
+      res.status(400).json({ error: "Finished goods can only be created in a production unit" });
+      return;
+    }
+    const resolvedManufacturingRole = sourceStore?.kind === "factory"
+      ? manufacturingRole ?? "raw_material"
+      : "raw_material";
     const canShareCatalogProduct = req.productCatalogMode === "shared"
       && Boolean(req.user?.platformTenantId)
       && sourceStore?.kind === "store";
@@ -736,6 +752,7 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       color: color || null,
       colisage: productColisage,
       unitSaleEnabled: unitSaleEnabled === true,
+      manufacturingRole: resolvedManufacturingRole,
       weight: weight || null,
       priceGros: priceGros || null,
       priceSemiGros: priceSemiGros || null,
@@ -888,6 +905,36 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
       .from(schema.storesTable)
       .where(eq(schema.storesTable.id, storeId))
       .limit(1);
+    if ("manufacturingRole" in body) {
+      if (!["raw_material", "finished_good"].includes(String(body.manufacturingRole))) {
+        res.status(400).json({ error: "Invalid manufacturingRole" });
+        return;
+      }
+      if (sourceStore?.kind !== "factory") {
+        res.status(400).json({ error: "Manufacturing role is only available in a production unit" });
+        return;
+      }
+      if (body.manufacturingRole !== currentProduct.manufacturingRole) {
+        const [referenced] = await db.select({ id: schema.manufacturingRecipesTable.id })
+          .from(schema.manufacturingRecipesTable)
+          .leftJoin(
+            schema.manufacturingRecipeItemsTable,
+            eq(schema.manufacturingRecipeItemsTable.recipeId, schema.manufacturingRecipesTable.id),
+          )
+          .where(and(
+            eq(schema.manufacturingRecipesTable.storeId, storeId),
+            or(
+              eq(schema.manufacturingRecipesTable.outputProductId, id),
+              eq(schema.manufacturingRecipeItemsTable.productId, id),
+            ),
+          ))
+          .limit(1);
+        if (referenced) {
+          res.status(409).json({ error: "Remove this product from its recipes before changing its production role" });
+          return;
+        }
+      }
+    }
     const canSyncSharedCatalog = req.productCatalogMode === "shared"
       && Boolean(req.user?.platformTenantId)
       && sourceStore?.kind === "store";

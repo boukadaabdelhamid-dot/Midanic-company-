@@ -397,6 +397,11 @@ paths:
           name: filterCostPrice
           schema:
             type: string
+        - in: query
+          name: manufacturingRole
+          schema:
+            type: string
+            enum: [raw_material, finished_good]
       responses:
         "200":
           description: Products list
@@ -3652,6 +3657,9 @@ components:
         catalogueType:
           type: string
           nullable: true
+        manufacturingRole:
+          type: string
+          enum: [raw_material, finished_good]
         brand:
           type: string
           nullable: true
@@ -3821,6 +3829,9 @@ components:
         catalogueType:
           type: string
           nullable: true
+        manufacturingRole:
+          type: string
+          enum: [raw_material, finished_good]
         brand:
           type: string
           nullable: true
@@ -3917,6 +3928,9 @@ components:
         catalogueType:
           type: string
           nullable: true
+        manufacturingRole:
+          type: string
+          enum: [raw_material, finished_good]
         brand:
           type: string
           nullable: true
