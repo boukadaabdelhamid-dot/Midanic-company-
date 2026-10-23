@@ -4,5 +4,8 @@ export const modules: ModuleMap = {
   "./components/mockups/company-admin/Current.tsx": () => import("../components/mockups/company-admin/Current.tsx"),
   "./components/mockups/company-admin/Organized.tsx": () => import("../components/mockups/company-admin/Organized.tsx"),
   "./components/mockups/customer-balance-history/ClearLedger.tsx": () => import("../components/mockups/customer-balance-history/ClearLedger.tsx"),
-  "./components/mockups/customer-balance-history/Current.tsx": () => import("../components/mockups/customer-balance-history/Current.tsx")
+  "./components/mockups/customer-balance-history/Current.tsx": () => import("../components/mockups/customer-balance-history/Current.tsx"),
+  "./components/mockups/public-store/CategoryBrowse.tsx": () => import("../components/mockups/public-store/CategoryBrowse.tsx"),
+  "./components/mockups/public-store/Current.tsx": () => import("../components/mockups/public-store/Current.tsx"),
+  "./components/mockups/public-store/Storefront.tsx": () => import("../components/mockups/public-store/Storefront.tsx")
 };

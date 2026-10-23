@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+.store-prototype {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  --opaque-button-border-intensity: -8;
+
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  /* Off-white background */
+  --background: 60 14% 95%;
+  --foreground: 220 20% 10%;
+
+  --border: 60 10% 85%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 220 20% 10%;
+  --card-border: 60 10% 90%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 20% 10%;
+  --popover-border: 60 10% 90%;
+
+  /* Navy deep */
+  --primary: 219 53% 22%;
+  --primary-foreground: 60 14% 95%;
+
+  /* Warm gold/sand accent */
+  --secondary: 40 40% 85%;
+  --secondary-foreground: 219 53% 22%;
+
+  --muted: 60 10% 90%;
+  --muted-foreground: 220 10% 40%;
+
+  --accent: 40 40% 90%;
+  --accent-foreground: 219 53% 22%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 60 10% 85%;
+  --ring: 219 53% 22%;
+
+  --app-font-sans: 'Inter', system-ui, sans-serif;
+  --app-font-serif: 'Playfair Display', Georgia, serif;
+  --app-font-mono: Menlo, monospace;
+  
+  --radius: 0.5rem;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+.store-prototype.dark {
+  --background: 220 20% 10%;
+  --foreground: 60 14% 95%;
+
+  --border: 220 20% 20%;
+
+  --card: 220 20% 12%;
+  --card-foreground: 60 14% 95%;
+  --card-border: 220 20% 18%;
+
+  --popover: 220 20% 12%;
+  --popover-foreground: 60 14% 95%;
+  --popover-border: 220 20% 18%;
+
+  --primary: 40 40% 85%;
+  --primary-foreground: 219 53% 22%;
+
+  --secondary: 219 53% 30%;
+  --secondary-foreground: 60 14% 95%;
+
+  --muted: 220 20% 20%;
+  --muted-foreground: 220 10% 60%;
+
+  --accent: 219 53% 22%;
+  --accent-foreground: 60 14% 95%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 220 20% 25%;
+  --ring: 40 40% 85%;
+
+  --opaque-button-border-intensity: 9;
+}
+.store-prototype { font-family: var(--app-font-sans); background:hsl(var(--background));color:hsl(var(--foreground));min-height:100vh; }
+.store-prototype .font-serif { font-family: var(--app-font-serif); }
