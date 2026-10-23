@@ -1,10 +1,13 @@
 import { Router, type NextFunction, type Response } from "express";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../lib/db";
 import {
   hasSufficientStock,
+  isBelowMinimumStock,
   requiredMaterialQuantity,
+  suggestedProductionQuantity,
+  suggestedPurchaseQuantity,
   weightedAverageCost,
 } from "../lib/manufacturing-calculations";
 import {
@@ -139,6 +142,90 @@ router.get(
         ))
         .orderBy(schema.productsTable.nameEn);
       res.json({ products });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  },
+);
+
+router.get(
+  "/erp/manufacturing/replenishment",
+  authenticate,
+  requireStore,
+  requireFactoryStore,
+  requirePermission("manufacturing", "view"),
+  async (req: AuthRequest, res) => {
+    try {
+      const storeId = req.currentStoreId!;
+      const [products, recipes, plannedOrders] = await Promise.all([
+        db.select({
+          productId: schema.productsTable.id,
+          nameAr: schema.productsTable.nameAr,
+          nameEn: schema.productsTable.nameEn,
+          manufacturingRole: schema.productsTable.manufacturingRole,
+          stock: schema.productsTable.stock,
+          minStock: schema.productsTable.minStock,
+        })
+          .from(schema.productsTable)
+          .where(and(
+            eq(schema.productsTable.storeId, storeId),
+            eq(schema.productsTable.isActive, true),
+          )),
+        db.select({
+          id: schema.manufacturingRecipesTable.id,
+          outputProductId: schema.manufacturingRecipesTable.outputProductId,
+          isActive: schema.manufacturingRecipesTable.isActive,
+        })
+          .from(schema.manufacturingRecipesTable)
+          .where(eq(schema.manufacturingRecipesTable.storeId, storeId)),
+        db.select({
+          outputProductId: schema.manufacturingRecipesTable.outputProductId,
+          quantity: sql<number>`COALESCE(SUM(${schema.manufacturingOrdersTable.plannedQuantity}), 0)::float8`,
+        })
+          .from(schema.manufacturingOrdersTable)
+          .innerJoin(
+            schema.manufacturingRecipesTable,
+            eq(schema.manufacturingOrdersTable.recipeId, schema.manufacturingRecipesTable.id),
+          )
+          .where(and(
+            eq(schema.manufacturingOrdersTable.storeId, storeId),
+            eq(schema.manufacturingOrdersTable.status, "planned"),
+          ))
+          .groupBy(schema.manufacturingRecipesTable.outputProductId),
+      ]);
+
+      const plannedByProduct = new Map(plannedOrders.map((order) => [order.outputProductId, order.quantity]));
+      const recipeByProduct = new Map(recipes.map((recipe) => [recipe.outputProductId, recipe]));
+      const rawMaterials = products
+        .filter((product) =>
+          product.manufacturingRole === "raw_material" &&
+          isBelowMinimumStock(product.stock, product.minStock),
+        )
+        .map((product) => ({
+          ...product,
+          suggestedQuantity: suggestedPurchaseQuantity(product.stock, product.minStock),
+        }))
+        .sort((left, right) => left.stock - right.stock || left.nameEn.localeCompare(right.nameEn));
+      const finishedGoods = products
+        .filter((product) =>
+          product.manufacturingRole === "finished_good" &&
+          isBelowMinimumStock(product.stock, product.minStock),
+        )
+        .map((product) => {
+          const plannedQuantity = plannedByProduct.get(product.productId) ?? 0;
+          const recipe = recipeByProduct.get(product.productId);
+          return {
+            ...product,
+            plannedQuantity,
+            suggestedQuantity: suggestedProductionQuantity(product.stock, product.minStock, plannedQuantity),
+            recipeId: recipe?.id ?? null,
+            recipeIsActive: recipe?.isActive ?? false,
+          };
+        })
+        .filter((product) => product.suggestedQuantity > 0)
+        .sort((left, right) => left.stock - right.stock || left.nameEn.localeCompare(right.nameEn));
+
+      res.json({ rawMaterials, finishedGoods });
     } catch (error) {
       sendError(req, res, error);
     }

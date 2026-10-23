@@ -5567,6 +5567,10 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
         WHERE  p.store_id              = ${storeId}
           AND  p.is_active             = true
           AND  (
+            NOT EXISTS (SELECT 1 FROM current_store cs WHERE cs.kind = 'factory')
+            OR p.manufacturing_role = 'raw_material'
+          )
+          AND  (
             p.stock = 0
             OR (p.min_stock IS NOT NULL AND p.stock <= p.min_stock)
           )

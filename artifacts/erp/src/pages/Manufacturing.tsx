@@ -7,13 +7,16 @@ import {
   createManufacturingRecipe,
   getManufacturingCatalogue,
   getManufacturingOrders,
+  getManufacturingReplenishment,
   getManufacturingRecipes,
   manufacturingQueryKeys,
   updateManufacturingRecipe,
+  type FinishedGoodReplenishmentItem,
   type ManufacturingOrder,
   type ManufacturingProduct,
   type ManufacturingRecipe,
 } from "@workspace/erp-api-client-react";
+import { useLocation } from "wouter";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentStore } from "@/hooks/use-current-store";
@@ -32,7 +35,7 @@ import {
 import {
   AlertTriangle, ArrowUpRight, Beaker, Check, ChevronDown,
   CircleAlert, ClipboardList, Factory, History, Layers3, Plus, RefreshCw,
-  Search, Settings2, ShieldCheck, X,
+  Search, Settings2, ShieldCheck, ShoppingBasket, X,
 } from "lucide-react";
 
 type Lang = "fr" | "ar" | "en";
@@ -43,6 +46,7 @@ const copy: Copy = {
   recipes: { fr: "Formules", ar: "الوصفات", en: "Recipes" },
   orders: { fr: "Ordres de fabrication", ar: "أوامر التصنيع", en: "Production orders" },
   history: { fr: "Historique", ar: "السجل", en: "History" },
+  replenishment: { fr: "Réapprovisionnement", ar: "اقتراحات التزويد", en: "Replenishment" },
   newRecipe: { fr: "Nouvelle formule", ar: "وصفة جديدة", en: "New recipe" },
   newOrder: { fr: "Planifier un ordre", ar: "تخطيط أمر", en: "Plan an order" },
   activeRecipes: { fr: "Formules actives", ar: "الوصفات النشطة", en: "Active recipes" },
@@ -114,6 +118,20 @@ const copy: Copy = {
   removed: { fr: "Retirer", ar: "إزالة", en: "Remove" },
   completedOn: { fr: "Terminé le", ar: "أُنجز في", en: "Completed" },
   historyHint: { fr: "Les lignes terminées détaillent les quantités réellement consommées.", ar: "تعرض الأوامر المكتملة الكميات المستهلكة فعليًا.", en: "Completed orders show the quantities actually consumed." },
+  rawMaterialNeeds: { fr: "Matières premières à acheter", ar: "مواد أولية يُقترح شراؤها", en: "Raw materials to purchase" },
+  finishedGoodNeeds: { fr: "Produits finis à fabriquer", ar: "منتجات جاهزة يُقترح إنتاجها", en: "Finished goods to produce" },
+  replenishHint: { fr: "Les suggestions utilisent le stock minimum défini. Les ordres de fabrication déjà planifiés sont pris en compte.", ar: "تعتمد الاقتراحات على حد المخزون الأدنى، وتُحتسب أوامر الإنتاج المخططة.", en: "Suggestions use the configured minimum stock and account for planned production orders." },
+  currentStock: { fr: "Stock actuel", ar: "المخزون الحالي", en: "Current stock" },
+  minimumStock: { fr: "Stock minimum", ar: "الحد الأدنى", en: "Minimum stock" },
+  suggestedPurchase: { fr: "Quantité à acheter", ar: "الكمية المقترحة للشراء", en: "Suggested purchase" },
+  suggestedProduction: { fr: "Quantité à produire", ar: "الكمية المقترحة للإنتاج", en: "Suggested production" },
+  plannedCoverage: { fr: "Déjà planifié", ar: "مخطط مسبقًا", en: "Already planned" },
+  openSmartPurchase: { fr: "Ouvrir les besoins d’achat", ar: "فتح احتياجات الشراء", en: "Open purchase needs" },
+  planSuggestedProduction: { fr: "Planifier la production", ar: "تخطيط الإنتاج", en: "Plan production" },
+  createRecipeForProduct: { fr: "Créer une formule", ar: "إنشاء وصفة", en: "Create recipe" },
+  activateRecipe: { fr: "Réactiver la formule", ar: "إعادة تفعيل الوصفة", en: "Reactivate recipe" },
+  noRawMaterialNeeds: { fr: "Aucune matière première à acheter pour le moment.", ar: "لا توجد مواد أولية تحتاج إلى الشراء حاليًا.", en: "No raw materials need purchasing right now." },
+  noFinishedGoodNeeds: { fr: "Aucun produit fini ne nécessite de production pour le moment.", ar: "لا توجد منتجات جاهزة تحتاج إلى الإنتاج حاليًا.", en: "No finished goods need production right now." },
 };
 
 type MaterialDraft = { productId: number; quantity: string };
@@ -131,9 +149,10 @@ export default function Manufacturing() {
   const { can } = usePermissions();
   const store = useCurrentStore();
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const t = (key: keyof typeof copy) => copy[key][lang];
   const name = (en: string, ar: string) => lang === "ar" ? ar || en : en || ar;
-  const [tab, setTab] = useState<"recipes" | "orders" | "history">("recipes");
+  const [tab, setTab] = useState<"recipes" | "orders" | "history" | "replenishment">("recipes");
   const [filter, setFilter] = useState<"all" | "planned" | "completed" | "cancelled">("all");
   const [search, setSearch] = useState("");
   const [recipeOpen, setRecipeOpen] = useState(false);
@@ -161,9 +180,15 @@ export default function Manufacturing() {
     queryKey: [...manufacturingQueryKeys.orders, store?.id ?? null],
     queryFn: getManufacturingOrders,
   });
+  const replenishmentQuery = useQuery({
+    queryKey: [...manufacturingQueryKeys.replenishment, store?.id ?? null],
+    queryFn: getManufacturingReplenishment,
+    refetchInterval: 60_000,
+  });
   const products = catalogueQuery.data ?? [];
   const recipes = recipesQuery.data ?? [];
   const orders = ordersQuery.data ?? [];
+  const replenishment = replenishmentQuery.data ?? { rawMaterials: [], finishedGoods: [] };
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const activeRecipes = recipes.filter((r) => r.isActive);
   const plannedOrders = orders.filter((o) => o.status === "planned");
@@ -187,6 +212,7 @@ export default function Manufacturing() {
     qc.invalidateQueries({ queryKey: manufacturingQueryKeys.catalogue }),
     qc.invalidateQueries({ queryKey: manufacturingQueryKeys.recipes }),
     qc.invalidateQueries({ queryKey: manufacturingQueryKeys.orders }),
+    qc.invalidateQueries({ queryKey: manufacturingQueryKeys.replenishment }),
   ]);
   const recipeMutation = useMutation({
     mutationFn: async (draft: RecipeDraft) => {
@@ -224,13 +250,13 @@ export default function Manufacturing() {
     onError: (error) => { setActionError(errorText(error)); setConfirm(null); },
   });
 
-  const openRecipe = (recipe?: ManufacturingRecipe) => {
+  const openRecipe = (recipe?: ManufacturingRecipe, outputProductId?: number) => {
     setEditing(recipe ?? null);
     setRecipeError("");
     setRecipeDraft(recipe ? {
       outputProductId: String(recipe.outputProductId), yieldQuantity: String(recipe.yieldQuantity),
       instructions: recipe.instructions ?? "", items: recipe.components.map((c) => ({ productId: c.productId, quantity: String(c.quantity) })),
-    } : blankRecipe());
+    } : { ...blankRecipe(), outputProductId: outputProductId ? String(outputProductId) : "" });
     setRecipeOpen(true);
   };
   const submitRecipe = () => {
@@ -244,9 +270,26 @@ export default function Manufacturing() {
     if (!Number(orderQuantity) || Number(orderQuantity) <= 0) { setOrderError(t("positiveQty")); return; }
     orderMutation.mutate();
   };
-  const loading = catalogueQuery.isLoading || recipesQuery.isLoading || ordersQuery.isLoading;
-  const failed = catalogueQuery.isError || recipesQuery.isError || ordersQuery.isError;
-  const retry = () => { void Promise.all([catalogueQuery.refetch(), recipesQuery.refetch(), ordersQuery.refetch()]); };
+  const openSuggestedOrder = (recommendation: FinishedGoodReplenishmentItem) => {
+    if (!recommendation.recipeId || !recommendation.recipeIsActive) return;
+    setOrderRecipe(String(recommendation.recipeId));
+    setOrderQuantity(String(recommendation.suggestedQuantity));
+    setOrderNotes("");
+    setOrderError("");
+    setOrderOpen(true);
+  };
+  const loading = catalogueQuery.isLoading || recipesQuery.isLoading || ordersQuery.isLoading ||
+    (tab === "replenishment" && replenishmentQuery.isLoading);
+  const failed = catalogueQuery.isError || recipesQuery.isError || ordersQuery.isError ||
+    (tab === "replenishment" && replenishmentQuery.isError);
+  const retry = () => {
+    void Promise.all([
+      catalogueQuery.refetch(),
+      recipesQuery.refetch(),
+      ordersQuery.refetch(),
+      replenishmentQuery.refetch(),
+    ]);
+  };
   const dateLabel = (value: string | null) => value
     ? new Date(value).toLocaleString(useLang.locale(lang), { dateStyle: "medium", timeStyle: "short" })
     : "—";
@@ -290,12 +333,13 @@ export default function Manufacturing() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dbdcd5]">
         <nav className="flex gap-1" aria-label={lang === "ar" ? "أقسام الإنتاج" : lang === "en" ? "Production sections" : "Sections de production"}>
-          {(["recipes", "orders", "history"] as const).map((item) => {
-            const Icon = item === "recipes" ? Beaker : item === "orders" ? ClipboardList : History;
+          {(["recipes", "orders", "history", "replenishment"] as const).map((item) => {
+            const Icon = item === "recipes" ? Beaker : item === "orders" ? ClipboardList : item === "replenishment" ? ShoppingBasket : History;
             return <button key={item} type="button" data-testid={`tab-manufacturing-${item}`} onClick={() => { setTab(item); setActionError(""); }}
               className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${tab === item ? "border-[#29483f] text-[#29483f]" : "border-transparent text-[#7b8490] hover:text-[#365b4b]"}`}>
               <Icon className="h-4 w-4" />{t(item)}
               {item === "orders" && plannedOrders.length > 0 && <span className="rounded-full bg-[#e9edf1] px-1.5 py-0.5 text-[10px] tabular-nums">{plannedOrders.length}</span>}
+              {item === "replenishment" && replenishment.rawMaterials.length + replenishment.finishedGoods.length > 0 && <span className="rounded-full bg-[#fbf1df] px-1.5 py-0.5 text-[10px] tabular-nums text-[#8c6428]">{replenishment.rawMaterials.length + replenishment.finishedGoods.length}</span>}
             </button>;
           })}
         </nav>
@@ -328,6 +372,69 @@ export default function Manufacturing() {
             </div>
           )}
         </Card>
+      ) : tab === "replenishment" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card className="overflow-hidden border-[#d8dad3] shadow-sm">
+            <div className="flex items-start gap-3 border-b border-[#e4e5df] bg-[#fbfaf6] px-4 py-4 sm:px-5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fbf1df] text-[#9a7131]"><ShoppingBasket className="h-5 w-5" /></span>
+              <div><h2 className="font-semibold text-[#253b5c]">{t("rawMaterialNeeds")}</h2><p className="mt-0.5 text-xs text-[#7b8490]">{t("replenishHint")}</p></div>
+            </div>
+            {replenishment.rawMaterials.length === 0 ? <Empty icon={ShoppingBasket} title={t("noRawMaterialNeeds")} body={t("replenishHint")} /> : (
+              <div className="divide-y divide-[#e9e9e3]">
+                {replenishment.rawMaterials.map((item) => <article key={item.productId} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5" data-testid={`raw-material-replenishment-${item.productId}`}>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-[#293e5d]">{name(item.nameEn, item.nameAr)}</h3>
+                    <p className="mt-1 text-xs text-[#718078]">{t("currentStock")}: <strong className="tabular-nums text-[#43536a]">{prettyNumber(item.stock, lang)}</strong> · {t("minimumStock")}: <strong className="tabular-nums text-[#43536a]">{item.minStock == null ? "—" : prettyNumber(item.minStock, lang)}</strong></p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <span className="rounded-md bg-[#fbf1df] px-3 py-2 text-xs font-semibold text-[#825f2c]">{t("suggestedPurchase")}: {prettyNumber(item.suggestedQuantity, lang)}</span>
+                  </div>
+                </article>)}
+              </div>
+            )}
+            <div className="border-t border-[#e4e5df] bg-[#fbfaf6] p-3">
+              <Button variant="outline" className="w-full border-[#d7d6ca] bg-white text-[#40536d]" onClick={() => navigate("/smart-purchase")} disabled={!can("purchases", "view")} data-testid="button-open-factory-smart-purchase">
+                <ShoppingBasket className="me-2 h-4 w-4" />{t("openSmartPurchase")}
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden border-[#d8dad3] shadow-sm">
+            <div className="flex items-start gap-3 border-b border-[#e4e5df] bg-[#fbfaf6] px-4 py-4 sm:px-5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#edf4ef] text-[#3b7358]"><Factory className="h-5 w-5" /></span>
+              <div><h2 className="font-semibold text-[#253b5c]">{t("finishedGoodNeeds")}</h2><p className="mt-0.5 text-xs text-[#7b8490]">{t("replenishHint")}</p></div>
+            </div>
+            {replenishment.finishedGoods.length === 0 ? <Empty icon={Factory} title={t("noFinishedGoodNeeds")} body={t("replenishHint")} /> : (
+              <div className="divide-y divide-[#e9e9e3]">
+                {replenishment.finishedGoods.map((item) => {
+                  const recipe = recipes.find((candidate) => candidate.outputProductId === item.productId);
+                  return <article key={item.productId} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5" data-testid={`finished-good-replenishment-${item.productId}`}>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold text-[#293e5d]">{name(item.nameEn, item.nameAr)}</h3>
+                      <p className="mt-1 text-xs text-[#718078]">{t("currentStock")}: <strong className="tabular-nums text-[#43536a]">{prettyNumber(item.stock, lang)}</strong> · {t("minimumStock")}: <strong className="tabular-nums text-[#43536a]">{item.minStock == null ? "—" : prettyNumber(item.minStock, lang)}</strong>{item.plannedQuantity > 0 && <> · {t("plannedCoverage")}: <strong className="tabular-nums text-[#43536a]">{prettyNumber(item.plannedQuantity, lang)}</strong></>}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                      <span className="rounded-md bg-[#edf4ef] px-3 py-2 text-xs font-semibold text-[#3b7358]">{t("suggestedProduction")}: {prettyNumber(item.suggestedQuantity, lang)}</span>
+                      {item.recipeIsActive && item.recipeId ? (
+                        <Button size="sm" className="bg-[#29483f] text-white hover:bg-[#365b4b]" onClick={() => openSuggestedOrder(item)} disabled={!can("manufacturing", "create")} data-testid={`button-produce-suggested-${item.productId}`}>
+                          <Plus className="me-1.5 h-3.5 w-3.5" />{t("planSuggestedProduction")}
+                        </Button>
+                      ) : recipe ? (
+                        <Button size="sm" variant="outline" onClick={() => activeMutation.mutate(recipe)} disabled={!can("manufacturing", "edit") || activeMutation.isPending} data-testid={`button-reactivate-recipe-${item.productId}`}>
+                          {t("activateRecipe")}
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => openRecipe(undefined, item.productId)} disabled={!can("manufacturing", "create")} data-testid={`button-create-recipe-${item.productId}`}>
+                          <Beaker className="me-1.5 h-3.5 w-3.5" />{t("createRecipeForProduct")}
+                        </Button>
+                      )}
+                    </div>
+                  </article>;
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
       ) : (
         <Card className="overflow-hidden border-[#d8dad3] shadow-sm">
           <div className="flex flex-col justify-between gap-3 border-b border-[#e4e5df] bg-[#fbfaf6] px-4 py-4 sm:flex-row sm:items-center sm:px-5">

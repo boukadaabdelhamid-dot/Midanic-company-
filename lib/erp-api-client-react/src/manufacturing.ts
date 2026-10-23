@@ -59,6 +59,27 @@ export type ManufacturingOrder = {
   materials: ManufacturingOrderMaterial[];
 };
 
+export type ManufacturingReplenishmentItem = {
+  productId: number;
+  nameAr: string;
+  nameEn: string;
+  manufacturingRole: "raw_material" | "finished_good";
+  stock: number;
+  minStock: number | null;
+  suggestedQuantity: number;
+};
+
+export type FinishedGoodReplenishmentItem = ManufacturingReplenishmentItem & {
+  plannedQuantity: number;
+  recipeId: number | null;
+  recipeIsActive: boolean;
+};
+
+export type ManufacturingReplenishment = {
+  rawMaterials: ManufacturingReplenishmentItem[];
+  finishedGoods: FinishedGoodReplenishmentItem[];
+};
+
 export type ManufacturingRecipeInput = {
   outputProductId: number;
   yieldQuantity: number;
@@ -74,6 +95,7 @@ export const manufacturingQueryKeys = {
   catalogue: ["/api/erp/manufacturing/catalogue"] as const,
   recipes: ["/api/erp/manufacturing/recipes"] as const,
   orders: ["/api/erp/manufacturing/orders"] as const,
+  replenishment: ["/api/erp/manufacturing/replenishment"] as const,
 };
 
 export async function getManufacturingCatalogue(): Promise<ManufacturingProduct[]> {
@@ -81,6 +103,10 @@ export async function getManufacturingCatalogue(): Promise<ManufacturingProduct[
     "/api/erp/manufacturing/catalogue",
   );
   return response.products;
+}
+
+export async function getManufacturingReplenishment(): Promise<ManufacturingReplenishment> {
+  return customFetch<ManufacturingReplenishment>("/api/erp/manufacturing/replenishment");
 }
 
 export async function getManufacturingRecipes(): Promise<ManufacturingRecipe[]> {
