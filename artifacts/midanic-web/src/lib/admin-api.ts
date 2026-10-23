@@ -191,6 +191,7 @@ export const adminApi = {
       notes?: string | null;
       trialEndsAt?: string | null;
       featureFlags?: Record<string, boolean>;
+      productCatalogMode?: "separate" | "shared";
       maxStores?: number | null;
       subdomain?: string | null;
       domainStatus?: "inactive" | "active";
@@ -783,6 +784,7 @@ export interface ErpTenant {
   webStoreDomainStatus: "inactive" | "active";
   webStoreDomainActivatedAt: string | null;
   featureFlags: Record<string, boolean>;
+  productCatalogMode: "separate" | "shared";
   maxStores: number | null;
   currentStores: number | null;
   storeCountStatus: "ready" | "not_ready" | "unavailable";

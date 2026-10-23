@@ -14,6 +14,9 @@ export type ErpTenantStatus = (typeof erpTenantStatusValues)[number];
 export const erpContractPeriodValues = ["monthly", "yearly"] as const;
 export type ErpContractPeriod = (typeof erpContractPeriodValues)[number];
 
+export const erpProductCatalogModeValues = ["separate", "shared"] as const;
+export type ErpProductCatalogMode = (typeof erpProductCatalogModeValues)[number];
+
 export const erpTenantDatabaseStatusValues = [
   "unprovisioned",
   "provisioning",
@@ -121,6 +124,10 @@ export const erpTenantsTable = pgTable("erp_tenants", {
   webStoreDomainStatus: text("web_store_domain_status").notNull().default("inactive"),
   webStoreDomainActivatedAt: timestamp("web_store_domain_activated_at", { withTimezone: true }),
   featureFlags: jsonb("feature_flags").$type<ErpFeatureFlags>().notNull().default(defaultErpFeatureFlags),
+  productCatalogMode: text("product_catalog_mode")
+    .$type<ErpProductCatalogMode>()
+    .notNull()
+    .default("separate"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

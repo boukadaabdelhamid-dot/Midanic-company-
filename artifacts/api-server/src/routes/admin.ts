@@ -326,6 +326,7 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
       dataImportError: erpTenantsTable.dataImportError,
       dataImportSummary: erpTenantsTable.dataImportSummary,
       featureFlags: erpTenantsTable.featureFlags,
+      productCatalogMode: erpTenantsTable.productCatalogMode,
       webStoreStatus: erpTenantsTable.webStoreStatus,
       webStoreSubdomain: erpTenantsTable.webStoreSubdomain,
       webStoreHostname: erpTenantsTable.webStoreHostname,
@@ -461,7 +462,7 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
   }
 
   const [owner] = await db
-    .select({ id: usersTable.id })
+    .select({ id: usersTable.id, email: usersTable.email })
     .from(usersTable)
     .where(eq(usersTable.id, ownerUserId))
     .limit(1);
@@ -469,6 +470,22 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Owner user not found" });
     return;
   }
+
+  // A matching ERP request carries the owner's catalog preference into the
+  // company record. If there is no matching request, preserve the safe legacy
+  // behavior: each store keeps its own catalog.
+  const [matchingRequest] = await db
+    .select({ customAnswers: trialRequestsTable.customAnswers })
+    .from(trialRequestsTable)
+    .where(and(
+      eq(sql`lower(trim(${trialRequestsTable.email}))`, owner.email.toLowerCase()),
+      eq(sql`lower(trim(${trialRequestsTable.companyName}))`, companyName.toLowerCase()),
+    ))
+    .orderBy(desc(trialRequestsTable.createdAt))
+    .limit(1);
+  const requestedCatalogMode =
+    matchingRequest?.customAnswers?.["product_catalog_mode"]?.value;
+  const productCatalogMode = requestedCatalogMode === "shared" ? "shared" : "separate";
 
   try {
     const [tenant] = await db
@@ -481,6 +498,7 @@ router.post("/admin/erp/tenants", async (req, res): Promise<void> => {
         hostname: subdomain ? buildErpTenantHostname(subdomain) : null,
         domainStatus: "inactive",
         dataImportStatus: importExistingData ? "awaiting_backup" : "not_requested",
+        productCatalogMode,
       })
       .returning();
     await db
@@ -821,6 +839,16 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
   const status = typeof body.status === "string" ? body.status : undefined;
+  const hasProductCatalogMode = Object.prototype.hasOwnProperty.call(body, "productCatalogMode");
+  const productCatalogMode = body.productCatalogMode;
+  if (
+    hasProductCatalogMode &&
+    productCatalogMode !== "separate" &&
+    productCatalogMode !== "shared"
+  ) {
+    res.status(400).json({ error: "productCatalogMode must be 'separate' or 'shared'" });
+    return;
+  }
   const domainStatus = typeof body.domainStatus === "string" ? body.domainStatus : undefined;
   const webStoreStatus = typeof body.webStoreStatus === "string" ? body.webStoreStatus : undefined;
   const webStoreDomainStatus = typeof body.webStoreDomainStatus === "string"
@@ -965,6 +993,9 @@ router.patch("/admin/erp/tenants/:id", async (req, res): Promise<void> => {
   }
 
   const updates: Partial<typeof erpTenantsTable.$inferInsert> = {};
+  if (hasProductCatalogMode) {
+    updates.productCatalogMode = productCatalogMode as "separate" | "shared";
+  }
   let subdomainChanged = false;
   let webStoreSubdomainChanged = false;
   if (status) {

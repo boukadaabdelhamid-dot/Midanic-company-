@@ -37,3 +37,4 @@
 - [Primary product barcode integrity](primary-product-barcode-integrity.md) — preserve legacy duplicate records; block new same-store barcode collisions transactionally instead of adding a unique index.
 - [Stock transfer workflows](stock-transfer-simplification.md) — direct sends skip destination pre-approval; ordinary requests retain approval and final receipt confirmation.
 - [Wholesale sale units](wholesale-sale-units.md) — product unit sales are configurable per item and currently apply only to Bon de vente, with inventory stored in base pieces.
+- [Shared product catalogs](shared-product-catalog.md) — shared mode copies new product data and prices across active stores; stock stays local and existing products are not backfilled.

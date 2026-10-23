@@ -314,6 +314,27 @@ export default function AdminErp() {
     }
   }
 
+  async function updateProductCatalogMode(
+    tenant: ErpTenant,
+    productCatalogMode: "separate" | "shared",
+  ) {
+    if (tenant.productCatalogMode === productCatalogMode) return;
+    try {
+      const updated = await adminApi.updateErpTenant(tenant.id, { productCatalogMode });
+      setTenants((current) => current.map((item) => item.id === tenant.id ? updated : item));
+      toast({
+        title: tAdmin("Product catalog setting saved"),
+        description: tAdmin("This applies to new products; existing products stay unchanged."),
+      });
+    } catch (error) {
+      toast({
+        title: tAdmin("Could not save product catalog setting"),
+        description: error instanceof Error ? error.message : tAdmin("Please try again."),
+        variant: "destructive",
+      });
+    }
+  }
+
   async function createTenant() {
     const parsedOwnerId = Number(ownerUserId);
     if (!companyName.trim() || !Number.isInteger(parsedOwnerId) || parsedOwnerId <= 0) {
@@ -696,6 +717,24 @@ export default function AdminErp() {
                 <TableCell>
                   <div className="font-medium">{tenant.companyName}</div>
                   <div className="text-xs text-muted-foreground">{tAdmin("Tenant")} #{tenant.id}</div>
+                  <div className="mt-2 flex flex-col items-start gap-1">
+                    <label htmlFor={`catalog-mode-${tenant.id}`} className="text-xs text-muted-foreground">
+                      {tAdmin("Product catalog")}
+                    </label>
+                    <select
+                      id={`catalog-mode-${tenant.id}`}
+                      value={tenant.productCatalogMode ?? "separate"}
+                      onChange={(event) => void updateProductCatalogMode(
+                        tenant,
+                        event.target.value as "separate" | "shared",
+                      )}
+                      title={tAdmin("This applies to new products; existing products stay unchanged.")}
+                      className="h-8 max-w-56 rounded-md border bg-background px-2 text-xs"
+                    >
+                      <option value="separate">{tAdmin("Separate products by store")}</option>
+                      <option value="shared">{tAdmin("Share products across stores")}</option>
+                    </select>
+                  </div>
                   {tenant.dataImportStatus === "completed" && (
                     <p className="mt-1 text-xs text-green-700 dark:text-green-400" data-testid={`status-import-completed-${tenant.id}`}>
                       {tAdmin("Imported")}: {tenant.dataImportSummary?.tableCount ?? 0} {tAdmin("tables")}

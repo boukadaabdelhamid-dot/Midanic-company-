@@ -7,7 +7,7 @@ When a deployed database was created with `drizzle-kit push` before tracked migr
 
 **Why:** The production database could have an old schema while the app's migration journal appeared current, causing startup migration failures with no useful error detail.
 
-**How to apply:** Keep legacy reconciliation idempotent, use `NOT VALID` constraints when old rows may violate new relationships, and log the original migration error (message and stack) before terminating startup. Verify both a push-bootstrapped database and a fresh database.
+**How to apply:** Keep legacy reconciliation idempotent, use `NOT VALID` constraints when old rows may violate new relationships, and log the original migration error (message and stack) before terminating startup. Verify both a push-bootstrapped database and a fresh database. Schema generators can detect columns missing from the last snapshot even when they already exist in a live database; inspect generated SQL and make such DDL idempotent.
 
 An absent `drizzle.__drizzle_migrations` table must be checked with `to_regclass` first; PostgreSQL still resolves a table reference inside a `CASE` subquery even when that branch would not execute.
 

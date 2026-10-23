@@ -120,6 +120,211 @@ async function syncProductImages(productId: number, inputs: ImageInput[]) {
     .orderBy(schema.productImagesTable.sortOrder, schema.productImagesTable.id);
 }
 
+type ProductReplicationSummary = {
+  targetStores: number;
+  createdStores: number;
+  skippedStores: number;
+  failedStoreIds: number[];
+  error?: true;
+};
+
+async function replicateProductToStore(
+  source: typeof schema.productsTable.$inferSelect,
+  targetStoreId: number,
+  images: ImageInput[],
+): Promise<"created" | "already_exists"> {
+  let targetCategoryId: number | null = null;
+  if (source.categoryId) {
+    const [sourceCategory] = await db.select().from(schema.categoriesTable)
+      .where(eq(schema.categoriesTable.id, source.categoryId)).limit(1);
+    if (sourceCategory) {
+      const [targetCategory] = await db.select({ id: schema.categoriesTable.id })
+        .from(schema.categoriesTable)
+        .where(and(
+          eq(schema.categoriesTable.storeId, targetStoreId),
+          eq(schema.categoriesTable.nameAr, sourceCategory.nameAr),
+        )).limit(1);
+      if (targetCategory) {
+        targetCategoryId = targetCategory.id;
+      } else {
+        const [createdCategory] = await db.insert(schema.categoriesTable).values({
+          storeId: targetStoreId,
+          nameAr: sourceCategory.nameAr,
+          nameEn: sourceCategory.nameEn,
+          imageUrl: sourceCategory.imageUrl,
+        }).returning({ id: schema.categoriesTable.id });
+        targetCategoryId = createdCategory?.id ?? null;
+      }
+    }
+  }
+
+  let targetFamilyId: number | null = null;
+  if (source.familyId) {
+    const [sourceFamily] = await db.select().from(schema.productFamiliesTable)
+      .where(eq(schema.productFamiliesTable.id, source.familyId)).limit(1);
+    if (sourceFamily) {
+      const [targetFamily] = await db.select({ id: schema.productFamiliesTable.id })
+        .from(schema.productFamiliesTable)
+        .where(and(
+          eq(schema.productFamiliesTable.storeId, targetStoreId),
+          eq(sql`lower(${schema.productFamiliesTable.nameFr})`, sourceFamily.nameFr.toLowerCase()),
+        )).limit(1);
+      if (targetFamily) {
+        targetFamilyId = targetFamily.id;
+      } else {
+        const [createdFamily] = await db.insert(schema.productFamiliesTable).values({
+          storeId: targetStoreId,
+          nameFr: sourceFamily.nameFr,
+          nameAr: sourceFamily.nameAr,
+        }).returning({ id: schema.productFamiliesTable.id });
+        targetFamilyId = createdFamily?.id ?? null;
+      }
+    }
+  }
+
+  let targetBrandId: number | null = null;
+  if (source.brandId) {
+    const [sourceBrand] = await db.select().from(schema.productBrandsTable)
+      .where(eq(schema.productBrandsTable.id, source.brandId)).limit(1);
+    if (sourceBrand) {
+      const [targetBrand] = await db.select({ id: schema.productBrandsTable.id })
+        .from(schema.productBrandsTable)
+        .where(and(
+          eq(schema.productBrandsTable.storeId, targetStoreId),
+          eq(sql`lower(${schema.productBrandsTable.nameFr})`, sourceBrand.nameFr.toLowerCase()),
+        )).limit(1);
+      if (targetBrand) {
+        targetBrandId = targetBrand.id;
+      } else {
+        const [createdBrand] = await db.insert(schema.productBrandsTable).values({
+          storeId: targetStoreId,
+          nameFr: sourceBrand.nameFr,
+          nameAr: sourceBrand.nameAr,
+        }).returning({ id: schema.productBrandsTable.id });
+        targetBrandId = createdBrand?.id ?? null;
+      }
+    }
+  }
+
+  let targetColorId: number | null = null;
+  if (source.colorId) {
+    const [sourceColor] = await db.select().from(schema.productColorsTable)
+      .where(eq(schema.productColorsTable.id, source.colorId)).limit(1);
+    if (sourceColor) {
+      const [targetColor] = await db.select({ id: schema.productColorsTable.id })
+        .from(schema.productColorsTable)
+        .where(and(
+          eq(schema.productColorsTable.storeId, targetStoreId),
+          eq(sql`lower(${schema.productColorsTable.nameFr})`, sourceColor.nameFr.toLowerCase()),
+        )).limit(1);
+      if (targetColor) {
+        targetColorId = targetColor.id;
+      } else {
+        const [createdColor] = await db.insert(schema.productColorsTable).values({
+          storeId: targetStoreId,
+          nameFr: sourceColor.nameFr,
+          nameAr: sourceColor.nameAr,
+          hexCode: sourceColor.hexCode,
+        }).returning({ id: schema.productColorsTable.id });
+        targetColorId = createdColor?.id ?? null;
+      }
+    }
+  }
+
+  const created = await insertProductWithBarcodeGuard({
+    storeId: targetStoreId,
+    nameAr: source.nameAr,
+    nameEn: source.nameEn,
+    descriptionAr: source.descriptionAr,
+    descriptionEn: source.descriptionEn,
+    price: source.price,
+    imageUrl: source.imageUrl,
+    stock: 0,
+    categoryId: targetCategoryId,
+    reference: source.reference,
+    barcode: source.barcode,
+    costPrice: source.costPrice,
+    catalogueType: source.catalogueType,
+    brand: source.brand,
+    model: source.model,
+    color: source.color,
+    colisage: source.colisage,
+    unitSaleEnabled: source.unitSaleEnabled,
+    weight: source.weight,
+    priceGros: source.priceGros,
+    priceSemiGros: source.priceSemiGros,
+    priceMin: source.priceMin,
+    catalogue1: source.catalogue1,
+    catalogue2: source.catalogue2,
+    catalogue3: source.catalogue3,
+    catalogue4: source.catalogue4,
+    catalogue5: source.catalogue5,
+    catalogue6: source.catalogue6,
+    isActive: source.isActive,
+    // Storefront publication is a per-store choice; don't expose a newly
+    // copied product on another store's web catalog without its approval.
+    isExposed: false,
+    familyId: targetFamilyId,
+    brandId: targetBrandId,
+    colorId: targetColorId,
+    minStock: null,
+    excludedFromPurchase: source.excludedFromPurchase,
+  });
+  if (created.duplicateProductId !== null) return "already_exists";
+
+  const gallery = images.length
+    ? images
+    : source.imageUrl
+      ? [{ url: source.imageUrl, sortOrder: 0, isPrimary: true }]
+      : [];
+  if (gallery.length) await syncProductImages(created.product.id, gallery);
+
+  const extraBarcodes = await db.select({ barcode: schema.productBarcodesTable.barcode })
+    .from(schema.productBarcodesTable)
+    .where(eq(schema.productBarcodesTable.productId, source.id));
+  for (const extra of extraBarcodes) {
+    await db.insert(schema.productBarcodesTable).values({
+      productId: created.product.id,
+      storeId: targetStoreId,
+      barcode: extra.barcode,
+    }).onConflictDoNothing();
+  }
+  return "created";
+}
+
+async function replicateProductAcrossTenantStores(
+  source: typeof schema.productsTable.$inferSelect,
+  sourceStoreId: number,
+  tenantId: number,
+  images: ImageInput[],
+): Promise<ProductReplicationSummary> {
+  const targets = await db.select({ id: schema.storesTable.id })
+    .from(schema.storesTable)
+    .where(and(
+      eq(schema.storesTable.platformTenantId, tenantId),
+      eq(schema.storesTable.isActive, true),
+      sql`${schema.storesTable.id} <> ${sourceStoreId}`,
+    ))
+    .orderBy(schema.storesTable.id);
+
+  const summary: ProductReplicationSummary = {
+    targetStores: targets.length,
+    createdStores: 0,
+    skippedStores: 0,
+    failedStoreIds: [],
+  };
+  for (const target of targets) {
+    try {
+      const result = await replicateProductToStore(source, target.id, images);
+      if (result === "created") summary.createdStores += 1;
+      else summary.skippedStores += 1;
+    } catch {
+      summary.failedStoreIds.push(target.id);
+    }
+  }
+  return summary;
+}
+
 router.get(
   "/products",
   optionalTenantAuth,
@@ -483,16 +688,41 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       });
       return;
     }
-    const product = created.product;
-    if (Array.isArray(images) && images.length > 0) {
-      await syncProductImages(product.id, images);
-      const [fresh] = await db.select().from(schema.productsTable).where(eq(schema.productsTable.id, product.id)).limit(1);
-      const [withImages] = await loadImagesFor([fresh ?? product]);
-      res.status(201).json(withImages);
-      return;
+    let product = created.product;
+    const imageInputs = Array.isArray(images) ? images as ImageInput[] : [];
+    if (imageInputs.length > 0) {
+      await syncProductImages(product.id, imageInputs);
+      const [fresh] = await db.select().from(schema.productsTable)
+        .where(eq(schema.productsTable.id, product.id)).limit(1);
+      product = fresh ?? product;
     }
+
+    let replication: ProductReplicationSummary | undefined;
+    if (req.productCatalogMode === "shared" && req.user?.platformTenantId) {
+      try {
+        replication = await replicateProductAcrossTenantStores(
+          product,
+          storeId,
+          req.user.platformTenantId,
+          imageInputs,
+        );
+      } catch (err) {
+        req.log.warn({ err, productId: product.id }, "Shared catalog replication could not list tenant stores");
+        replication = {
+          targetStores: 0,
+          createdStores: 0,
+          skippedStores: 0,
+          failedStoreIds: [],
+          error: true,
+        };
+      }
+    }
+
     const [withImages] = await loadImagesFor([product]);
-    res.status(201).json(withImages);
+    res.status(201).json({
+      ...withImages,
+      ...(replication ? { replication } : {}),
+    });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 

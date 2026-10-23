@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "erp_session_version" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "erp_tenants" ADD COLUMN IF NOT EXISTS "product_catalog_mode" text DEFAULT 'separate' NOT NULL;

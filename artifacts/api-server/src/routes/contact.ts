@@ -32,6 +32,35 @@ type SavedRequestAnswer = {
   options?: ProductRequestField["options"];
 };
 
+const ERP_PRODUCT_CATALOG_MODE_FIELD: ProductRequestField = {
+  key: "product_catalog_mode",
+  label: {
+    en: "If you have multiple stores, do they share the same products?",
+    fr: "Si vous avez plusieurs magasins, partagent-ils les mêmes produits ?",
+    ar: "إذا كان لديكم عدة متاجر، هل تتشارك المنتجات نفسها؟",
+  },
+  type: "select",
+  required: true,
+  options: [
+    {
+      value: "separate",
+      label: {
+        en: "Each store has its own products",
+        fr: "Chaque magasin a ses propres produits",
+        ar: "لكل متجر منتجاته الخاصة",
+      },
+    },
+    {
+      value: "shared",
+      label: {
+        en: "All stores share the same products",
+        fr: "Tous les magasins partagent les mêmes produits",
+        ar: "جميع المتاجر تتشارك المنتجات نفسها",
+      },
+    },
+  ],
+};
+
 function validateCustomAnswers(
   fields: ProductRequestField[],
   submitted: Record<string, RequestAnswerValue> | undefined,
@@ -120,7 +149,12 @@ router.post("/trial-request", contactLimiter, async (req, res): Promise<void> =>
     res.status(400).json({ error: "Choose a published product" });
     return;
   }
-  const fields = product.productType === "erp" ? product.requestFormFields : [];
+  const fields = product.productType === "erp"
+    ? [
+        ...product.requestFormFields.filter((field) => field.key !== ERP_PRODUCT_CATALOG_MODE_FIELD.key),
+        ERP_PRODUCT_CATALOG_MODE_FIELD,
+      ]
+    : [];
   const custom = validateCustomAnswers(fields, parsed.data.customAnswers);
   if (custom.error) {
     res.status(400).json({ error: custom.error });

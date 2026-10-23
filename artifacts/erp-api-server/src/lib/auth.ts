@@ -108,6 +108,7 @@ export interface AuthRequest extends Request {
   currentStoreId?: number;
   isPlatformService?: boolean;
   tenantFeatures?: Record<string, unknown>;
+  productCatalogMode?: "separate" | "shared";
   featureDisabled?: string;
   tenantDatabaseContext?: TenantDatabaseContext;
 }
@@ -169,6 +170,8 @@ export async function enforcePlatformAccess(
       maxUsers: domain.maxUsers ?? null,
       storageGb: domain.storageGb ?? null,
     };
+    featureRequest.productCatalogMode =
+      domain.productCatalogMode === "shared" ? "shared" : "separate";
     const disabledFeature = featureForRequestPath(
       "originalUrl" in req ? req.originalUrl : undefined,
     );

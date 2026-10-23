@@ -210,6 +210,12 @@ async function ensureProductRequestFormsSchema(): Promise<void> {
 }
 
 async function ensureErpManagementSchema(): Promise<void> {
+  // Some push-created databases already have this column, while older
+  // databases may reach a tracked migration that introduces it.
+  await pool.query(`
+    ALTER TABLE "users"
+      ADD COLUMN IF NOT EXISTS "erp_session_version" integer DEFAULT 0 NOT NULL
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "erp_tenants" (
       "id" serial PRIMARY KEY NOT NULL,
@@ -225,6 +231,7 @@ async function ensureErpManagementSchema(): Promise<void> {
       "approved_at" timestamp with time zone,
       "suspended_at" timestamp with time zone,
       "notes" text,
+      "product_catalog_mode" text DEFAULT 'separate' NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     )
@@ -253,7 +260,8 @@ async function ensureErpManagementSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "web_store_hostname" text,
       ADD COLUMN IF NOT EXISTS "web_store_domain_status" text DEFAULT 'inactive' NOT NULL,
        ADD COLUMN IF NOT EXISTS "web_store_domain_activated_at" timestamp with time zone,
-       ADD COLUMN IF NOT EXISTS "feature_flags" jsonb DEFAULT '{"dashboard":true,"orders":true,"products":true,"inventory":true,"purchases":true,"customers":true,"suppliers":true,"hr":true,"accounting":true,"reports":true,"transfers":true,"caisse":true,"realtime":true,"alerts":true,"settings":true,"web_store":true}'::jsonb NOT NULL
+        ADD COLUMN IF NOT EXISTS "feature_flags" jsonb DEFAULT '{"dashboard":true,"orders":true,"products":true,"inventory":true,"purchases":true,"customers":true,"suppliers":true,"hr":true,"accounting":true,"reports":true,"transfers":true,"caisse":true,"realtime":true,"alerts":true,"settings":true,"web_store":true}'::jsonb NOT NULL,
+        ADD COLUMN IF NOT EXISTS "product_catalog_mode" text DEFAULT 'separate' NOT NULL
   `);
   await pool.query(`
     UPDATE "erp_tenants"

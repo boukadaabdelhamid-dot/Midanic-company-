@@ -12,6 +12,7 @@ export type PlatformTenantDomain = {
   domainStatus: string;
   databaseStatus: string;
   featureFlags?: Record<string, boolean>;
+  productCatalogMode?: "separate" | "shared";
   maxStores?: number | null;
   maxUsers?: number | null;
   storageGb?: number | null;

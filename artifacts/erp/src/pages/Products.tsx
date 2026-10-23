@@ -819,7 +819,36 @@ export default function Products() {
       });
     } else {
       createProduct.mutate({ data }, {
-        onSuccess: () => {
+        onSuccess: (created) => {
+          const replication = (
+            created as Product & {
+              replication?: {
+                targetStores: number;
+                createdStores: number;
+                skippedStores: number;
+                failedStoreIds: number[];
+                error?: true;
+              };
+            }
+          ).replication;
+          if (replication?.error || replication?.failedStoreIds.length || replication?.skippedStores) {
+            toast({
+              variant: "destructive",
+              title: t("Product saved, but sharing was incomplete", "تم حفظ المنتج لكن المشاركة لم تكتمل"),
+              description: t(
+                `Created in ${replication.createdStores} other store(s); ${replication.skippedStores} already had the barcode; ${replication.failedStoreIds.length} failed.`,
+                `أُنشئ في ${replication.createdStores} متجر(ات) أخرى؛ ${replication.skippedStores} لديها الباركود مسبقاً؛ وفشل في ${replication.failedStoreIds.length}.`,
+              ),
+            });
+          } else if (replication && replication.createdStores > 0) {
+            toast({
+              title: t("Product shared with other stores", "تمت مشاركة المنتج مع المتاجر الأخرى"),
+              description: t(
+                `Created in ${replication.createdStores} other store(s).`,
+                `أُنشئ في ${replication.createdStores} متجر(ات) أخرى.`,
+              ),
+            });
+          }
           setPage(1);
           forceRefresh();
           setDialogError(null);

@@ -11,7 +11,36 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRequestTrial, useListProducts } from '@workspace/api-client-react';
 import { toast } from 'sonner';
-import { hasCompleteRequestAnswers, ProductRequestFields, type RequestAnswers } from '@/components/product-request-fields';
+import { hasCompleteRequestAnswers, ProductRequestFields, type RequestAnswers, type RequestFieldConfig } from '@/components/product-request-fields';
+
+const PRODUCT_CATALOG_MODE_FIELD: RequestFieldConfig = {
+  key: 'product_catalog_mode',
+  label: {
+    en: 'If you have multiple stores, do they share the same products?',
+    fr: 'Si vous avez plusieurs magasins, partagent-ils les mêmes produits ?',
+    ar: 'إذا كان لديكم عدة متاجر، هل تتشارك المنتجات نفسها؟',
+  },
+  type: 'select',
+  required: true,
+  options: [
+    {
+      value: 'separate',
+      label: {
+        en: 'Each store has its own products',
+        fr: 'Chaque magasin a ses propres produits',
+        ar: 'لكل متجر منتجاته الخاصة',
+      },
+    },
+    {
+      value: 'shared',
+      label: {
+        en: 'All stores share the same products',
+        fr: 'Tous les magasins partagent les mêmes produits',
+        ar: 'جميع المتاجر تتشارك المنتجات نفسها',
+      },
+    },
+  ],
+};
 
 const trialSchema = z.object({
   name: z.string().min(1),
@@ -44,7 +73,12 @@ export default function Trial() {
 
   const onSubmit = (data: TrialForm) => {
     const selectedProduct = products?.find((product) => product.id === data.productId);
-    const fields = selectedProduct?.productType === 'erp' ? selectedProduct.requestFormFields : [];
+    const fields = selectedProduct?.productType === 'erp'
+      ? [
+          ...selectedProduct.requestFormFields.filter((field) => field.key !== PRODUCT_CATALOG_MODE_FIELD.key),
+          PRODUCT_CATALOG_MODE_FIELD,
+        ]
+      : [];
     if (!hasCompleteRequestAnswers(fields, customAnswers)) {
       toast.error(t('trial.required_product_fields'));
       return;
@@ -165,7 +199,10 @@ export default function Trial() {
                     const selectedProduct = products?.find((product) => product.id === Number(form.watch('productId')));
                     return selectedProduct?.productType === 'erp' ? (
                       <ProductRequestFields
-                        fields={selectedProduct.requestFormFields}
+                        fields={[
+                          ...selectedProduct.requestFormFields.filter((field) => field.key !== PRODUCT_CATALOG_MODE_FIELD.key),
+                          PRODUCT_CATALOG_MODE_FIELD,
+                        ]}
                         answers={customAnswers}
                         language={i18n.language}
                         onChange={(key, value) => setCustomAnswers((current) => ({ ...current, [key]: value }))}
