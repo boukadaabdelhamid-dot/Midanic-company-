@@ -8,6 +8,7 @@ import { authenticate, configuredTenantLimit, requireAdmin, requireTenantAdmin, 
 import { countLimitReached } from "../lib/entitlement-limits";
 import { broadcastToAdmins, broadcastCaisseChanged } from "../lib/ws";
 import { ensureCaisse } from "./caisses";
+import { isSafeLegacyCatalogMatchGroup } from "../lib/shared-product-catalog";
 import {
   recomputeContactBalance,
   syncLinkedCustomerBalances,
@@ -2210,8 +2211,14 @@ router.post("/erp/suppliers/:id/adjust", authenticate, requireStaff, requireStor
  * including any annexe charge allocations distributed to individual purchase items.
  * Call inside a transaction after any change that affects charge lines or item costs.
  */
-async function recalcProductCump(tx: DbLike, productId: number, storeId: number) {
-  const [cumpRow] = await (tx as typeof db)
+async function recalcProductCump(
+  tx: DbLike,
+  productId: number,
+  storeId: number,
+  sharedCatalogTenantId?: number,
+) {
+  const txDb = tx as typeof db;
+  const [cumpRow] = await txDb
     .select({
       cump: sql<string>`ROUND(
         SUM(
@@ -2236,9 +2243,84 @@ async function recalcProductCump(tx: DbLike, productId: number, storeId: number)
       eq(schema.purchaseOrdersTable.status, "received"),
     ));
   if (cumpRow?.cump != null) {
-    await (tx as typeof db).update(schema.productsTable)
+    const costPrice = String(cumpRow.cump);
+    await txDb.update(schema.productsTable)
       .set({ costPrice: String(cumpRow.cump) })
-      .where(eq(schema.productsTable.id, productId));
+      .where(and(
+        eq(schema.productsTable.id, productId),
+        eq(schema.productsTable.storeId, storeId),
+      ));
+
+    if (!sharedCatalogTenantId) return;
+    const [source] = await txDb.select({
+      id: schema.productsTable.id,
+      barcode: schema.productsTable.barcode,
+      sharedCatalogId: schema.productsTable.sharedCatalogId,
+      storeKind: schema.storesTable.kind,
+      platformTenantId: schema.storesTable.platformTenantId,
+    })
+      .from(schema.productsTable)
+      .innerJoin(schema.storesTable, eq(schema.storesTable.id, schema.productsTable.storeId))
+      .where(and(
+        eq(schema.productsTable.id, productId),
+        eq(schema.productsTable.storeId, storeId),
+      ))
+      .limit(1);
+    if (!source || source.storeKind !== "store" || source.platformTenantId !== sharedCatalogTenantId) return;
+
+    let sharedCatalogId = source.sharedCatalogId;
+    const barcode = source.barcode?.trim();
+    if (!sharedCatalogId && barcode) {
+      const lockKey = `erp:product-barcode:${barcode}`;
+      await txDb.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+      const matches = await txDb.select({
+        id: schema.productsTable.id,
+        storeId: schema.productsTable.storeId,
+        sharedCatalogId: schema.productsTable.sharedCatalogId,
+      })
+        .from(schema.productsTable)
+        .innerJoin(schema.storesTable, eq(schema.storesTable.id, schema.productsTable.storeId))
+        .where(and(
+          eq(schema.storesTable.platformTenantId, sharedCatalogTenantId),
+          eq(schema.storesTable.kind, "store"),
+          eq(schema.storesTable.isActive, true),
+          sql`trim(${schema.productsTable.barcode}) = ${barcode}`,
+        ));
+      if (isSafeLegacyCatalogMatchGroup(matches)) {
+        const existingIds = new Set(matches
+          .map((match) => match.sharedCatalogId)
+          .filter((value): value is string => Boolean(value)));
+        if (existingIds.size <= 1) {
+          sharedCatalogId = existingIds.values().next().value ?? randomUUID();
+          const unlinkedIds = matches.filter((match) => !match.sharedCatalogId).map((match) => match.id);
+          if (unlinkedIds.length) {
+            await txDb.update(schema.productsTable)
+              .set({ sharedCatalogId })
+              .where(and(
+                inArray(schema.productsTable.id, unlinkedIds),
+                isNull(schema.productsTable.sharedCatalogId),
+              ));
+          }
+        }
+      }
+    }
+
+    if (!sharedCatalogId) return;
+    const linkedProducts = await txDb.select({ id: schema.productsTable.id })
+      .from(schema.productsTable)
+      .innerJoin(schema.storesTable, eq(schema.storesTable.id, schema.productsTable.storeId))
+      .where(and(
+        eq(schema.productsTable.sharedCatalogId, sharedCatalogId),
+        ne(schema.productsTable.id, productId),
+        eq(schema.storesTable.platformTenantId, sharedCatalogTenantId),
+        eq(schema.storesTable.kind, "store"),
+        eq(schema.storesTable.isActive, true),
+      ));
+    if (linkedProducts.length) {
+      await txDb.update(schema.productsTable)
+        .set({ costPrice })
+        .where(inArray(schema.productsTable.id, linkedProducts.map((product) => product.id)));
+    }
   }
 }
 
@@ -2460,7 +2542,12 @@ router.put("/erp/purchase-orders/:id/receive", authenticate, requireStaff, requi
           // The current PO is already marked 'received' above, so it is included in this query.
           // Annexe charge allocations (frais de transport, douanes…) are included via a correlated
           // subquery so that effective unit cost = unitCost + (total_charges / qty) per item.
-          await recalcProductCump(tx, item.productId, storeId);
+          await recalcProductCump(
+            tx,
+            item.productId,
+            storeId,
+            req.productCatalogMode === "shared" ? req.user?.platformTenantId : undefined,
+          );
         }
       }
 
@@ -2638,7 +2725,12 @@ router.post("/erp/purchase-annexe-charges", authenticate, requireStaff, requireS
           items.filter(it => receivedBonIds.has(it.purchaseOrderId)).map(it => it.productId)
         )];
         for (const productId of affectedProductIds) {
-          await recalcProductCump(tx, productId, storeId);
+          await recalcProductCump(
+            tx,
+            productId,
+            storeId,
+            req.productCatalogMode === "shared" ? req.user?.platformTenantId : undefined,
+          );
         }
       }
 
@@ -2692,7 +2784,12 @@ router.delete("/erp/purchase-annexe-charges/:id", authenticate, requireStaff, re
         .where(and(eq(schema.purchaseAnnexeChargesTable.id, chargeId), eq(schema.purchaseAnnexeChargesTable.storeId, storeId)));
       // Recalculate CUMP now that this charge's allocations are gone
       for (const productId of affectedProductIds) {
-        await recalcProductCump(tx, productId, storeId);
+        await recalcProductCump(
+          tx,
+          productId,
+          storeId,
+          req.productCatalogMode === "shared" ? req.user?.platformTenantId : undefined,
+        );
       }
     });
 
