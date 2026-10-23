@@ -303,6 +303,7 @@ async function replicateProductAcrossTenantStores(
     .where(and(
       eq(schema.storesTable.platformTenantId, tenantId),
       eq(schema.storesTable.isActive, true),
+      sql`${schema.storesTable.kind} <> 'factory'`,
       sql`${schema.storesTable.id} <> ${sourceStoreId}`,
     ))
     .orderBy(schema.storesTable.id);
@@ -700,12 +701,20 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
     let replication: ProductReplicationSummary | undefined;
     if (req.productCatalogMode === "shared" && req.user?.platformTenantId) {
       try {
-        replication = await replicateProductAcrossTenantStores(
-          product,
-          storeId,
-          req.user.platformTenantId,
-          imageInputs,
-        );
+        const [sourceStore] = await db.select({ kind: schema.storesTable.kind })
+          .from(schema.storesTable)
+          .where(eq(schema.storesTable.id, storeId))
+          .limit(1);
+        // A production unit owns its raw materials and finished products.
+        // Shared catalogs apply only to ordinary stores, never to factories.
+        if (sourceStore?.kind === "store") {
+          replication = await replicateProductAcrossTenantStores(
+            product,
+            storeId,
+            req.user.platformTenantId,
+            imageInputs,
+          );
+        }
       } catch (err) {
         req.log.warn({ err, productId: product.id }, "Shared catalog replication could not list tenant stores");
         replication = {
@@ -1080,6 +1089,18 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
     const sourceStoreId = req.currentStoreId!;
     const { productIds, targetStoreIds } = req.body as { productIds?: unknown; targetStoreIds?: unknown };
 
+    const [sourceStore] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, sourceStoreId))
+      .limit(1);
+    if (sourceStore?.kind === "factory") {
+      res.status(403).json({
+        error: "Production unit products must remain in the production unit",
+        code: "FACTORY_PRODUCT_COPY_DISABLED",
+      });
+      return;
+    }
+
     if (!Array.isArray(productIds) || !Array.isArray(targetStoreIds) || productIds.length === 0 || targetStoreIds.length === 0) {
       res.status(400).json({ error: "productIds and targetStoreIds must be non-empty arrays" });
       return;
@@ -1098,6 +1119,7 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
       .where(and(
         inArray(schema.storesTable.id, uniqueTargetStoreIds),
         eq(schema.storesTable.isActive, true),
+        sql`${schema.storesTable.kind} <> 'factory'`,
         req.user?.platformTenantId === undefined
           ? undefined
           : eq(schema.storesTable.platformTenantId, req.user.platformTenantId),

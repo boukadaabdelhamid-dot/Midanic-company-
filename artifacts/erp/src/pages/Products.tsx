@@ -1034,13 +1034,15 @@ export default function Products() {
               <Printer className="h-4 w-4" />
               {t("Imprimer étiquettes", "طباعة")}
             </Button>
-            <Button
-              variant="outline" size="sm" className="h-9 gap-2"
-              onClick={() => setCopyModal({ open: true, productIds: Array.from(selected) })}
-            >
-              <Send className="h-4 w-4" />
-              {t("Envoyer vers magasin", "إرسال إلى متجر")}
-            </Button>
+            {!isFactoryUnit && (
+              <Button
+                variant="outline" size="sm" className="h-9 gap-2"
+                onClick={() => setCopyModal({ open: true, productIds: Array.from(selected) })}
+              >
+                <Send className="h-4 w-4" />
+                {t("Envoyer vers magasin", "إرسال إلى متجر")}
+              </Button>
+            )}
           </>
         )}
         {/* Column visibility button */}
@@ -1450,13 +1452,15 @@ export default function Products() {
             <Copy className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span>{t("Dupliquer", "نسخ المنتج")}</span>
           </button>
-          <button
-            className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-muted/60 transition-colors text-right"
-            onClick={() => { const pid = menuProduct.id; setOpenMenuId(null); setMenuPos(null); setMenuProduct(null); setCopyModal({ open: true, productIds: [pid] }); }}
-          >
-            <Send className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span>{t("Envoyer vers magasin", "إرسال إلى متجر")}</span>
-          </button>
+          {!isFactoryUnit && (
+            <button
+              className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-muted/60 transition-colors text-right"
+              onClick={() => { const pid = menuProduct.id; setOpenMenuId(null); setMenuPos(null); setMenuProduct(null); setCopyModal({ open: true, productIds: [pid] }); }}
+            >
+              <Send className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span>{t("Envoyer vers magasin", "إرسال إلى متجر")}</span>
+            </button>
+          )}
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-muted/60 transition-colors text-right"
             onClick={() => { setOpenMenuId(null); setMenuPos(null); setMenuProduct(null); setDetailsProduct(menuProduct); }}
@@ -2184,12 +2188,14 @@ export default function Products() {
         onClose={() => setHistoryProduct(null)}
       />
 
-      <CopyToStoresModal
-        open={copyModal.open}
-        onClose={() => setCopyModal({ open: false, productIds: [] })}
-        productIds={copyModal.productIds}
-        products={products}
-      />
+      {!isFactoryUnit && (
+        <CopyToStoresModal
+          open={copyModal.open}
+          onClose={() => setCopyModal({ open: false, productIds: [] })}
+          productIds={copyModal.productIds}
+          products={products}
+        />
+      )}
 
       <ImportExcelModal
         open={importModal}
