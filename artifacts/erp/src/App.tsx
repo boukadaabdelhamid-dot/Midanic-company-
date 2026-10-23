@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useRealtimeWS } from "@/hooks/use-realtime-ws";
 import { getApiBase } from "@/lib/api-base";
 import { Layout } from "@/components/layout/Layout";
+import { MultiSiteOnly } from "@/components/layout/MultiSiteOnly";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -87,11 +88,13 @@ function ProtectedRoute({
   adminOnly = false,
   section,
   nonFactoryOnly = false,
+  multiSiteOnly = false,
 }: {
   component: React.ComponentType;
   adminOnly?: boolean;
   section?: PermSection;
   nonFactoryOnly?: boolean;
+  multiSiteOnly?: boolean;
 }) {
   const { token, logout } = useAuth();
   const { currentStoreId, stores } = useStoreContext();
@@ -122,7 +125,7 @@ function ProtectedRoute({
   }
   return (
     <Layout>
-      <Component />
+      {multiSiteOnly ? <MultiSiteOnly><Component /></MultiSiteOnly> : <Component />}
     </Layout>
   );
 }
@@ -202,7 +205,7 @@ function Router() {
         {token ? <Redirect to="/home" /> : <Redirect to="/login" />}
       </Route>
       <Route path="/stores">
-        <ProtectedRoute component={Stores} adminOnly section="settings" />
+        <ProtectedRoute component={Stores} adminOnly section="settings" multiSiteOnly />
       </Route>
       <Route path="/home">
         <ProtectedHome />
@@ -250,7 +253,7 @@ function Router() {
         <ProtectedRoute component={Inventory} section="inventory" />
       </Route>
       <Route path="/transfers">
-        <ProtectedRoute component={Transfers} section="transfers" />
+        <ProtectedRoute component={Transfers} section="transfers" multiSiteOnly />
       </Route>
       <Route path="/manufacturing">
         <ProtectedRoute component={Manufacturing} section="manufacturing" />

@@ -13,7 +13,7 @@ import logoPath from "@/assets/midanic-logo.jpeg";
 export default function SelectStore() {
   const [, setLocation] = useLocation();
   const { token, setToken, logout } = useAuth();
-  const { setStores, setCurrentStoreId } = useStoreContext();
+  const { currentStoreId, setStores, setCurrentStoreId } = useStoreContext();
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const qc = useQueryClient();
@@ -35,6 +35,7 @@ export default function SelectStore() {
   };
 
   if (!token) return <Redirect to="/login" />;
+  if (stores.length === 1 && currentStoreId === stores[0].id) return <Redirect to="/home" />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

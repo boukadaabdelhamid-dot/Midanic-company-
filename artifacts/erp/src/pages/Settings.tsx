@@ -21,9 +21,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { User, Store as StoreIcon, Shield, Save, Settings as SettingsIcon, Users } from "lucide-react";
 import { getStoreName, setStoreName, DEFAULT_STORE_NAME } from "@/lib/store-settings";
+import { useCompanySites } from "@/hooks/use-company-sites";
+import { SingleSiteNameSettings } from "@/components/settings/SingleSiteNameSettings";
 
 export default function Settings() {
-  const { user, role } = useMe();
+  const { user, role, isAdmin } = useMe();
+  const { siteCount, hasMultipleSites } = useCompanySites();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { lang } = useLang();
@@ -107,6 +110,10 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {isAdmin && siteCount === 1 && currentStore && (
+        <SingleSiteNameSettings key={currentStore.id} store={currentStore} />
+      )}
+
       <Card className="border shadow-sm">
         <CardHeader className="pb-3 pt-4 px-5">
           <CardTitle className="text-sm font-semibold flex items-center gap-2 text-[#1B3057]">
@@ -187,6 +194,7 @@ export default function Settings() {
           {t("Administration", "الإدارة")}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {isAdmin && hasMultipleSites && (
           <Card className="border shadow-sm cursor-pointer hover:border-[#1B3057]/50 hover:shadow-md transition-all group" onClick={() => navigate("/stores")}>
             <CardContent className="p-5 flex items-center gap-4">
               <div className="w-10 h-10 rounded-full bg-[#1B3057]/10 flex items-center justify-center shrink-0 group-hover:bg-[#1B3057]/20 transition-colors">
@@ -198,6 +206,7 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           <Card className="border shadow-sm cursor-pointer hover:border-[#1B3057]/50 hover:shadow-md transition-all group" onClick={() => navigate("/staff")}>
             <CardContent className="p-5 flex items-center gap-4">

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { isChimeMuted, setChimeMuted, playNewOrderChime } from "@/lib/chime";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions, type PermSection } from "@/hooks/use-permissions";
+import { useCompanySites } from "@/hooks/use-company-sites";
 
 type NavItem = {
   href: string;
@@ -115,6 +116,7 @@ const navEntries: NavEntry[] = [
 const COLLAPSE_KEY = "midanic.erp.sidebarCollapsed";
 
 function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { hasMultipleSites } = useCompanySites();
   const { lang } = useLang();
   const productionLabel = lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Production unit" : "Unité de production";
   const { user } = useMe();
@@ -156,7 +158,7 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
       setStores(apiStores, selectedStoreIsAvailable ? currentStoreId : null);
     }
   }, [accessibleStores, apiStores, currentStoreId, ctxStores, setStores]);
-  const current = stores.find((s) => s.id === currentStoreId);
+  const current = stores.find((s) => s.id === currentStoreId) ?? (stores.length === 1 ? stores[0] : undefined);
 
   if (!stores.length) return null;
 
@@ -178,7 +180,7 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
     });
   };
 
-  if (stores.length === 1) {
+  if (!hasMultipleSites || stores.length === 1) {
     if (collapsed) return null;
     const UnitIcon = current?.kind === "factory" ? Factory : StoreIcon;
     return (
@@ -189,7 +191,9 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
             : <UnitIcon className="h-3.5 w-3.5 shrink-0" />}
           <span className="min-w-0">
             {current?.kind === "factory" && <span className="block text-[9px] font-bold uppercase tracking-[.14em] text-[#d5b47e]">{productionLabel}</span>}
-            <span className="block truncate font-medium" title={current?.nameEn}>{current?.nameEn}</span>
+            <span className="block truncate font-medium" title={lang === "ar" ? current?.nameAr : current?.nameEn}>
+              {lang === "ar" ? current?.nameAr : current?.nameEn}
+            </span>
           </span>
         </div>
       </div>
@@ -299,6 +303,7 @@ function useAlertsBadgeCount(enabled: boolean): number {
 }
 
 export function Sidebar() {
+  const { hasMultipleSites } = useCompanySites();
   const [location] = useLocation();
   const { logout } = useAuth();
   const { isAdmin, user, features } = useMe();
@@ -311,6 +316,7 @@ export function Sidebar() {
   const userId = (user as { id?: number | string } | null)?.id ?? null;
   const { can } = usePermissions();
   const visibleEntries = navEntries.filter((it) => {
+    if ("href" in it && (it.href === "/stores" || it.href === "/transfers") && !hasMultipleSites) return false;
     if (it.section === "manufacturing" && currentStore?.kind !== "factory") return false;
     if (it.section && features[featureForSection(it.section)] === false) return false;
     if (it.adminOnly && !isAdmin) return false;
