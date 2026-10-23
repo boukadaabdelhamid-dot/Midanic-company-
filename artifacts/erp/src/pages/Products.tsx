@@ -2246,10 +2246,32 @@ export default function Products() {
 function BarcodeManagerPanel({ productId }: { productId: number }) {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
+  const qc = useQueryClient();
   const [input, setInput] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const apiBase = getApiBase();
   const tok = () => localStorage.getItem("midanic_token") ?? "";
+  const barcodeError = (data: { error?: string; code?: string; storeId?: number | null }) => {
+    if (data.code === "SHARED_PRODUCT_UNLINKED") {
+      return t(
+        "Les copies du produit sont ambiguës. Définissez un code-barres principal unique avant de modifier les codes partagés.",
+        "تعذر تحديد نسخ المنتج بأمان. عيّن باركوداً أساسياً فريداً قبل تعديل الباركودات المشتركة.",
+      );
+    }
+    if (data.code === "PRODUCT_BARCODE_EXISTS") {
+      return `${t("Code-barres déjà utilisé dans le magasin", "الباركود مستخدم مسبقاً في المتجر")} ${data.storeId ?? ""}`;
+    }
+    if (data.code === "PRODUCT_COPY_MISSING") {
+      return t("Une copie du produit n'existe plus. Actualisez la page.", "إحدى نسخ المنتج لم تعد موجودة. حدّث الصفحة.");
+    }
+    return data.error;
+  };
+  const refreshBarcodeQueries = () => {
+    void refetch();
+    void qc.invalidateQueries({ queryKey: ["extra-barcodes-all"] });
+    void qc.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+  };
 
   const { data: list = [], refetch, isLoading } = useQuery<Array<{ id: number; barcode: string }>>({
     queryKey: ["extra-barcodes", productId],
@@ -2272,10 +2294,20 @@ function BarcodeManagerPanel({ productId }: { productId: number }) {
         headers: { Authorization: `Bearer ${tok()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ barcode }),
       });
-      const d = await r.json().catch(() => ({})) as { error?: string };
-      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      const d = await r.json().catch(() => ({})) as {
+        error?: string; code?: string; storeId?: number | null; synchronizedStores?: number;
+      };
+      if (!r.ok) throw new Error(barcodeError(d) ?? `HTTP ${r.status}`);
+      return d;
     },
-    onSuccess: () => { setInput(""); setErr(null); void refetch(); },
+    onSuccess: (data) => {
+      setInput("");
+      setErr(null);
+      setNotice((data.synchronizedStores ?? 0) > 1
+        ? `${t("Code-barres synchronisé dans", "تمت مزامنة الباركود في")} ${data.synchronizedStores} ${t("magasins", "متاجر")}`
+        : null);
+      refreshBarcodeQueries();
+    },
     onError: (e) => setErr((e as Error).message),
   });
 
@@ -2286,11 +2318,11 @@ function BarcodeManagerPanel({ productId }: { productId: number }) {
         headers: { Authorization: `Bearer ${tok()}` },
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { error?: string };
-        throw new Error(d.error ?? `HTTP ${r.status}`);
+        const d = await r.json().catch(() => ({})) as { error?: string; code?: string; storeId?: number | null };
+        throw new Error(barcodeError(d) ?? `HTTP ${r.status}`);
       }
     },
-    onSuccess: () => { void refetch(); },
+    onSuccess: () => { setErr(null); setNotice(null); refreshBarcodeQueries(); },
     onError: (e) => setErr((e as Error).message),
   });
 
@@ -2298,6 +2330,7 @@ function BarcodeManagerPanel({ productId }: { productId: number }) {
     const bc = input.trim();
     if (!bc) return;
     setErr(null);
+    setNotice(null);
     add.mutate(bc);
   };
 
@@ -2326,6 +2359,7 @@ function BarcodeManagerPanel({ productId }: { productId: number }) {
         </Button>
       </div>
       {err && <p className="text-xs text-red-600">{err}</p>}
+      {notice && <p className="text-xs text-green-700">{notice}</p>}
 
       {isLoading && (
         <div className="flex justify-center py-3">

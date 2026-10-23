@@ -361,7 +361,10 @@ export async function syncSharedCatalogProductCopies(options: {
             )).limit(1);
           const [duplicateExtraBarcode] = await tx.select({ productId: schema.productBarcodesTable.productId })
             .from(schema.productBarcodesTable)
-            .where(eq(schema.productBarcodesTable.barcode, source.barcode.trim()))
+            .where(and(
+              eq(schema.productBarcodesTable.storeId, target.storeId),
+              eq(schema.productBarcodesTable.barcode, source.barcode.trim()),
+            ))
             .limit(1);
           if (duplicateProduct || (duplicateExtraBarcode && duplicateExtraBarcode.productId !== target.id)) {
             return false;

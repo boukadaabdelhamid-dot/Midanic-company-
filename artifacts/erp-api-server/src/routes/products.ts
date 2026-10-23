@@ -18,6 +18,7 @@ import {
 import { resolvePublicStore } from "../lib/store-context";
 import { getProductExposureFilter, isProductStaffRole } from "../lib/product-visibility";
 import { classifyProductImportDuplicates } from "../lib/product-import-duplicates";
+import { addBarcodeToProductCopies, removeBarcodeFromProductCopies } from "../lib/product-barcodes";
 import {
   changedSharedProductFields,
   hasSharedCatalogProductChanges,
@@ -1156,8 +1157,6 @@ router.post("/erp/products/:id/barcodes", authenticate, requireStaff, requireSto
       ))
       .limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-    const storeId = product.storeId;
-
     const { barcode } = req.body as { barcode?: string };
     if (!barcode?.trim()) { res.status(400).json({ error: "barcode is required" }); return; }
     const bc = barcode.trim();
@@ -1170,73 +1169,14 @@ router.post("/erp/products/:id/barcodes", authenticate, requireStaff, requireSto
       return;
     }
 
-    const inserted = await db.transaction(async (tx) => {
-      const lockKey = `erp:product-barcode:${bc}`;
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-
-      const targetProducts = await tx.select({
-        id: schema.productsTable.id,
-        storeId: schema.productsTable.storeId,
-      })
-        .from(schema.productsTable)
-        .where(inArray(schema.productsTable.id, syncTargets.productIds));
-      if (!targetProducts.some((target) => target.id === productId)) {
-        return { duplicate: true as const, storeId, reason: "Product copy no longer exists" };
-      }
-
-      for (const target of targetProducts) {
-        const [inMain] = await tx.select({ id: schema.productsTable.id })
-          .from(schema.productsTable)
-          .where(and(
-            eq(schema.productsTable.storeId, target.storeId),
-            eq(schema.productsTable.barcode, bc),
-          ))
-          .limit(1);
-        if (inMain) {
-          return { duplicate: true as const, storeId: target.storeId, reason: "Barcode is already a primary barcode" };
-        }
-
-        const [inExtra] = await tx.select({
-          id: schema.productBarcodesTable.id,
-          productId: schema.productBarcodesTable.productId,
-        })
-          .from(schema.productBarcodesTable)
-          .where(and(
-            eq(schema.productBarcodesTable.storeId, target.storeId),
-            eq(schema.productBarcodesTable.barcode, bc),
-          ))
-          .limit(1);
-        if (inExtra && inExtra.productId !== target.id) {
-          return { duplicate: true as const, storeId: target.storeId, reason: "Barcode is already used by another product" };
-        }
-      }
-
-      let sourceRow: typeof schema.productBarcodesTable.$inferSelect | undefined;
-      for (const target of targetProducts) {
-        const [existing] = await tx.select().from(schema.productBarcodesTable)
-          .where(and(
-            eq(schema.productBarcodesTable.productId, target.id),
-            eq(schema.productBarcodesTable.storeId, target.storeId),
-            eq(schema.productBarcodesTable.barcode, bc),
-          ))
-          .limit(1);
-        const [row] = existing
-          ? [existing]
-          : await tx.insert(schema.productBarcodesTable)
-            .values({ productId: target.id, storeId: target.storeId, barcode: bc })
-            .returning();
-        if (target.id === productId) sourceRow = row;
-      }
-      return {
-        duplicate: false as const,
-        row: sourceRow,
-        synchronizedStores: new Set(targetProducts.map((target) => target.storeId)).size,
-      };
-    });
-    if (inserted.duplicate) {
+    const inserted = await addBarcodeToProductCopies(syncTargets.productIds, productId, bc);
+    if (!inserted.ok) {
       res.status(409).json({
-        error: `${inserted.reason} (store ${inserted.storeId})`,
-        code: "PRODUCT_BARCODE_EXISTS",
+        error: inserted.code === "PRODUCT_COPY_MISSING"
+          ? "Product copy no longer exists"
+          : `Barcode is already used in store ${inserted.storeId}`,
+        code: inserted.code,
+        storeId: inserted.storeId,
       });
       return;
     }
@@ -1419,6 +1359,12 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
             }
           }
 
+          const sourceExtraBarcodes = await db.select({ barcode: schema.productBarcodesTable.barcode })
+            .from(schema.productBarcodesTable)
+            .where(and(
+              eq(schema.productBarcodesTable.productId, src.id),
+              eq(schema.productBarcodesTable.storeId, sourceStoreId),
+            ));
           const created = await insertProductWithBarcodeGuard({
             storeId: targetStoreId,
             nameAr: src.nameAr,
@@ -1453,14 +1399,16 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
             familyId: targetFamilyId,
             brandId: targetBrandId,
             colorId: targetColorId,
-          });
+          }, sourceExtraBarcodes.map((extra) => extra.barcode));
 
           if (created.duplicateProductId !== null) {
             results.push({
               productId,
               targetStoreId,
-              status: "already_exists",
-              message: "Barcode already exists in target store",
+              status: created.duplicateBarcode ? "error" : "already_exists",
+              message: created.duplicateBarcode
+                ? "An additional barcode is already used in target store"
+                : "Barcode already exists in target store",
             });
             continue;
           }
@@ -1998,15 +1946,7 @@ router.delete("/erp/products/:id/barcodes/:barcodeId", authenticate, requireStaf
       });
       return;
     }
-    await db.transaction(async (tx) => {
-      const lockKey = `erp:product-barcode:${extra.barcode}`;
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-      await tx.delete(schema.productBarcodesTable)
-        .where(and(
-          inArray(schema.productBarcodesTable.productId, syncTargets.productIds),
-          eq(schema.productBarcodesTable.barcode, extra.barcode),
-        ));
-    });
+    await removeBarcodeFromProductCopies(syncTargets.productIds, extra.barcode);
     res.status(204).end();
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });

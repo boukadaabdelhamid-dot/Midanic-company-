@@ -37,6 +37,6 @@
 - [Primary product barcode integrity](primary-product-barcode-integrity.md) — preserve legacy duplicate records; block new same-store barcode collisions transactionally instead of adding a unique index.
 - [Stock transfer workflows](stock-transfer-simplification.md) — direct sends skip destination pre-approval; ordinary requests retain approval and final receipt confirmation.
 - [Wholesale sale units](wholesale-sale-units.md) — product unit sales are configurable per item and currently apply only to Bon de vente, with inventory stored in base pieces.
-- [Shared product catalogs](shared-product-catalog.md) — shared mode copies new product data and prices across active stores; stock stays local and existing products are not backfilled.
+- [Shared product catalogs](shared-product-catalog.md) — data, prices, CUMP and barcodes sync across linked ordinary stores; stock stays local and factories remain isolated.
 - [ERP store setup](erp-store-setup.md) — provision the requested stores at onboarding; company owners can rename, but not create or delete, and existing stores remain untouched.
 - [Production unit identity](production-unit-visual-identity.md) — production units should have a distinct visual identity from ordinary stores.
