@@ -4,9 +4,11 @@ import {
   useGetCustomerProfitReport,
   useGetSupplierReport,
   useGetMonthlyReport,
+  useGetExpenseReportDetails,
 } from "@workspace/erp-api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -49,6 +51,7 @@ function fmt(v: number) {
 export default function Reports() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
+  const t3 = (fr: string, ar: string, en: string) => lang === "ar" ? ar : lang === "en" ? en : fr;
   const currency = lang === "ar" ? "دج" : "DA";
   const { can } = usePermissions();
   const canViewProfit = can("products", "view_purchase_price");
@@ -56,6 +59,8 @@ export default function Reports() {
   const [from, setFrom] = useState(MONTH_AGO);
   const [to, setTo] = useState(TODAY);
   const [activePreset, setActivePreset] = useState<number | null>(30);
+  const [chargePeriod, setChargePeriod] = useState<{ month: string; from: string; to: string } | null>(null);
+  const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
 
   const applyPreset = (days: number) => {
     setFrom(daysAgo(days));
@@ -69,6 +74,24 @@ export default function Reports() {
   const { data: customers, isLoading: loadingCustomers } = useGetCustomerProfitReport(params as any);
   const { data: suppliers, isLoading: loadingSuppliers } = useGetSupplierReport(params as any);
   const { data: monthly, isLoading: loadingMonthly } = useGetMonthlyReport(params as any);
+  const { data: expenseDetails, isLoading: loadingExpenseDetails, isError: expenseDetailsError } =
+    useGetExpenseReportDetails(
+      chargePeriod ? { from: chargePeriod.from, to: chargePeriod.to } : null,
+      chargeDialogOpen,
+    );
+
+  const openChargeDetails = (month: string) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    if (!year || !monthNumber || monthNumber < 1 || monthNumber > 12) return;
+    const monthStart = `${month}-01`;
+    const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+    setChargePeriod({
+      month,
+      from: from > monthStart ? from : monthStart,
+      to: to < monthEnd ? to : monthEnd,
+    });
+    setChargeDialogOpen(true);
+  };
 
   const productRows = (products ?? []) as {
     id: number; nameEn: string; nameAr: string; reference?: string | null;
@@ -211,7 +234,17 @@ export default function Reports() {
                         />
                         <Bar dataKey="totalRevenue" fill="hsl(var(--chart-1))" radius={[3,3,0,0]} />
                         {canViewProfit && <Bar dataKey="grossProfit"   fill="hsl(var(--chart-2))" radius={[3,3,0,0]} />}
-                        {canViewProfit && <Bar dataKey="totalExpenses" fill="hsl(var(--chart-5))" radius={[3,3,0,0]} />}
+                        {canViewProfit && (
+                          <Bar
+                            dataKey="totalExpenses"
+                            fill="hsl(var(--chart-5))"
+                            radius={[3,3,0,0]}
+                            onClick={(_, index) => {
+                              const month = monthlyRows[index]?.month;
+                              if (month) openChargeDetails(month);
+                            }}
+                          />
+                        )}
                         {canViewProfit && <Bar dataKey="netProfit"     fill="hsl(var(--chart-3))" radius={[3,3,0,0]} />}
                       </BarChart>
                     </ResponsiveContainer>
@@ -257,7 +290,16 @@ export default function Reports() {
                                 {fmt(row.grossProfit)} {currency}
                               </td>
                             )}
-                            <td className="px-4 py-2.5 text-right text-red-500">{fmt(row.totalExpenses)} {currency}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() => openChargeDetails(row.month)}
+                                aria-label={`${t3("Voir le détail des charges", "عرض تفاصيل المصاريف", "View expense details")} ${row.month}`}
+                                className="font-medium text-red-500 underline decoration-dotted underline-offset-2 hover:text-red-700"
+                              >
+                                {fmt(row.totalExpenses)} {currency}
+                              </button>
+                            </td>
                             {canViewProfit && (
                               <td className={`px-4 py-2.5 text-right font-bold ${row.netProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>
                                 {fmt(row.netProfit)} {currency}
@@ -547,6 +589,87 @@ export default function Reports() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={chargeDialogOpen} onOpenChange={setChargeDialogOpen}>
+        <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>
+              {t3("Détail des charges", "تفاصيل المصاريف", "Expense details")}
+              {chargePeriod ? ` — ${chargePeriod.month}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {chargePeriod
+                ? `${t3("Période", "الفترة", "Period")}: ${chargePeriod.from} – ${chargePeriod.to}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {expenseDetailsError ? (
+            <p className="py-8 text-center text-sm text-destructive">
+              {t3("Impossible de charger les charges.", "تعذر تحميل المصاريف.", "Could not load expenses.")}
+            </p>
+          ) : loadingExpenseDetails ? (
+            <div className="space-y-2 py-2">
+              {[...Array(5)].map((_, index) => <Skeleton key={index} className="h-10" />)}
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                <span className="text-sm text-muted-foreground">
+                  {expenseDetails?.length ?? 0} {t3("charge(s)", "مصروف", "expense(s)")}
+                </span>
+                <span className="font-semibold text-red-600">
+                  {t3("Total", "الإجمالي", "Total")}:{" "}
+                  {fmt((expenseDetails ?? []).reduce((sum, item) => sum + Number(item.amount), 0))} {currency}
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead className="sticky top-0 bg-muted/95">
+                    <tr className="border-b">
+                      <th className="px-3 py-2 text-left font-medium">{t3("Date", "التاريخ", "Date")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t3("Catégorie", "الفئة", "Category")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t3("Détail", "التفصيل", "Description")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t3("Référence", "المرجع", "Reference")}</th>
+                      <th className="px-3 py-2 text-right font-medium">{t3("Montant", "المبلغ", "Amount")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(expenseDetails ?? []).map((expense) => {
+                      const categories: Record<string, [string, string, string]> = {
+                        salary: ["Salaire", "راتب", "Salary"],
+                        rent: ["Loyer", "إيجار", "Rent"],
+                        utilities: ["Services publics", "مرافق", "Utilities"],
+                        marketing: ["Marketing", "تسويق", "Marketing"],
+                        other: ["Autre", "أخرى", "Other"],
+                      };
+                      const category = categories[expense.category];
+                      return (
+                        <tr key={expense.id} className="border-b last:border-0">
+                          <td className="whitespace-nowrap px-3 py-2.5">{expense.createdAt.slice(0, 10)}</td>
+                          <td className="px-3 py-2.5">{category ? t3(...category) : expense.category}</td>
+                          <td className="max-w-sm px-3 py-2.5">{expense.description || "—"}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground">{expense.reference || "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium text-red-600">
+                            {fmt(Number(expense.amount))} {currency}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!expenseDetails?.length && (
+                      <tr>
+                        <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                          {t3("Aucune charge pour cette période.", "لا توجد مصاريف في هذه الفترة.", "No expenses in this period.")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

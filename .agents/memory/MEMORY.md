@@ -40,3 +40,4 @@
 - [Shared product catalogs](shared-product-catalog.md) — data, prices, CUMP and barcodes sync across linked ordinary stores; stock stays local and factories remain isolated.
 - [ERP store setup](erp-store-setup.md) — provision the requested stores at onboarding; company owners can rename, but not create or delete, and existing stores remain untouched.
 - [Production unit identity](production-unit-visual-identity.md) — production units should have a distinct visual identity from ordinary stores.
+- [Expense report drill-down](expense-report-drill-down.md) — charge details must stay scoped to the selected store and period and reconcile with the monthly total.

@@ -1372,6 +1372,51 @@ router.get("/admin/reports/suppliers", authenticate, requireTenantAdmin, require
   }
 });
 
+// GET /admin/reports/expenses — itemized operating expenses for a selected period
+router.get("/admin/reports/expenses", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
+  try {
+    const from = typeof req.query["from"] === "string" ? req.query["from"] : "";
+    const to = typeof req.query["to"] === "string" ? req.query["to"] : "";
+    const isValidDate = (value: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    };
+    if (!isValidDate(from) || !isValidDate(to) || from > to) {
+      res.status(400).json({ error: "Valid from and to dates are required" });
+      return;
+    }
+
+    const expenses = await db.select({
+      id: schema.transactionsTable.id,
+      amount: schema.transactionsTable.amount,
+      category: schema.transactionsTable.category,
+      description: schema.transactionsTable.description,
+      reference: schema.transactionsTable.reference,
+      createdAt: schema.transactionsTable.createdAt,
+    })
+      .from(schema.transactionsTable)
+      .where(and(
+        eq(schema.transactionsTable.storeId, req.currentStoreId!),
+        eq(schema.transactionsTable.type, "expense"),
+        sql`${schema.transactionsTable.category} <> 'purchase'`,
+        sql`(${schema.transactionsTable.reference} IS NULL OR ${schema.transactionsTable.reference} NOT LIKE 'RETOUR-%')`,
+        sql`(${schema.transactionsTable.reference} IS NULL OR ${schema.transactionsTable.reference} NOT LIKE 'PO-%')`,
+        sql`${schema.transactionsTable.createdAt} BETWEEN ${from}::timestamp AND (${to}::timestamp + INTERVAL '1 day')`,
+      ))
+      .orderBy(desc(schema.transactionsTable.createdAt), desc(schema.transactionsTable.id));
+
+    res.json(expenses.map((expense) => ({
+      ...expense,
+      amount: Number(expense.amount),
+      createdAt: expense.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /admin/reports/monthly — month-by-month revenue vs expenses vs profit
 router.get("/admin/reports/monthly", authenticate, requireTenantAdmin, requireStore, async (req: AuthRequest, res) => {
   try {
