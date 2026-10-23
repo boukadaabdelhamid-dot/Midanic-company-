@@ -22,8 +22,11 @@ test("storefront visibility, complete pagination, and ERP toggles", {
   ]);
   const suffix = randomUUID();
   const slug = `visibility-test-${suffix}`;
+  const factorySlug = `factory-visibility-${suffix}`;
   let storeId: number | undefined;
+  let factoryStoreId: number | undefined;
   let userId: number | undefined;
+  let customerUserId: number | undefined;
   const server = createServer(app);
   try {
     const [store] = await db.insert(schema.storesTable).values({
@@ -33,6 +36,14 @@ test("storefront visibility, complete pagination, and ERP toggles", {
       isActive: true,
     }).returning();
     storeId = store.id;
+    const [factoryStore] = await db.insert(schema.storesTable).values({
+      nameAr: "وحدة إنتاج للاختبار",
+      nameEn: "Factory visibility fixture",
+      slug: factorySlug,
+      kind: "factory",
+      isActive: true,
+    }).returning();
+    factoryStoreId = factoryStore.id;
     const [user] = await db.insert(schema.usersTable).values({
       name: "Visibility fixture",
       email: `visibility-${suffix}@example.test`,
@@ -41,6 +52,14 @@ test("storefront visibility, complete pagination, and ERP toggles", {
     }).returning();
     userId = user.id;
     await db.insert(schema.userStoresTable).values({ userId, storeId });
+    const [customer] = await db.insert(schema.usersTable).values({
+      name: "Visibility customer fixture",
+      email: `visibility-customer-${suffix}@example.test`,
+      passwordHash: "test-fixture-not-a-login",
+      role: "customer",
+    }).returning();
+    customerUserId = customer.id;
+    await db.insert(schema.userStoresTable).values({ userId: customer.id, storeId });
     const products = await db.insert(schema.productsTable).values(
       Array.from({ length: 28 }, (_, index) => ({
         storeId: store.id,
@@ -52,6 +71,26 @@ test("storefront visibility, complete pagination, and ERP toggles", {
     ).returning();
     const hidden = products[27];
     const exposed = products[0];
+    const factoryProducts = await db.insert(schema.productsTable).values([
+      {
+        storeId: factoryStore.id,
+        nameEn: "Private raw material",
+        nameAr: "مادة أولية داخلية",
+        price: "10.00",
+        stock: 4,
+        manufacturingRole: "raw_material",
+        isExposed: true,
+      },
+      {
+        storeId: factoryStore.id,
+        nameEn: "Factory finished good",
+        nameAr: "منتج جاهز",
+        price: "25.00",
+        stock: 3,
+        manufacturingRole: "finished_good",
+        isExposed: true,
+      },
+    ]).returning();
 
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -64,7 +103,7 @@ test("storefront visibility, complete pagination, and ERP toggles", {
     };
     const customerHeaders = {
       ...headers,
-      Authorization: `Bearer ${signToken({ id: user.id, email: user.email, role: "customer", currentStoreId: store.id })}`,
+      Authorization: `Bearer ${signToken({ id: customer.id, email: customer.email, role: "customer", currentStoreId: store.id })}`,
     };
     const list = async (query: string, requestHeaders = headers) => {
       const response = await fetch(`${base}/products?${query}`, { headers: requestHeaders });
@@ -91,6 +130,37 @@ test("storefront visibility, complete pagination, and ERP toggles", {
       assert.equal(response.status, 404);
     }
     assert.equal((await fetch(`${base}/products/${hidden.id}`, { headers: staffHeaders })).status, 200);
+    const factoryHeaders = { "X-Store-Slug": factorySlug };
+    const factoryListResponse = await fetch(`${base}/products?limit=100`, { headers: factoryHeaders });
+    assert.equal(factoryListResponse.status, 200);
+    const factoryList = await factoryListResponse.json() as { total: number; products: { id: number }[] };
+    assert.equal(factoryList.total, 1);
+    assert.deepEqual(factoryList.products.map((p) => p.id), [factoryProducts[1].id]);
+    assert.equal((await fetch(`${base}/products/${factoryProducts[0].id}`, { headers: factoryHeaders })).status, 404);
+    assert.equal((await fetch(`${base}/products/${factoryProducts[1].id}`, { headers: factoryHeaders })).status, 200);
+    const factoryCustomerHeaders = {
+      Authorization: `Bearer ${signToken({
+        id: customer.id,
+        email: customer.email,
+        role: "customer",
+        currentStoreId: factoryStore.id,
+      })}`,
+    };
+    await db.insert(schema.cartItemsTable).values({
+      userId: customer.id,
+      productId: factoryProducts[0].id,
+      quantity: 1,
+      storeId: factoryStore.id,
+    });
+    const cartResponse = await fetch(`${base}/cart`, { headers: factoryCustomerHeaders });
+    assert.equal(cartResponse.status, 200);
+    assert.deepEqual(await cartResponse.json(), []);
+    const addRawMaterial = await fetch(`${base}/cart`, {
+      method: "POST",
+      headers: { ...factoryCustomerHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ productId: factoryProducts[0].id, quantity: 1 }),
+    });
+    assert.equal(addRawMaterial.status, 404);
     for (const visible of [false, true]) {
       const response = await fetch(`${base}/products/${exposed.id}`, {
         method: "PUT",
@@ -114,7 +184,13 @@ test("storefront visibility, complete pagination, and ERP toggles", {
         await db.delete(schema.userStoresTable).where(eq(schema.userStoresTable.storeId, storeId));
         await db.delete(schema.storesTable).where(eq(schema.storesTable.id, storeId));
       }
+      if (factoryStoreId) {
+        await db.delete(schema.cartItemsTable).where(eq(schema.cartItemsTable.storeId, factoryStoreId));
+        await db.delete(schema.productsTable).where(eq(schema.productsTable.storeId, factoryStoreId));
+        await db.delete(schema.storesTable).where(eq(schema.storesTable.id, factoryStoreId));
+      }
       if (userId) await db.delete(schema.usersTable).where(eq(schema.usersTable.id, userId));
+      if (customerUserId) await db.delete(schema.usersTable).where(eq(schema.usersTable.id, customerUserId));
     } finally {
       await pool.end();
     }

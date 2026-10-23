@@ -56,6 +56,10 @@ router.post("/orders", orderLimiter, optionalAuth, resolvePublicStore, async (re
       }
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`phone:${storeId}:${phone}`}, 0))`);
       const [settings] = await tx.select().from(schema.storeWebSettingsTable).where(eq(schema.storeWebSettingsTable.storeId, storeId));
+      const [store] = await tx.select({ kind: schema.storesTable.kind })
+        .from(schema.storesTable)
+        .where(eq(schema.storesTable.id, storeId))
+        .limit(1);
       if (settings?.acceptOrders === false) throw new OrderError(403, "This store is not accepting orders right now.");
       const [registry] = await tx.select().from(schema.webCustomersTable)
         .where(and(eq(schema.webCustomersTable.storeId, storeId), eq(schema.webCustomersTable.phone, phone)));
@@ -83,7 +87,14 @@ router.post("/orders", orderLimiter, optionalAuth, resolvePublicStore, async (re
       let subtotal = 0;
       for (const [id, quantity] of lines) {
         const p = products.find(p => p.id === id);
-        if (!p || !p.isExposed || p.stock < quantity) throw new OrderError(409, "A product is unavailable or has insufficient stock.");
+        if (
+          !p
+          || !p.isExposed
+          || (store?.kind === "factory" && p.manufacturingRole === "raw_material")
+          || p.stock < quantity
+        ) {
+          throw new OrderError(409, "A product is unavailable or has insufficient stock.");
+        }
         const price = Number(p.price);
         if (!Number.isFinite(price) || price < 0) throw new OrderError(409, "A product price is unavailable.");
         subtotal += Math.round(price * quantity * 100);

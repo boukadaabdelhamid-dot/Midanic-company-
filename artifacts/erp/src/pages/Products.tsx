@@ -962,10 +962,14 @@ export default function Products() {
     });
   };
 
+  const isFactoryRawMaterial = (p: Pick<Product, "manufacturingRole">) =>
+    isFactoryUnit && p.manufacturingRole === "raw_material";
+
   const getExposed = (p: Product) =>
-    exposedMap.has(p.id) ? exposedMap.get(p.id)! : p.isExposed;
+    isFactoryRawMaterial(p) ? false : exposedMap.has(p.id) ? exposedMap.get(p.id)! : p.isExposed;
 
   const toggleVisibility = (p: Product) => {
+    if (isFactoryRawMaterial(p)) return;
     const newVal = !getExposed(p);
     // Flip icon immediately via local state — no cache dependency
     setExposedMap((m) => new Map(m).set(p.id, newVal));
@@ -1318,8 +1322,8 @@ export default function Products() {
                       )}
                       {col("isExposed")    && (
                         <TableCell className="text-center">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${p.isExposed ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
-                            {p.isExposed ? t("Oui", "نعم") : t("Non", "لا")}
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${getExposed(p) ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                            {getExposed(p) ? t("Oui", "نعم") : t("Non", "لا")}
                           </span>
                         </TableCell>
                       )}
@@ -1364,17 +1368,25 @@ export default function Products() {
                       )}
                       {col("vitrine")      && (
                         <TableCell className="text-center">
-                          <button
-                            onClick={() => toggleVisibility(p)}
-                            title={getExposed(p) ? t("Visible — cliquer pour masquer", "مرئي — انقر للإخفاء") : t("Masqué — cliquer pour afficher", "مخفي — انقر للإظهار")}
-                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
-                              getExposed(p)
-                                ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
-                                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                            }`}
-                          >
-                            {getExposed(p) ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </button>
+                          {isFactoryRawMaterial(p) ? (
+                            <span
+                              title={t("Les matières premières restent internes", "المواد الأولية تبقى داخلية")}
+                              aria-label={t("Masqué du magasin en ligne", "مخفي عن المتجر الإلكتروني")}
+                              className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-gray-400"
+                            ><EyeOff className="h-3.5 w-3.5" /></span>
+                          ) : (
+                            <button
+                              onClick={() => toggleVisibility(p)}
+                              title={getExposed(p) ? t("Visible — cliquer pour masquer", "مرئي — انقر للإخفاء") : t("Masqué — cliquer pour afficher", "مخفي — انقر للإظهار")}
+                              className={`inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
+                                getExposed(p)
+                                  ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
+                                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                              }`}
+                            >
+                              {getExposed(p) ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
                         </TableCell>
                       )}
                       {col("actions")      && (
@@ -1599,11 +1611,17 @@ export default function Products() {
                 onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
                 label="Activé"
               />
-              <ToggleSwitch
-                checked={form.isExposed}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, isExposed: v }))}
-                label={form.isExposed ? t("🌐 Visible en vitrine", "🌐 مرئي في الواجهة") : t("🚫 Masqué du magasin", "🚫 مخفي من المتجر")}
-              />
+              {isFactoryUnit && form.manufacturingRole === "raw_material" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600">
+                  <EyeOff className="h-3.5 w-3.5" />{t("Matière première — masquée en boutique", "مادة أولية — مخفية عن المتجر")}
+                </span>
+              ) : (
+                <ToggleSwitch
+                  checked={form.isExposed}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, isExposed: v }))}
+                  label={form.isExposed ? t("🌐 Visible en vitrine", "🌐 مرئي في الواجهة") : t("🚫 Masqué du magasin", "🚫 مخفي من المتجر")}
+                />
+              )}
               {/* Purchase suggestion toggle — only shown when editing an existing product */}
               {dialog.editing && (
                 <button

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, schema } from "../lib/db";
 import { authenticate, type AuthRequest } from "../lib/auth";
 import { resolvePublicStore } from "../lib/store-context";
@@ -17,6 +17,10 @@ function withStore(req: AuthRequest, res: import("express").Response, next: impo
 router.get("/cart", authenticate, withStore, async (req: AuthRequest, res) => {
   try {
     const storeId = req.currentStoreId!;
+    const [store] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, storeId))
+      .limit(1);
     const items = await db.select({
       id: schema.cartItemsTable.id,
       quantity: schema.cartItemsTable.quantity,
@@ -34,6 +38,9 @@ router.get("/cart", authenticate, withStore, async (req: AuthRequest, res) => {
       .where(and(
         eq(schema.cartItemsTable.userId, req.user!.id),
         eq(schema.cartItemsTable.storeId, storeId),
+        store?.kind === "factory"
+          ? sql`${schema.productsTable.manufacturingRole} IS DISTINCT FROM 'raw_material'`
+          : undefined,
       ));
     res.json(items);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
@@ -48,10 +55,21 @@ router.post("/cart", authenticate, withStore, async (req: AuthRequest, res) => {
       res.status(400).json({ error: "quantity must be a positive integer" });
       return;
     }
-    // Verify the product belongs to this store
-    const [product] = await db.select({ id: schema.productsTable.id }).from(schema.productsTable)
+    const [store] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, storeId))
+      .limit(1);
+    // Verify the product belongs to this store and factory materials stay internal.
+    const [product] = await db.select({
+      id: schema.productsTable.id,
+      manufacturingRole: schema.productsTable.manufacturingRole,
+    }).from(schema.productsTable)
       .where(and(eq(schema.productsTable.id, productId), eq(schema.productsTable.storeId, storeId))).limit(1);
     if (!product) { res.status(404).json({ error: "Product not found in this store" }); return; }
+    if (store?.kind === "factory" && product.manufacturingRole === "raw_material") {
+      res.status(404).json({ error: "Product not found in this store" });
+      return;
+    }
 
     const existing = await db.select().from(schema.cartItemsTable)
       .where(and(

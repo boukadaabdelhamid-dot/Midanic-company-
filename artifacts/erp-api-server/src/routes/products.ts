@@ -416,6 +416,16 @@ router.get(
     if (manufacturingRole === "raw_material" || manufacturingRole === "finished_good") {
       conditions.push(eq(schema.productsTable.manufacturingRole, manufacturingRole));
     }
+    const publicOnly = !isProductStaffRole(req.user?.role);
+    if (publicOnly) {
+      const [store] = await db.select({ kind: schema.storesTable.kind })
+        .from(schema.storesTable)
+        .where(eq(schema.storesTable.id, storeId))
+        .limit(1);
+      if (store?.kind === "factory") {
+        conditions.push(sql`${schema.productsTable.manufacturingRole} IS DISTINCT FROM 'raw_material'`);
+      }
+    }
     const exposedOnly = getProductExposureFilter(req.user?.role, filterExposed);
     if (exposedOnly !== undefined) {
       conditions.push(eq(schema.productsTable.isExposed, exposedOnly));
@@ -599,13 +609,22 @@ async function handleGetProduct(req: AuthRequest, res: import("express").Respons
     const publicOnly = !isProductStaffRole(req.user?.role);
     const storeId = req.currentStoreId!;
     const id = parseInt(req.params["id"] as string);
+    const conditions = [
+      eq(schema.productsTable.id, id),
+      eq(schema.productsTable.storeId, storeId),
+      ...(publicOnly ? [eq(schema.productsTable.isExposed, true)] : []),
+    ];
+    if (publicOnly) {
+      const [store] = await db.select({ kind: schema.storesTable.kind })
+        .from(schema.storesTable)
+        .where(eq(schema.storesTable.id, storeId))
+        .limit(1);
+      if (store?.kind === "factory") {
+        conditions.push(sql`${schema.productsTable.manufacturingRole} IS DISTINCT FROM 'raw_material'`);
+      }
+    }
     const [product] = await db.select().from(schema.productsTable)
-      .where(and(
-        eq(schema.productsTable.id, id),
-        eq(schema.productsTable.storeId, storeId),
-        // Public storefront cannot open a product hidden via the VITRINE toggle.
-        ...(publicOnly ? [eq(schema.productsTable.isExposed, true)] : []),
-      )).limit(1);
+      .where(and(...conditions)).limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
     const reviews = await db.select({
@@ -764,7 +783,9 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       catalogue5: catalogue5 || null,
       catalogue6: catalogue6 || null,
       isActive: isActive !== undefined ? isActive : true,
-      isExposed: isExposed !== undefined ? isExposed : true,
+      isExposed: sourceStore?.kind === "factory" && resolvedManufacturingRole === "raw_material"
+        ? false
+        : isExposed !== undefined ? isExposed : true,
       familyId: resolvedFamilyId,
       brandId: resolvedBrandId,
       colorId: resolvedColorId,
@@ -905,6 +926,12 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
       .from(schema.storesTable)
       .where(eq(schema.storesTable.id, storeId))
       .limit(1);
+    if (
+      sourceStore?.kind === "factory"
+      && (body.manufacturingRole ?? currentProduct.manufacturingRole) === "raw_material"
+    ) {
+      body.isExposed = false;
+    }
     if ("manufacturingRole" in body) {
       if (!["raw_material", "finished_good"].includes(String(body.manufacturingRole))) {
         res.status(400).json({ error: "Invalid manufacturingRole" });

@@ -19,6 +19,7 @@ test("phone identity normalizes international, local and Arabic-digit mobile for
 test("guest checkout, identity blocking and store isolation", { skip: !process.env.DATABASE_URL }, async t => {
   const f = await seedWebOrderFixture();
   const server = createServer(app);
+  let factoryStoreId: number | undefined;
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
@@ -34,6 +35,39 @@ test("guest checkout, identity blocking and store isolation", { skip: !process.e
   let first: { id: number; trackingToken: string };
   let customerId: number;
   try {
+    await t.test("factory raw materials cannot be ordered through a forged public request", async () => {
+      const factorySlug = `factory-order-test-${randomUUID()}`;
+      const [factory] = await db.insert(schema.storesTable).values({
+        nameAr: "وحدة إنتاج للاختبار",
+        nameEn: "Factory order fixture",
+        slug: factorySlug,
+        kind: "factory",
+        isActive: true,
+      }).returning();
+      factoryStoreId = factory.id;
+      const [rawMaterial] = await db.insert(schema.productsTable).values({
+        storeId: factory.id,
+        nameAr: "مادة أولية",
+        nameEn: "Private raw material",
+        price: "10.00",
+        stock: 5,
+        manufacturingRole: "raw_material",
+        isExposed: true,
+      }).returning();
+      const response = await fetch(`${base}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Store-Slug": factorySlug },
+        body: JSON.stringify({
+          customerName: "Factory buyer",
+          customerPhone: "0555123456",
+          customerAddress: "Development test address only",
+          items: [{ productId: rawMaterial.id, quantity: 1 }],
+          requestKey: randomUUID(),
+        }),
+      });
+      assert.equal(response.status, 409);
+      assert.equal((await json(response)).error, "A product is unavailable or has insufficient stock.");
+    });
     await t.test("anonymous order creates a CRM identity, uses authoritative prices, and retries exactly once", async () => {
       const body = payload();
       const response = await post({ ...body, totalAmount: "0.01", userId: f.staff });
@@ -130,6 +164,10 @@ test("guest checkout, identity blocking and store isolation", { skip: !process.e
     });
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
+    if (factoryStoreId) {
+      await db.delete(schema.productsTable).where(eq(schema.productsTable.storeId, factoryStoreId));
+      await db.delete(schema.storesTable).where(eq(schema.storesTable.id, factoryStoreId));
+    }
     await cleanWebOrderFixture(f);
     await pool.end();
   }
