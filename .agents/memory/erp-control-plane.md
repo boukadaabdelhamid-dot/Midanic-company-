@@ -5,6 +5,8 @@ description: Durable architecture for centrally controlling ERP companies, trial
 
 The Midanic Super Admin panel is the source of truth for the ERP tenant lifecycle, feature flags, and store limits. ERP and Web Store should consume server-side tenant state rather than deciding access from browser state or local storage.
 
-**Why:** The product requirement is total administrative control, including manual approval, seven-day trials, suspension, conversion, and manual deletion without automatic data loss.
+One platform customer may own multiple ERP companies. The customer dashboard must show each owned company separately, with its own access state and tenant-scoped launch link; it must not collapse the list to a single ERP.
 
-**How to apply:** Keep tenant status, feature flags, and entitlements in Platform PostgreSQL; expose live tenant usage through authenticated service endpoints owned by ERP; enforce authorization in API middleware and tenant-scoped queries; record any future support/impersonation entry in an audit log before enabling it.
+**Why:** The product requirement is total administrative control, including manual approval, seven-day trials, suspension, conversion, and manual deletion without automatic data loss. The user also expects every ERP company owned by one platform account to be visible from the customer dashboard.
+
+**How to apply:** Keep tenant status, feature flags, and entitlements in Platform PostgreSQL; expose live tenant usage through authenticated service endpoints owned by ERP; list every owned tenant with a separate access decision and tenant-scoped SSO link; enforce authorization in API middleware and tenant-scoped queries; record any future support/impersonation entry in an audit log before enabling it.

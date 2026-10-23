@@ -67,6 +67,7 @@ export const adminApi = {
     }),
   getMyEntitlements: () => request<MyEntitlements>("/my/entitlements"),
   getMyErpAccess: () => request<MyErpAccess>("/my/erp"),
+  getMyErpAccesses: () => request<MyErpAccess[]>("/my/erps"),
 
   // Stats
   getStats: () => request<AdminStats>("/admin/stats"),

@@ -192,7 +192,7 @@ export default function Dashboard() {
 
   const [licenses, setLicenses] = useState<MyLicense[]>([]);
   const [downloads, setDownloads] = useState<MyDownload[]>([]);
-  const [erpAccess, setErpAccess] = useState<MyErpAccess | null>(null);
+  const [erpAccesses, setErpAccesses] = useState<MyErpAccess[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Redirect unauthenticated visitors
@@ -209,11 +209,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isAuthenticated) return;
     setLoading(true);
-    Promise.all([adminApi.getMyLicenses(), adminApi.getMyDownloads(), adminApi.getMyErpAccess()])
+    Promise.all([adminApi.getMyLicenses(), adminApi.getMyDownloads(), adminApi.getMyErpAccesses()])
       .then(([licRes, dlRes, erpRes]) => {
         setLicenses(licRes.licenses);
         setDownloads(dlRes.downloads);
-        setErpAccess(erpRes);
+        setErpAccesses(erpRes);
       })
       .catch((e: Error) => {
         toast({ title: 'Error loading data', description: e.message, variant: 'destructive' });
@@ -265,45 +265,57 @@ export default function Dashboard() {
         </div>
 
         {/* ERP access */}
-        <section>
-          <Card className={erpAccess?.canAccess ? 'border-primary/40 bg-primary/[0.03]' : ''}>
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
-                  <BriefcaseBusiness className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-semibold">Midanic ERP</h2>
-                  {loading && !erpAccess ? (
-                    <p className="mt-1 text-sm text-muted-foreground">Checking your ERP access...</p>
-                  ) : erpAccess?.canAccess ? (
-                    <>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {erpAccess.companyName ? `${erpAccess.companyName} · ` : ''}Your ERP workspace is ready.
-                      </p>
-                      {erpAccess.trialEndsAt && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Trial ends {formatExpiry(erpAccess.trialEndsAt)}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {erpAccess?.message ?? 'Your ERP access link will appear here after approval.'}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {erpAccess?.canAccess && (
-                <Button asChild className="shrink-0 gap-2">
-                  <a href={erpAccess.launchUrl}>
-                    Open ERP
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Your ERP companies</h2>
+          {loading && erpAccesses.length === 0 ? (
+            <Card><CardContent className="p-5 text-sm text-muted-foreground">Checking your ERP access...</CardContent></Card>
+          ) : erpAccesses.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {erpAccesses.map((erpAccess) => (
+                <Card key={erpAccess.id} className={erpAccess.canAccess ? 'border-primary/40 bg-primary/[0.03]' : ''}>
+                  <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
+                        <BriefcaseBusiness className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold">{erpAccess.companyName || 'Midanic ERP'}</h3>
+                        {erpAccess.canAccess ? (
+                          <>
+                            <p className="mt-1 text-sm text-muted-foreground">Your ERP workspace is ready.</p>
+                            {erpAccess.trialEndsAt && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Trial ends {formatExpiry(erpAccess.trialEndsAt)}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {erpAccess.message ?? 'Your ERP access is not ready yet.'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {erpAccess.canAccess && (
+                      <Button asChild className="shrink-0 gap-2">
+                        <a href={erpAccess.launchUrl}>
+                          Open ERP
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex items-center gap-3 p-5">
+                <BriefcaseBusiness className="h-5 w-5 text-primary" />
+                <p className="text-sm text-muted-foreground">Your ERP access link will appear here after approval.</p>
+              </CardContent>
+            </Card>
+          )}
         </section>
 
         {/* Active licenses */}

@@ -115,6 +115,78 @@ router.get("/my/erp", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
+// Customer: return every ERP company owned by this account, not just one.
+router.get("/my/erps", requireAuth, async (req, res): Promise<void> => {
+  const tenants = await db
+    .select({
+      id: erpTenantsTable.id,
+      companyName: erpTenantsTable.companyName,
+      status: erpTenantsTable.status,
+      hostname: erpTenantsTable.hostname,
+      domainStatus: erpTenantsTable.domainStatus,
+      trialStartedAt: erpTenantsTable.trialStartedAt,
+      trialEndsAt: erpTenantsTable.trialEndsAt,
+      contractPeriod: erpTenantsTable.contractPeriod,
+      contractStartsAt: erpTenantsTable.contractStartsAt,
+      contractEndsAt: erpTenantsTable.contractEndsAt,
+    })
+    .from(erpTenantsTable)
+    .where(eq(erpTenantsTable.ownerUserId, req.user!.userId))
+    .orderBy(desc(erpTenantsTable.createdAt));
+
+  const accesses = await Promise.all(tenants.map(async (tenant) => {
+    const effectiveStatus = getEffectiveErpTenantStatus(tenant);
+    const tenantIsActive = effectiveStatus === "active" || effectiveStatus === "converted";
+    const domainIsActive = tenant.domainStatus === "active" && Boolean(tenant.hostname);
+    const canAccess = tenantIsActive && canAccessErpTenant(tenant) && domainIsActive;
+    const ssoToken = canAccess
+      ? await generateErpSsoToken({
+          userId: req.user!.userId,
+          email: req.user!.email,
+          role: req.user!.role,
+          tenantId: tenant.id,
+          hostname: tenant.hostname!,
+        })
+      : null;
+
+    return {
+      hasAccount: true,
+      id: tenant.id,
+      companyName: tenant.companyName,
+      status: effectiveStatus,
+      canAccess,
+      hostname: tenant.hostname,
+      domainStatus: tenant.domainStatus,
+      launchUrl: tenant.hostname
+        ? buildErpTenantLaunchUrl(tenant.hostname, ssoToken ?? undefined)
+        : "/erp/",
+      trialStartedAt: tenant.trialStartedAt,
+      trialEndsAt: tenant.trialEndsAt,
+      contractPeriod: tenant.contractPeriod,
+      contractStartsAt: tenant.contractStartsAt,
+      contractEndsAt: tenant.contractEndsAt,
+      message:
+        effectiveStatus === "pending"
+          ? "Your ERP request is under review."
+          : effectiveStatus === "expired"
+            ? tenant.contractPeriod
+              ? "Your ERP contract has expired. Please contact the administration."
+              : "Your ERP trial has ended. Please contact the administration."
+            : effectiveStatus === "suspended"
+              ? "Your ERP access is currently suspended. Please contact the administration."
+              : tenant.contractPeriod &&
+                  tenant.contractStartsAt &&
+                  tenant.contractStartsAt > getErpBusinessDate()
+                ? "Your ERP contract has not started yet."
+                : tenantIsActive && !domainIsActive
+                  ? "Your ERP company domain is not active yet. Please contact the administration."
+                  : null,
+    };
+  }));
+
+  res.json(accesses);
+});
+
 router.patch("/profile", requireAuth, async (req, res): Promise<void> => {
   const parsed = UpdateProfileBody.safeParse(req.body);
   if (!parsed.success) {
