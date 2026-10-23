@@ -5499,17 +5499,42 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
         WHERE  store_id     = ${storeId}
           AND  snoozed_until > NOW()
       ),
-      -- 4. Cross-store in-stock references/barcodes (one scan, used for anti-join)
+      -- 4. In-stock product identities from other active retail stores in this company.
+      --    Include linked catalog IDs, references, primary barcodes and extra barcodes.
+      current_store AS (
+        SELECT id, platform_tenant_id, kind
+        FROM stores
+        WHERE id = ${storeId}
+      ),
       cross_avail AS (
-        SELECT reference, barcode
-        FROM   products
-        WHERE  store_id  != ${storeId}
-          AND  is_active  = true
-          AND  stock      > 0
-          AND  (
-            (reference IS NOT NULL AND reference != '')
-            OR (barcode IS NOT NULL AND barcode != '')
-          )
+        SELECT p.shared_catalog_id,
+               NULLIF(BTRIM(p.reference), '') AS reference,
+               NULLIF(BTRIM(p.barcode), '') AS barcode
+        FROM products p
+        JOIN stores other_store ON other_store.id = p.store_id
+        CROSS JOIN current_store cs
+        WHERE p.store_id != ${storeId}
+          AND cs.kind = 'store'
+          AND other_store.kind = 'store'
+          AND other_store.is_active = true
+          AND other_store.platform_tenant_id IS NOT DISTINCT FROM cs.platform_tenant_id
+          AND p.is_active = true
+          AND p.stock > 0
+        UNION
+        SELECT p.shared_catalog_id,
+               NULLIF(BTRIM(p.reference), '') AS reference,
+               NULLIF(BTRIM(pb.barcode), '') AS barcode
+        FROM product_barcodes pb
+        JOIN products p ON p.id = pb.product_id AND p.store_id = pb.store_id
+        JOIN stores other_store ON other_store.id = p.store_id
+        CROSS JOIN current_store cs
+        WHERE p.store_id != ${storeId}
+          AND cs.kind = 'store'
+          AND other_store.kind = 'store'
+          AND other_store.is_active = true
+          AND other_store.platform_tenant_id IS NOT DISTINCT FROM cs.platform_tenant_id
+          AND p.is_active = true
+          AND p.stock > 0
       ),
       -- 5. Full filtered result set WITHOUT tab/stockFilter — used for counts + pagination
       base_rows AS (
@@ -5547,13 +5572,46 @@ router.get(["/erp/purchases/needed", "/erp/purchases/needs"], authenticate, requ
           )
           AND  p.excluded_from_purchase = false
           AND  sn.product_id IS NULL
-          AND NOT (
-            (p.reference IS NOT NULL AND p.reference != ''
-              AND EXISTS (SELECT 1 FROM cross_avail ca WHERE ca.reference = p.reference))
-            OR
-            (COALESCE(p.reference, '') = '' AND p.barcode IS NOT NULL AND p.barcode != ''
-              AND EXISTS (SELECT 1 FROM cross_avail ca WHERE ca.barcode = p.barcode))
-          )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM current_store cs
+             WHERE cs.kind = 'store'
+               AND (
+                 (p.shared_catalog_id IS NOT NULL
+                   AND EXISTS (
+                     SELECT 1 FROM cross_avail ca
+                     WHERE ca.shared_catalog_id = p.shared_catalog_id
+                   ))
+                 OR
+                 (NULLIF(BTRIM(p.reference), '') IS NOT NULL
+                   AND EXISTS (
+                     SELECT 1 FROM cross_avail ca
+                     WHERE ca.reference = NULLIF(BTRIM(p.reference), '')
+                   ))
+                 OR
+                 (
+                   (
+                     NULLIF(BTRIM(p.barcode), '') IS NOT NULL
+                     OR EXISTS (
+                       SELECT 1 FROM product_barcodes local_barcode
+                       WHERE local_barcode.product_id = p.id
+                         AND local_barcode.store_id = p.store_id
+                     )
+                   )
+                   AND EXISTS (
+                     SELECT 1
+                     FROM cross_avail ca
+                     WHERE ca.barcode = NULLIF(BTRIM(p.barcode), '')
+                        OR EXISTS (
+                          SELECT 1 FROM product_barcodes local_barcode
+                          WHERE local_barcode.product_id = p.id
+                            AND local_barcode.store_id = p.store_id
+                            AND ca.barcode = NULLIF(BTRIM(local_barcode.barcode), '')
+                        )
+                   )
+                 )
+               )
+           )
           ${familyFilter}
           ${brandFilter}
           ${searchFilter}
