@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
+import { FactoryProductionNeeds } from "@/components/manufacturing/FactoryProductionNeeds";
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose,
 } from "@/components/ui/drawer";
@@ -1345,6 +1346,7 @@ export default function SmartPurchase() {
   const { lang } = useLang();
   const t = useCallback((fr: string, ar: string) => useLang.translate(lang, fr, ar), [lang]);
   const store = useCurrentStore();
+  const isFactory = (store as { kind?: string } | null)?.kind === "factory";
   const qc = useQueryClient();
   const { user: me, isAdmin: isMeAdmin } = useMe();
 
@@ -1833,6 +1835,14 @@ export default function SmartPurchase() {
 
       {/* ── Main list ── */}
       <div className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full space-y-3">
+        {isFactory && store && stockFilter !== "suggestions" && (
+          <>
+            <FactoryProductionNeeds key={store.id} storeId={store.id} search={search} stockFilter={stockFilter} />
+            <h2 className="pt-3 font-semibold text-slate-800">
+              {lang === "en" ? "Raw materials to purchase" : t("Matières premières à acheter", "المواد الأولية المطلوب شراؤها")}
+            </h2>
+          </>
+        )}
 
         {/* ── Suggestions panel ── */}
         {stockFilter === "suggestions" && (

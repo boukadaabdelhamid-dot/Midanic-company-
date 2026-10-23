@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelManufacturingOrder,
@@ -16,7 +16,7 @@ import {
   type ManufacturingProduct,
   type ManufacturingRecipe,
 } from "@workspace/erp-api-client-react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentStore } from "@/hooks/use-current-store";
@@ -146,13 +146,17 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : "
 
 export default function Manufacturing() {
   const { lang } = useLang();
-  const { can } = usePermissions();
+  const { can, isLoaded: permissionsLoaded } = usePermissions();
   const store = useCurrentStore();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
+  const routeSearch = useSearch();
+  const handledProductionLink = useRef(false);
   const t = (key: keyof typeof copy) => copy[key][lang];
   const name = (en: string, ar: string) => lang === "ar" ? ar || en : en || ar;
-  const [tab, setTab] = useState<"recipes" | "orders" | "history" | "replenishment">("recipes");
+  const [tab, setTab] = useState<"recipes" | "orders" | "history" | "replenishment">(
+    () => new URLSearchParams(routeSearch).get("tab") === "replenishment" ? "replenishment" : "recipes",
+  );
   const [filter, setFilter] = useState<"all" | "planned" | "completed" | "cancelled">("all");
   const [search, setSearch] = useState("");
   const [recipeOpen, setRecipeOpen] = useState(false);
@@ -278,6 +282,37 @@ export default function Manufacturing() {
     setOrderError("");
     setOrderOpen(true);
   };
+  useEffect(() => {
+    if (handledProductionLink.current || !store || !permissionsLoaded ||
+      !recipesQuery.data || !replenishmentQuery.data ||
+      recipesQuery.isFetching || replenishmentQuery.isFetching) return;
+    const params = new URLSearchParams(routeSearch);
+    if (params.get("tab") !== "replenishment") return;
+    handledProductionLink.current = true;
+    setTab("replenishment");
+    // Links are scoped to the originating factory; never prefill a different store.
+    if (Number(params.get("storeId")) !== store.id || !can("manufacturing", "create")) return;
+    const item = replenishmentQuery.data.finishedGoods.find(
+      (candidate) => candidate.productId === Number(params.get("productId")),
+    );
+    if (!item) return;
+    if (item.recipeId && item.recipeIsActive) {
+      setOrderRecipe(String(item.recipeId));
+      setOrderQuantity(String(item.suggestedQuantity));
+      setOrderNotes("");
+      setOrderError("");
+      setOrderOpen(true);
+    } else if (!recipesQuery.data.some((recipe) => recipe.outputProductId === item.productId)) {
+      setEditing(null);
+      setRecipeError("");
+      setRecipeDraft({ ...blankRecipe(), outputProductId: String(item.productId) });
+      setRecipeOpen(true);
+    }
+    // Inactive recipes stay on the replenishment tab for explicit reactivation.
+  }, [
+    routeSearch, store, can, permissionsLoaded, recipesQuery.data, recipesQuery.isFetching,
+    replenishmentQuery.data, replenishmentQuery.isFetching,
+  ]);
   const loading = catalogueQuery.isLoading || recipesQuery.isLoading || ordersQuery.isLoading ||
     (tab === "replenishment" && replenishmentQuery.isLoading);
   const failed = catalogueQuery.isError || recipesQuery.isError || ordersQuery.isError ||
