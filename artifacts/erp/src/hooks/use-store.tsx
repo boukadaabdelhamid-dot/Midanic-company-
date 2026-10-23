@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
-import type { Store } from "@workspace/erp-api-client-react";
+import type { Store as ApiStore } from "@workspace/erp-api-client-react";
 
 const STORE_KEY = "midanic.erp.currentStoreId";
+
+export type Store = ApiStore & { kind?: "store" | "factory" };
 
 type StoreContextType = {
   currentStoreId: number | null;

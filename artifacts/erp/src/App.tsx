@@ -30,6 +30,7 @@ import Suppliers from "@/pages/Suppliers";
 import PurchaseOrders from "@/pages/PurchaseOrders";
 import Inventory from "@/pages/Inventory";
 import Transfers from "@/pages/Transfers";
+import Manufacturing from "@/pages/Manufacturing";
 import Accounting from "@/pages/Accounting";
 import Customers from "@/pages/Customers";
 import Caisse from "@/pages/Caisse";
@@ -91,7 +92,7 @@ function ProtectedRoute({
   section?: PermSection;
 }) {
   const { token, logout } = useAuth();
-  const { currentStoreId } = useStoreContext();
+  const { currentStoreId, stores } = useStoreContext();
   const { isAdmin, isStaff, role, isLoading, user, features } = useMe();
   const { can, isLoaded: permsLoaded } = usePermissions();
   // Customer accounts are the normal Midanic ERP audience. Access is
@@ -100,8 +101,14 @@ function ProtectedRoute({
   if (!token) return <Redirect to="/login" />;
   if (isLoading) return <Layout><div className="p-6 text-sm text-muted-foreground">…</div></Layout>;
   if (!isLoading && user && !isStaff && role !== "customer") return <Redirect to="/login" />;
-  const stores = (user as { stores?: unknown[] } | null)?.stores ?? [];
-  if (!currentStoreId && stores.length > 0) return <Redirect to="/select-store" />;
+  const storeList = stores.length
+    ? stores
+    : (user as { stores?: Array<{ id: number; kind?: "store" | "factory" }> } | null)?.stores ?? [];
+  if (!currentStoreId && storeList.length > 0) return <Redirect to="/select-store" />;
+  if (
+    section === "manufacturing" &&
+    storeList.find((store) => store.id === currentStoreId)?.kind !== "factory"
+  ) return <Redirect to="/home" />;
   if (adminOnly && !isAdmin) return <Redirect to="/home" />;
   if (section && features[featureForSection(section)] === false) return <Redirect to="/home" />;
   if (section && !isAdmin) {
@@ -239,6 +246,9 @@ function Router() {
       </Route>
       <Route path="/transfers">
         <ProtectedRoute component={Transfers} section="transfers" />
+      </Route>
+      <Route path="/manufacturing">
+        <ProtectedRoute component={Manufacturing} section="manufacturing" />
       </Route>
       <Route path="/alerts">
         <ProtectedRoute component={Alertes} section="alerts" />

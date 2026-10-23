@@ -19,6 +19,7 @@ import { runProductAttributeDedupMigration } from "./lib/product-attribute-dedup
 import { runOrderSourceMigration } from "./lib/order-source-migration";
 import { runPaymentMethodMigration } from "./lib/payment-method-migration";
 import { runPurchaseOrdersSchemaMigration } from "./lib/purchase-orders-schema-migration";
+import { runManufacturingMigration } from "./lib/manufacturing-migration";
 import { getStorageMode, getLocalStorageBase, ensureLocalStorageReady } from "./lib/objectStorage";
 import { listReadyTenantDatabases } from "./lib/tenant-registry";
 import { resolvePlatformTenantDatabase } from "./lib/tenant-domain";
@@ -864,6 +865,7 @@ async function runMigrations(targetPool: Pool = pool) {
   await targetPool.query(`DROP INDEX IF EXISTS "erp"."stores_platform_tenant_id_uq"`);
   await targetPool.query(`CREATE INDEX IF NOT EXISTS "stores_platform_tenant_id_idx" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
   await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
+  await runManufacturingMigration(targetPool);
   await runWebOrdersMigration(targetPool);
 }
 
@@ -1404,7 +1406,7 @@ app.get("/api/internal/erp/store-summary/:tenantId", async (req, res): Promise<v
     const result = await tenantPool.query<{ current_stores: string | number }>(
       `SELECT COUNT(*)::int AS current_stores
        FROM stores
-       WHERE is_active = TRUE`,
+       WHERE is_active = TRUE AND kind <> 'factory'`,
     );
     res.json({
       tenantId,

@@ -8,14 +8,14 @@ import {
   ChevronLeft, ChevronRight, Store as StoreIcon, Check,
   ArrowLeftRight, Bell, Volume2, VolumeX, Settings,
   ChevronDown, Layers, User, BellRing, Languages, HardDrive, Shield,
-  TrendingUp, KeyRound, Globe, RotateCcw, Receipt, AlertTriangle,
+  TrendingUp, KeyRound, Globe, RotateCcw, Receipt, AlertTriangle, Factory,
 } from "lucide-react";
 import logoPath from "@assets/logo_des_13_midanic_1777739613232.jpeg";
 import { useAuth } from "@/hooks/use-auth";
 import { useMe } from "@/hooks/use-me";
-import { useStoreContext } from "@/hooks/use-store";
+import { useStoreContext, type Store as StoreWithKind } from "@/hooks/use-store";
 import {
-  useSelectStore, useGetAdminOrders, getGetAdminOrdersQueryKey,
+  useSelectStore, useGetErpStoresMine, useGetAdminOrders, getGetAdminOrdersQueryKey,
   GetAdminOrdersChannel,
 } from "@workspace/erp-api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,6 +80,7 @@ const navEntries: NavEntry[] = [
   { href: "/purchase-orders", icon: FileText, labelEn: "Achats", labelAr: "المشتريات", section: "purchases" },
   { href: "/inventory", icon: BarChart2, labelEn: "Stock", labelAr: "المخزون", section: "inventory" },
   { href: "/transfers", icon: ArrowLeftRight, labelEn: "Transferts", labelAr: "التحويلات", section: "transfers" },
+  { href: "/manufacturing", icon: Factory, labelEn: "Production", labelAr: "الإنتاج", section: "manufacturing" },
   { href: "/alerts", icon: AlertTriangle, labelEn: "Alertes", labelAr: "التنبيهات", badge: "alerts-count", section: "alerts" },
   { href: "/customers", icon: UserCheck, labelEn: "Clients", labelAr: "العملاء", section: "customers" },
   { href: "/suppliers", icon: Truck, labelEn: "Fournisseurs", labelAr: "الموردون", section: "suppliers" },
@@ -117,16 +118,21 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
   const { lang } = useLang();
   const { user } = useMe();
   const { currentStoreId, stores: ctxStores, setStores, setCurrentStoreId } = useStoreContext();
+  const { data: accessibleStores } = useGetErpStoresMine();
   const { setToken } = useAuth();
   const qc = useQueryClient();
   const selectStore = useSelectStore();
   const [open, setOpen] = useState(false);
 
-  const rawUserStores = (user as { stores?: Array<{ id: number; nameAr: string; nameEn: string; slug: string }> } | null)?.stores;
+  const rawUserStores = (user as { stores?: Array<{ id: number; nameAr: string; nameEn: string; slug: string; kind?: "store" | "factory" }> } | null)?.stores;
   // Stabilise the reference — avoids triggering the hydration effect on every render
   // when React Query returns a structurally-identical but newly-allocated array.
   const userStores = useMemo(() => rawUserStores ?? [], [rawUserStores]);
-  const stores = ctxStores.length > 0 ? ctxStores : userStores;
+  const apiStores = useMemo(
+    () => (accessibleStores ?? []) as StoreWithKind[],
+    [accessibleStores],
+  );
+  const stores = ctxStores.length > 0 ? ctxStores : apiStores.length > 0 ? apiStores : userStores;
   // Hydrate context from /auth/me on first load (e.g., page refresh) so the
   // switcher works even before another login event populates context.
   useEffect(() => {
@@ -134,6 +140,21 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
       setStores(userStores, currentStoreId);
     }
   }, [ctxStores.length, userStores, currentStoreId, setStores]);
+  useEffect(() => {
+    if (!accessibleStores) return;
+    const synchronized = ctxStores.length === apiStores.length &&
+      apiStores.every((serverStore) => {
+        const local = ctxStores.find((store) => store.id === serverStore.id);
+        return local?.nameAr === serverStore.nameAr &&
+          local.nameEn === serverStore.nameEn &&
+          local.kind === serverStore.kind;
+      });
+    const selectedStoreIsAvailable = currentStoreId === null ||
+      apiStores.some((store) => store.id === currentStoreId);
+    if (!synchronized || !selectedStoreIsAvailable) {
+      setStores(apiStores, selectedStoreIsAvailable ? currentStoreId : null);
+    }
+  }, [accessibleStores, apiStores, currentStoreId, ctxStores, setStores]);
   const current = stores.find((s) => s.id === currentStoreId);
 
   if (!stores.length) return null;
@@ -205,7 +226,11 @@ function StoreSwitcher({ collapsed }: { collapsed: boolean }) {
               {s.id === currentStoreId ? <Check className="h-3.5 w-3.5 text-primary" /> : <span className="w-3.5" />}
               <div className="flex-1 min-w-0 text-left">
                 <div className="truncate">{s.nameEn}</div>
-                <div className="text-xs text-muted-foreground truncate" dir="rtl">{s.nameAr}</div>
+                <div className="text-xs text-muted-foreground truncate" dir={lang === "ar" ? "rtl" : "ltr"}>
+                  {s.kind === "factory"
+                    ? lang === "ar" ? "وحدة الإنتاج" : lang === "en" ? "Production unit" : "Unité de production"
+                    : s.nameAr}
+                </div>
               </div>
             </button>
           ))}
@@ -263,9 +288,12 @@ export function Sidebar() {
   const { isAdmin, user, features } = useMe();
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
+  const { currentStoreId, stores } = useStoreContext();
+  const currentStore = stores.find((store) => store.id === currentStoreId);
   const userId = (user as { id?: number | string } | null)?.id ?? null;
   const { can } = usePermissions();
   const visibleEntries = navEntries.filter((it) => {
+    if (it.section === "manufacturing" && currentStore?.kind !== "factory") return false;
     if (it.section && features[featureForSection(it.section)] === false) return false;
     if (it.adminOnly && !isAdmin) return false;
     if ("group" in it) {

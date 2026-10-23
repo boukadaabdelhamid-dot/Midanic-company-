@@ -11,6 +11,7 @@ import erpSettingsRouter from "./erp-settings";
 import storesRouter from "./stores";
 import transfersRouter from "./transfers";
 import caissesRouter from "./caisses";
+import manufacturingRouter from "./manufacturing";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ router.use(webOrdersRouter);
 router.use(storesRouter);
 router.use(transfersRouter);
 router.use(caissesRouter);
+router.use(manufacturingRouter);
 router.use(erpRouter);
 router.use(erpSettingsRouter);
 

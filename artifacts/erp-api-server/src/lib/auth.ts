@@ -166,6 +166,9 @@ export async function enforcePlatformAccess(
   if (domain?.tenantId === user.platformTenantId && domain.ownerUserId === user.platformUserId) {
     featureRequest.tenantFeatures = {
       ...(domain.featureFlags ?? {}),
+      // Companies created before the manufacturing switch existed must stay
+      // disabled until an administrator explicitly enables it.
+      manufacturing: domain.featureFlags?.manufacturing === true,
       maxStores: domain.maxStores ?? null,
       maxUsers: domain.maxUsers ?? null,
       storageGb: domain.storageGb ?? null,
@@ -195,6 +198,7 @@ function featureForRequestPath(path: string | undefined): string | null {
     [/\/erp\/accounting(?:\/|$)/, "accounting"],
     [/\/erp\/reports(?:\/|$)/, "reports"],
     [/\/erp\/transfers(?:\/|$)/, "transfers"],
+    [/\/erp\/manufacturing(?:\/|$)/, "manufacturing"],
     [/\/erp\/caisses(?:\/|$)/, "caisse"],
     [/\/erp\/alerts(?:\/|$)/, "alerts"],
     [/\/erp\/(settings|stores)(?:\/|$)/, "settings"],
@@ -372,6 +376,7 @@ export async function requireStore(req: AuthRequest, res: Response, next: NextFu
     const [link] = await db.select({
       storeId: schema.userStoresTable.storeId,
       platformTenantId: schema.storesTable.platformTenantId,
+      kind: schema.storesTable.kind,
     })
       .from(schema.userStoresTable)
       .innerJoin(schema.storesTable, eq(schema.userStoresTable.storeId, schema.storesTable.id))
@@ -389,6 +394,13 @@ export async function requireStore(req: AuthRequest, res: Response, next: NextFu
       res.status(403).json({
         error: "The selected store does not belong to this ERP tenant",
         code: "TENANT_STORE_MISMATCH",
+      });
+      return;
+    }
+    if (link.kind === "factory" && req.tenantFeatures?.manufacturing !== true) {
+      res.status(403).json({
+        error: "The production unit is disabled for this company",
+        code: "FEATURE_DISABLED",
       });
       return;
     }

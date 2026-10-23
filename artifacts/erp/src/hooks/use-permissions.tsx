@@ -22,7 +22,8 @@ export type PermSection =
   | "reports"
   | "web_store"
   | "alerts"
-  | "transfers";
+  | "transfers"
+  | "manufacturing";
 
 export type PermAction =
   | "view" | "create" | "edit" | "delete"
@@ -43,6 +44,8 @@ export type PermAction =
   | "count"
   // customers (granular)
   | "view_balance" | "view_history"
+  // manufacturing
+  | "complete"
   // web_store
   | "edit_settings" | "manage_featured" | "manage_orders";
 

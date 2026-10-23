@@ -10,6 +10,7 @@ export const storesTable = pgTable("stores", {
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
   slug: text("slug").notNull().unique(),
+  kind: text("kind").notNull().default("store"),
   isActive: boolean("is_active").notNull().default(true),
   address: text("address"),
   phone: text("phone"),

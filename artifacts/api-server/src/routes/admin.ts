@@ -345,6 +345,7 @@ router.get("/admin/erp/tenants", async (req, res): Promise<void> => {
 
   const effectiveRows = tenantRows.map((tenant) => ({
     ...tenant,
+    featureFlags: { ...defaultErpFeatureFlags, ...(tenant.featureFlags ?? {}) },
     status: getEffectiveErpTenantStatus(tenant),
   }));
   const filteredRows = status

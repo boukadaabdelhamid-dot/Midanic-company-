@@ -6,7 +6,7 @@ import {
   Printer, CreditCard, Tag, TrendingUp, Globe, Package,
   Image as ImageIcon, Copy, Send, Upload, QrCode, History,
   LayoutGrid, Check, Cloud, Columns3, Store, User, Building2, Receipt, Layers,
-  ShoppingCart, ClipboardList, Palette,
+  ShoppingCart, ClipboardList, Palette, Factory,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -57,6 +57,7 @@ const SECTIONS: { key: string; labelFr: string; labelAr: string }[] = [
   { key: "realtime",  labelFr: "Temps Réel",        labelAr: "الوقت الفعلي"  },
   { key: "settings",  labelFr: "Paramètres",        labelAr: "الإعدادات"     },
   { key: "transfers", labelFr: "Transferts de stock", labelAr: "تحويلات المخزون" },
+  { key: "manufacturing", labelFr: "Production", labelAr: "الإنتاج" },
   { key: "alerts",    labelFr: "Alertes",             labelAr: "التنبيهات"         },
   { key: "web_store", labelFr: "Boutique en ligne",   labelAr: "المتجر الإلكتروني" },
 ];
@@ -117,6 +118,12 @@ const SECTION_ACTIONS: Record<string, ActionDef[]> = {
     { key: "edit",   labelFr: "Modifier",                          labelAr: "تعديل",                     icon: PenLine       },
     { key: "delete", labelFr: "Supprimer",                         labelAr: "حذف",                       icon: Trash2        },
     { key: "count",  labelFr: "Lancer / valider un jrd physique",  labelAr: "بدء / تأكيد جرد فعلي",      icon: ClipboardList },
+  ],
+  manufacturing: [
+    { key: "view", labelFr: "Accéder au module de production", labelAr: "الوصول إلى قسم الإنتاج", icon: Eye },
+    { key: "create", labelFr: "Créer une recette ou un ordre", labelAr: "إنشاء وصفة أو أمر إنتاج", icon: Plus },
+    { key: "edit", labelFr: "Modifier une recette ou annuler un ordre", labelAr: "تعديل وصفة أو إلغاء أمر", icon: PenLine },
+    { key: "complete", labelFr: "Valider une production et modifier le stock", labelAr: "تأكيد الإنتاج وتعديل المخزون", icon: Factory },
   ],
   settings: [
     { key: "view",                  labelFr: "Voir les paramètres",                     labelAr: "عرض الإعدادات",                  icon: Eye      },

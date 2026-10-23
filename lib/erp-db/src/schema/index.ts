@@ -9,5 +9,6 @@ export * from "./cart";
 export * from "./coupons";
 export * from "./reviews";
 export * from "./erp";
+export * from "./manufacturing";
 export * from "./uploads";
 export * from "./password-reset-tokens";

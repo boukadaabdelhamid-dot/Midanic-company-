@@ -34,11 +34,51 @@ router.get("/erp/stores/mine", authenticate, async (req: AuthRequest, res) => {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
+    const manufacturingEnabled = req.tenantFeatures?.["manufacturing"] === true;
+    if (
+      manufacturingEnabled &&
+      req.user!.platformTenantId !== undefined &&
+      (role === "tenant_admin" || role === "admin")
+    ) {
+      const whereFactory = and(
+        eq(schema.storesTable.kind, "factory"),
+        eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
+      );
+      const [existingFactory] = await db.select({ id: schema.storesTable.id })
+        .from(schema.storesTable)
+        .where(whereFactory)
+        .limit(1);
+      let factoryId = existingFactory?.id;
+      if (!factoryId) {
+        const [createdFactory] = await db.insert(schema.storesTable).values({
+          nameAr: "وحدة الإنتاج",
+          nameEn: "Production unit",
+          slug: `production-${req.user!.platformTenantId}`,
+          kind: "factory",
+          platformTenantId: req.user!.platformTenantId,
+          isActive: true,
+        }).onConflictDoNothing().returning({ id: schema.storesTable.id });
+        factoryId = createdFactory?.id;
+      }
+      if (!factoryId) {
+        const [factoryAfterConflict] = await db.select({ id: schema.storesTable.id })
+          .from(schema.storesTable)
+          .where(whereFactory)
+          .limit(1);
+        factoryId = factoryAfterConflict?.id;
+      }
+      if (factoryId) {
+        await db.insert(schema.userStoresTable)
+          .values({ userId: req.user!.id, storeId: factoryId })
+          .onConflictDoNothing();
+      }
+    }
     const rows = await db.select({
       id: schema.storesTable.id,
       nameAr: schema.storesTable.nameAr,
       nameEn: schema.storesTable.nameEn,
       slug: schema.storesTable.slug,
+      kind: schema.storesTable.kind,
       isActive: schema.storesTable.isActive,
       address: schema.storesTable.address,
       phone: schema.storesTable.phone,
@@ -59,7 +99,9 @@ router.get("/erp/stores/mine", authenticate, async (req: AuthRequest, res) => {
           : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
       ))
       .orderBy(schema.storesTable.id);
-    res.json(rows.filter((r) => r.isActive));
+    res.json(rows.filter((r) =>
+      r.isActive && (manufacturingEnabled || r.kind !== "factory")
+    ));
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -78,10 +120,14 @@ router.get("/erp/stores/all", authenticate, async (req: AuthRequest, res) => {
       nameAr: schema.storesTable.nameAr,
       nameEn: schema.storesTable.nameEn,
       slug: schema.storesTable.slug,
+      kind: schema.storesTable.kind,
       isActive: schema.storesTable.isActive,
     }).from(schema.storesTable)
       .where(and(
         eq(schema.storesTable.isActive, true),
+        req.tenantFeatures?.["manufacturing"] === true
+          ? undefined
+          : sql`${schema.storesTable.kind} <> 'factory'`,
         req.user!.platformTenantId === undefined
           ? undefined
           : eq(schema.storesTable.platformTenantId, req.user!.platformTenantId),
@@ -140,7 +186,10 @@ router.post("/erp/stores", authenticate, requireTenantAdmin, async (req: AuthReq
         // Each Platform tenant has its own database. Counting inside that
         // database is the tenant boundary and also handles legacy stores
         // whose platform_tenant_id was not backfilled.
-        .where(eq(schema.storesTable.isActive, true));
+        .where(and(
+          eq(schema.storesTable.isActive, true),
+          eq(schema.storesTable.kind, "store"),
+        ));
       if (countLimitReached(Number(currentStoreCount), configuredMaxStores)) {
         res.status(409).json({
           error: `This company has reached its store limit (${configuredMaxStores})`,

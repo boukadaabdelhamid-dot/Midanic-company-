@@ -73,6 +73,7 @@ const FEATURE_OPTIONS = [
   { key: "accounting", label: "Accounting", description: "Cash, accounting summaries, and transactions" },
   { key: "reports", label: "Reports", description: "Management reports" },
   { key: "transfers", label: "Transfers", description: "Stock transfers between stores" },
+  { key: "manufacturing", label: "Manufacturing", description: "Factory recipes, production orders, and factory stock" },
   { key: "caisse", label: "Cash registers", description: "Cash sessions and cash transfers" },
   { key: "realtime", label: "Realtime", description: "Realtime updates and activity" },
   { key: "alerts", label: "Alerts", description: "Stock and business alerts" },
