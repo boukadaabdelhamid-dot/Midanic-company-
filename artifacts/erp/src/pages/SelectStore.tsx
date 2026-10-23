@@ -8,7 +8,7 @@ import { useLang } from "@/hooks/use-lang";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Store as StoreIcon } from "lucide-react";
-import logoPath from "@assets/logo_des_13_midanic_1777739613232.jpeg";
+import logoPath from "@/assets/midanic-logo.jpeg";
 
 export default function SelectStore() {
   const [, setLocation] = useLocation();

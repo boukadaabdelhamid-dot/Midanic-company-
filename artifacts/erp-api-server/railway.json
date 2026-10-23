@@ -7,7 +7,6 @@
       "/artifacts/erp-api-server/**",
       "/artifacts/erp/**",
       "/lib/**",
-      "/attached_assets/**",
       "/package.json",
       "/pnpm-workspace.yaml",
       "/pnpm-lock.yaml",

@@ -6,7 +6,6 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY lib ./lib
 COPY artifacts/web-store ./artifacts/web-store
-COPY attached_assets ./attached_assets
 RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 RUN pnpm --filter @workspace/web-store run build

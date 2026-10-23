@@ -8,7 +8,6 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY lib ./lib
 COPY artifacts/erp-api-server ./artifacts/erp-api-server
 COPY artifacts/erp ./artifacts/erp
-COPY attached_assets ./attached_assets
 RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 # Force a clean bundle — never run a stale checked-in dist. Keeping this build

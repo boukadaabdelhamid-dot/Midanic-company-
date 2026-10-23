@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
-import logoPath from "@assets/logo_des_13_midanic_1777739613232.jpeg";
+import logoPath from "@/assets/midanic-logo.jpeg";
 
 const schema = z.object({
   email: z.string().email(),

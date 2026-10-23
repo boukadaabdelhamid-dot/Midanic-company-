@@ -10,7 +10,7 @@ import {
   ChevronDown, Layers, User, BellRing, Languages, HardDrive, Shield,
   TrendingUp, KeyRound, Globe, RotateCcw, Receipt, AlertTriangle, Factory,
 } from "lucide-react";
-import logoPath from "@assets/logo_des_13_midanic_1777739613232.jpeg";
+import logoPath from "@/assets/midanic-logo.jpeg";
 import { useAuth } from "@/hooks/use-auth";
 import { useMe } from "@/hooks/use-me";
 import { useStoreContext, type Store as StoreWithKind } from "@/hooks/use-store";
