@@ -18,6 +18,13 @@ import {
 import { resolvePublicStore } from "../lib/store-context";
 import { getProductExposureFilter, isProductStaffRole } from "../lib/product-visibility";
 import { classifyProductImportDuplicates } from "../lib/product-import-duplicates";
+import {
+  changedSharedProductFields,
+  hasSharedCatalogProductChanges,
+  linkLegacySharedCatalogCopies,
+  syncProductImages,
+  syncSharedCatalogProductCopies,
+} from "../lib/shared-product-catalog";
 
 const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
@@ -105,19 +112,6 @@ async function loadImagesFor<T extends { id: number; imageUrl: string | null }>(
     ...product,
     images: byProduct.get(product.id) ?? (product.imageUrl ? [{ url: product.imageUrl, isPrimary: true, sortOrder: 0 }] : []),
   }));
-}
-
-async function syncProductImages(productId: number, inputs: ImageInput[]) {
-  const normalized = inputs
-    .filter((image) => typeof image?.url === "string" && image.url.trim())
-    .map((image, index) => ({ url: image.url.trim(), sortOrder: image.sortOrder ?? index, isPrimary: image.isPrimary === true }));
-  if (normalized.length && !normalized.some((image) => image.isPrimary)) normalized[0].isPrimary = true;
-  await db.delete(schema.productImagesTable).where(eq(schema.productImagesTable.productId, productId));
-  if (normalized.length) await db.insert(schema.productImagesTable).values(normalized.map((image) => ({ ...image, productId })));
-  await db.update(schema.productsTable).set({ imageUrl: normalized.find((image) => image.isPrimary)?.url ?? normalized[0]?.url ?? null })
-    .where(eq(schema.productsTable.id, productId));
-  return db.select().from(schema.productImagesTable).where(eq(schema.productImagesTable.productId, productId))
-    .orderBy(schema.productImagesTable.sortOrder, schema.productImagesTable.id);
 }
 
 type ProductReplicationSummary = {
@@ -250,6 +244,7 @@ async function replicateProductToStore(
     color: source.color,
     colisage: source.colisage,
     unitSaleEnabled: source.unitSaleEnabled,
+    sharedCatalogId: source.sharedCatalogId,
     weight: source.weight,
     priceGros: source.priceGros,
     priceSemiGros: source.priceSemiGros,
@@ -650,6 +645,14 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
         .where(and(eq(schema.productColorsTable.id, resolvedColorId), eq(schema.productColorsTable.storeId, storeId))).limit(1);
       if (!row) { res.status(400).json({ error: "colorId does not belong to current store" }); return; }
     }
+    const [sourceStore] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, storeId))
+      .limit(1);
+    const canShareCatalogProduct = req.productCatalogMode === "shared"
+      && Boolean(req.user?.platformTenantId)
+      && sourceStore?.kind === "store";
+    const sharedCatalogId = canShareCatalogProduct ? randomUUID() : null;
     const created = await insertProductWithBarcodeGuard({
       storeId,
       nameAr, nameEn,
@@ -681,6 +684,7 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       brandId: resolvedBrandId,
       colorId: resolvedColorId,
       minStock: minStock != null && minStock !== "" ? Number(minStock) : null,
+      sharedCatalogId,
     });
     if (created.duplicateProductId !== null) {
       res.status(409).json({
@@ -699,22 +703,16 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
     }
 
     let replication: ProductReplicationSummary | undefined;
-    if (req.productCatalogMode === "shared" && req.user?.platformTenantId) {
+    if (canShareCatalogProduct && req.user?.platformTenantId) {
       try {
-        const [sourceStore] = await db.select({ kind: schema.storesTable.kind })
-          .from(schema.storesTable)
-          .where(eq(schema.storesTable.id, storeId))
-          .limit(1);
         // A production unit owns its raw materials and finished products.
         // Shared catalogs apply only to ordinary stores, never to factories.
-        if (sourceStore?.kind === "store") {
-          replication = await replicateProductAcrossTenantStores(
-            product,
-            storeId,
-            req.user.platformTenantId,
-            imageInputs,
-          );
-        }
+        replication = await replicateProductAcrossTenantStores(
+          product,
+          storeId,
+          req.user.platformTenantId,
+          imageInputs,
+        );
       } catch (err) {
         req.log.warn({ err, productId: product.id }, "Shared catalog replication could not list tenant stores");
         replication = {
@@ -743,6 +741,7 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
     // Drop any storeId from body — never let client move products across stores
     const body = { ...req.body };
     delete body.storeId;
+    delete body.sharedCatalogId;
     // Pull images out — they live in a separate table, not on products
     const images = body.images;
     delete body.images;
@@ -811,15 +810,30 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
       body.colorId = null;
     }
     if ("barcode" in body) body.barcode = normalizeProductBarcode(body.barcode);
-    const [currentProduct] = await db.select({
-      stock: schema.productsTable.stock,
-      barcode: schema.productsTable.barcode,
-    })
+    const [currentProduct] = await db.select()
       .from(schema.productsTable)
       .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
       .limit(1);
     if (!currentProduct) { res.status(404).json({ error: "Not found" }); return; }
     const oldStock = body.stock !== undefined ? currentProduct.stock : undefined;
+    const [sourceStore] = await db.select({ kind: schema.storesTable.kind })
+      .from(schema.storesTable)
+      .where(eq(schema.storesTable.id, storeId))
+      .limit(1);
+    const canSyncSharedCatalog = req.productCatalogMode === "shared"
+      && Boolean(req.user?.platformTenantId)
+      && sourceStore?.kind === "store";
+    const shouldResolveSharedCatalog = canSyncSharedCatalog
+      && (hasSharedCatalogProductChanges(Object.keys(body)) || Array.isArray(images));
+    const sharedCatalogId = shouldResolveSharedCatalog
+      ? await linkLegacySharedCatalogCopies({
+          productId: id,
+          storeId,
+          tenantId: req.user!.platformTenantId!,
+          sharedCatalogId: currentProduct.sharedCatalogId,
+          barcode: currentProduct.barcode,
+        })
+      : null;
 
     const updateResult = await db.transaction(async (tx) => {
       const nextBarcode = "barcode" in body ? normalizeProductBarcode(body.barcode) : null;
@@ -845,7 +859,10 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
         }
       }
       const [product] = await tx.update(schema.productsTable)
-        .set(body)
+        .set({
+          ...body,
+          ...(sharedCatalogId ? { sharedCatalogId } : {}),
+        })
         .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
         .returning();
       return { product: product ?? null, duplicate: false };
@@ -873,15 +890,44 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
         });
       }
     }
-    if (Array.isArray(images)) {
-      await syncProductImages(product.id, images);
-      const [fresh] = await db.select().from(schema.productsTable).where(eq(schema.productsTable.id, product.id)).limit(1);
-      const [withImages] = await loadImagesFor([fresh ?? product]);
-      res.json(withImages);
-      return;
+    if (Array.isArray(images)) await syncProductImages(product.id, images as ImageInput[]);
+    const [fresh] = await db.select().from(schema.productsTable)
+      .where(eq(schema.productsTable.id, product.id)).limit(1);
+    const finalProduct = fresh ?? product;
+    const changedFields = changedSharedProductFields(currentProduct, finalProduct, Object.keys(body));
+    const shouldSyncImages = Array.isArray(images);
+    let sharedSync: Awaited<ReturnType<typeof syncSharedCatalogProductCopies>> | undefined;
+    if (shouldResolveSharedCatalog && sharedCatalogId && (changedFields.length || shouldSyncImages)) {
+      sharedSync = await syncSharedCatalogProductCopies({
+        source: finalProduct,
+        tenantId: req.user!.platformTenantId!,
+        changedFields,
+        syncImages: shouldSyncImages,
+        onTargetError: (targetStoreId, err) => {
+          req.log.warn({ err, productId: id, targetStoreId }, "Could not update a shared product copy");
+        },
+      });
+    } else if (shouldResolveSharedCatalog && !sharedCatalogId) {
+      sharedSync = {
+        status: "unlinked",
+        updatedStores: 0,
+        failedStoreIds: [],
+        reason: "missing_or_ambiguous_barcode",
+      };
     }
-    const [withImages] = await loadImagesFor([product]);
-    res.json(withImages);
+    if (sharedSync?.failedStoreIds.length) {
+      req.log.warn(
+        { productId: id, failedStoreIds: sharedSync.failedStoreIds },
+        "Shared catalog product update was incomplete",
+      );
+    } else if (sharedSync?.status === "unlinked") {
+      req.log.info({ productId: id, storeId }, "Shared catalog update skipped without a unique barcode match");
+    }
+    const [withImages] = await loadImagesFor([finalProduct]);
+    res.json({
+      ...withImages,
+      ...(sharedSync ? { sharedSync } : {}),
+    });
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -1275,6 +1321,7 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
             priceGros: src.priceGros,
             priceSemiGros: src.priceSemiGros,
             priceMin: src.priceMin,
+            sharedCatalogId: src.sharedCatalogId,
             catalogue1: src.catalogue1,
             catalogue2: src.catalogue2,
             catalogue3: src.catalogue3,

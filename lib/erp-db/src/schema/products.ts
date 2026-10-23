@@ -46,6 +46,7 @@ export const productsTable = pgTable("products", {
   isExposed: boolean("is_exposed").default(false),
   minStock: doublePrecision("min_stock"),
   excludedFromPurchase: boolean("excluded_from_purchase").notNull().default(false),
+  sharedCatalogId: text("shared_catalog_id"),
 }, (t) => ({
   stockNonNegative: check("stock_non_negative", sql`${t.stock} >= 0`),
 }));

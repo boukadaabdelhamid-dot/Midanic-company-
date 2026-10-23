@@ -812,10 +812,46 @@ export default function Products() {
     if (dialog.editing) {
       const editingId = dialog.editing.id;
       updateProduct.mutate({ id: editingId, data }, {
-        onSuccess: () => {
+        onSuccess: (updated) => {
           // Immediately store overrides in local state so table updates without waiting for refetch
           const { images: _images, ...productOverride } = data;
           setProductOverrides((m) => new Map(m).set(editingId, productOverride));
+          const sharedSync = (
+            updated as Product & {
+              sharedSync?: {
+                status: "synced" | "unlinked";
+                updatedStores: number;
+                failedStoreIds: number[];
+              };
+            }
+          ).sharedSync;
+          if (sharedSync?.status === "unlinked") {
+            toast({
+              variant: "destructive",
+              title: t("Produit enregistré, partage non synchronisé", "تم حفظ المنتج لكن لم تتم مزامنة نسخه"),
+              description: t(
+                "No other product could be matched safely by a unique barcode; other products were left unchanged.",
+                "لم يمكن مطابقة نسخة أخرى بأمان عبر باركود فريد؛ تُركت المنتجات الأخرى دون تغيير.",
+              ),
+            });
+          } else if (sharedSync?.failedStoreIds.length) {
+            toast({
+              variant: "destructive",
+              title: t("Partage incomplet", "المزامنة غير مكتملة"),
+              description: t(
+                `Updated in ${sharedSync.updatedStores} other store(s); failed in ${sharedSync.failedStoreIds.length}.`,
+                `تم التحديث في ${sharedSync.updatedStores} متجر(ات) أخرى؛ وفشل في ${sharedSync.failedStoreIds.length}.`,
+              ),
+            });
+          } else if (sharedSync?.updatedStores) {
+            toast({
+              title: t("Produit synchronisé", "تمت مزامنة المنتج"),
+              description: t(
+                `Updated in ${sharedSync.updatedStores} other store(s).`,
+                `تم التحديث في ${sharedSync.updatedStores} متجر(ات) أخرى.`,
+              ),
+            });
+          }
           setDialogError(null);
           setDialog({ open: false, editing: null });
           forceRefresh();

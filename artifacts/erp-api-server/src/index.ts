@@ -20,6 +20,7 @@ import { runOrderSourceMigration } from "./lib/order-source-migration";
 import { runPaymentMethodMigration } from "./lib/payment-method-migration";
 import { runPurchaseOrdersSchemaMigration } from "./lib/purchase-orders-schema-migration";
 import { runManufacturingMigration } from "./lib/manufacturing-migration";
+import { runSharedProductCatalogMigration } from "./lib/shared-product-catalog-migration";
 import { getStorageMode, getLocalStorageBase, ensureLocalStorageReady } from "./lib/objectStorage";
 import { listReadyTenantDatabases } from "./lib/tenant-registry";
 import { resolvePlatformTenantDatabase } from "./lib/tenant-domain";
@@ -866,6 +867,7 @@ async function runMigrations(targetPool: Pool = pool) {
   await targetPool.query(`CREATE INDEX IF NOT EXISTS "stores_platform_tenant_id_idx" ON "erp"."stores" ("platform_tenant_id") WHERE "platform_tenant_id" IS NOT NULL`);
   await targetPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "users_platform_user_id_uq" ON "erp"."users" ("platform_user_id") WHERE "platform_user_id" IS NOT NULL`);
   await runManufacturingMigration(targetPool);
+  await runSharedProductCatalogMigration(targetPool);
   await runWebOrdersMigration(targetPool);
 }
 
