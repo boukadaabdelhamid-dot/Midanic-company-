@@ -29,6 +29,7 @@ interface PreviewRow {
   familyName: string | null;
   colorName: string | null;
   isDuplicate: boolean;
+  duplicateTargetIndex: number | null;
   error: string | null;
 }
 interface ParseStats {
@@ -305,7 +306,11 @@ export default function ImportExcelModal({ open, onClose, onImported }: Props) {
                               {row.error ? (
                                 <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{row.error}</Badge>
                               ) : row.isDuplicate ? (
-                                <Badge className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-200">{t("Doublon", "مكرر")}</Badge>
+                                <Badge className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-200">
+                                  {row.duplicateTargetIndex != null
+                                    ? t("Répété dans ce fichier", "مكرر داخل هذا الملف")
+                                    : t("Déjà présent", "موجود مسبقاً")}
+                                </Badge>
                               ) : (
                                 <Badge className="text-[10px] px-1.5 py-0 bg-green-100 text-green-700 border-green-200">{t("Nouveau", "جديد")}</Badge>
                               )}

@@ -34,5 +34,6 @@
 - [CSV BOM verification](csv-bom-verification.md) — use raw bytes to test UTF-8 BOMs; `Blob.text()` may consume the marker
 - [Legacy sales-source integrity](legacy-sales-source-integrity.md) — historical online labels may be wrong; do not infer a sale channel solely from a missing seller.
 - [Barcode lookup completeness](barcode-lookup-completeness.md) — a missing match in a preloaded catalog page is not proof that a barcode does not exist.
+- [Primary product barcode integrity](primary-product-barcode-integrity.md) — preserve legacy duplicate records; block new same-store barcode collisions transactionally instead of adding a unique index.
 - [Stock transfer workflows](stock-transfer-simplification.md) — direct sends skip destination pre-approval; ordinary requests retain approval and final receipt confirmation.
 - [Wholesale sale units](wholesale-sale-units.md) — product unit sales are configurable per item and currently apply only to Bon de vente, with inventory stored in base pieces.

@@ -17,6 +17,7 @@ import {
 } from "../lib/auth";
 import { resolvePublicStore } from "../lib/store-context";
 import { getProductExposureFilter, isProductStaffRole } from "../lib/product-visibility";
+import { classifyProductImportDuplicates } from "../lib/product-import-duplicates";
 
 const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number => {
@@ -29,7 +30,8 @@ type ImageInput = { url: string; sortOrder?: number; isPrimary?: boolean };
 type ImportRow = {
   index: number; excelCategoryId: number | null; nameEn: string; nameAr: string; model: string | null;
   barcode: string; price: number; costPrice: number | null; isDuplicate: boolean;
-  existingProductId: number | null; resolvedCategoryId: number | null; brandName: string | null;
+  existingProductId: number | null; duplicateTargetIndex: number | null;
+  resolvedCategoryId: number | null; brandName: string | null;
   familyName: string | null; colorName: string | null; resolvedBrandId: number | null;
   resolvedFamilyId: number | null; resolvedColorId: number | null; error: string | null;
 };
@@ -40,6 +42,53 @@ type ImportSession = {
 };
 const importSessions = new Map<string, ImportSession>();
 const xlsxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+function normalizeProductBarcode(value: unknown): string | null {
+  if (value == null) return null;
+  const barcode = String(value).trim();
+  return barcode || null;
+}
+
+async function insertProductWithBarcodeGuard(
+  values: typeof schema.productsTable.$inferInsert,
+): Promise<
+  | { product: typeof schema.productsTable.$inferSelect; duplicateProductId: null }
+  | { product: null; duplicateProductId: number }
+> {
+  const barcode = normalizeProductBarcode(values.barcode);
+  return db.transaction(async (tx) => {
+    if (barcode) {
+      // Serialize same-store writes for this exact barcode across API replicas.
+      // Existing legacy duplicates remain untouched; this prevents adding more.
+      const lockKey = `erp:product-barcode:${barcode}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+
+      const [existingProduct] = await tx.select({ id: schema.productsTable.id })
+        .from(schema.productsTable)
+        .where(and(
+          eq(schema.productsTable.storeId, Number(values.storeId)),
+          sql`trim(${schema.productsTable.barcode}) = ${barcode}`,
+        ))
+        .limit(1);
+      if (existingProduct) return { product: null, duplicateProductId: existingProduct.id };
+
+      const [existingExtraBarcode] = await tx.select({
+        productId: schema.productBarcodesTable.productId,
+      })
+        .from(schema.productBarcodesTable)
+        .where(eq(schema.productBarcodesTable.barcode, barcode))
+        .limit(1);
+      if (existingExtraBarcode) {
+        return { product: null, duplicateProductId: existingExtraBarcode.productId };
+      }
+    }
+
+    const [product] = await tx.insert(schema.productsTable)
+      .values({ ...values, barcode })
+      .returning();
+    return { product, duplicateProductId: null };
+  });
+}
 
 async function loadImagesFor<T extends { id: number; imageUrl: string | null }>(products: T[]) {
   if (!products.length) return products.map((product) => ({ ...product, images: [] }));
@@ -84,7 +133,7 @@ router.get(
   try {
     const storeId = req.currentStoreId!;
     const {
-      page = "1", limit = "50", search, filterCode, filterBrand, filterFamily, filterStock,
+      page = "1", limit = "50", search, filterName, filterCode, filterBrand, filterFamily, filterStock,
       inStockOnly, filterId, filterRef, filterCatalogueType, filterDescription, filterModel,
       filterColor, filterColisage, filterWeight, filterCatalogue1, filterCatalogue2, filterCatalogue3,
       filterCatalogue4, filterCatalogue5, filterCatalogue6, filterCreatedAt, filterExposed,
@@ -98,12 +147,38 @@ router.get(
     if (exposedOnly !== undefined) {
       conditions.push(eq(schema.productsTable.isExposed, exposedOnly));
     }
-    if (search) {
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      const searchPattern = `%${normalizedSearch}%`;
       conditions.push(or(
-        ilike(schema.productsTable.nameEn, `%${search}%`),
-        ilike(schema.productsTable.nameAr, `%${search}%`),
-        ilike(schema.productsTable.reference, `%${search}%`),
-        ilike(schema.productsTable.barcode, `%${search}%`),
+        ilike(schema.productsTable.nameEn, searchPattern),
+        ilike(schema.productsTable.nameAr, searchPattern),
+        ilike(schema.productsTable.reference, searchPattern),
+        ilike(schema.productsTable.barcode, searchPattern),
+        ilike(schema.productsTable.model, searchPattern),
+        ilike(schema.productsTable.brand, searchPattern),
+        ilike(schema.productsTable.color, searchPattern),
+        ilike(schema.productsTable.descriptionEn, searchPattern),
+        ilike(schema.productsTable.descriptionAr, searchPattern),
+        sql`EXISTS (
+          SELECT 1 FROM product_families pf
+          WHERE pf.id = ${schema.productsTable.familyId}
+            AND pf.store_id = ${storeId}
+            AND (pf.name_fr ILIKE ${searchPattern} OR pf.name_ar ILIKE ${searchPattern})
+        )`,
+        sql`EXISTS (
+          SELECT 1 FROM product_barcodes pb
+          WHERE pb.product_id = ${schema.productsTable.id}
+            AND pb.store_id = ${storeId}
+            AND pb.barcode ILIKE ${searchPattern}
+        )`,
+      )!);
+    }
+    if (filterName?.trim()) {
+      const namePattern = `%${filterName.trim()}%`;
+      conditions.push(or(
+        ilike(schema.productsTable.nameEn, namePattern),
+        ilike(schema.productsTable.nameAr, namePattern),
       )!);
     }
     if (filterCode) {
@@ -369,14 +444,14 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
         .where(and(eq(schema.productColorsTable.id, resolvedColorId), eq(schema.productColorsTable.storeId, storeId))).limit(1);
       if (!row) { res.status(400).json({ error: "colorId does not belong to current store" }); return; }
     }
-    const [product] = await db.insert(schema.productsTable).values({
+    const created = await insertProductWithBarcodeGuard({
       storeId,
       nameAr, nameEn,
       descriptionAr: descriptionAr || "",
       descriptionEn: descriptionEn || "",
       price, imageUrl, stock: stock || 0, categoryId,
       reference: reference || null,
-      barcode: barcode || null,
+      barcode: normalizeProductBarcode(barcode),
       costPrice: costPrice || null,
       catalogueType: catalogueType || "ARTICLE",
       brand: brand || null,
@@ -400,7 +475,15 @@ router.post("/products", authenticate, requireStaff, requireStore, requirePermis
       brandId: resolvedBrandId,
       colorId: resolvedColorId,
       minStock: minStock != null && minStock !== "" ? Number(minStock) : null,
-    }).returning();
+    });
+    if (created.duplicateProductId !== null) {
+      res.status(409).json({
+        error: "A product with this barcode already exists",
+        code: "PRODUCT_BARCODE_EXISTS",
+      });
+      return;
+    }
+    const product = created.product;
     if (Array.isArray(images) && images.length > 0) {
       await syncProductImages(product.id, images);
       const [fresh] = await db.select().from(schema.productsTable).where(eq(schema.productsTable.id, product.id)).limit(1);
@@ -488,19 +571,54 @@ router.put("/products/:id", authenticate, requireStaff, requireStore, requirePer
     } else if ("colorId" in body) {
       body.colorId = null;
     }
-    // Capture old stock before update to compute delta for inventory tracking
-    let oldStock: number | undefined;
-    if (body.stock !== undefined) {
-      const [cur] = await db.select({ stock: schema.productsTable.stock })
-        .from(schema.productsTable)
-        .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
-        .limit(1);
-      oldStock = cur?.stock;
-    }
-    const [product] = await db.update(schema.productsTable)
-      .set(body)
+    if ("barcode" in body) body.barcode = normalizeProductBarcode(body.barcode);
+    const [currentProduct] = await db.select({
+      stock: schema.productsTable.stock,
+      barcode: schema.productsTable.barcode,
+    })
+      .from(schema.productsTable)
       .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
-      .returning();
+      .limit(1);
+    if (!currentProduct) { res.status(404).json({ error: "Not found" }); return; }
+    const oldStock = body.stock !== undefined ? currentProduct.stock : undefined;
+
+    const updateResult = await db.transaction(async (tx) => {
+      const nextBarcode = "barcode" in body ? normalizeProductBarcode(body.barcode) : null;
+      if (nextBarcode && nextBarcode !== currentProduct.barcode) {
+        const lockKey = `erp:product-barcode:${nextBarcode}`;
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+        const [existingProduct] = await tx.select({ id: schema.productsTable.id })
+          .from(schema.productsTable)
+          .where(and(
+            eq(schema.productsTable.storeId, storeId),
+            sql`trim(${schema.productsTable.barcode}) = ${nextBarcode}`,
+            sql`${schema.productsTable.id} <> ${id}`,
+          ))
+          .limit(1);
+        const [existingExtraBarcode] = await tx.select({
+          productId: schema.productBarcodesTable.productId,
+        })
+          .from(schema.productBarcodesTable)
+          .where(eq(schema.productBarcodesTable.barcode, nextBarcode))
+          .limit(1);
+        if (existingProduct || existingExtraBarcode) {
+          return { product: null, duplicate: true };
+        }
+      }
+      const [product] = await tx.update(schema.productsTable)
+        .set(body)
+        .where(and(eq(schema.productsTable.id, id), eq(schema.productsTable.storeId, storeId)))
+        .returning();
+      return { product: product ?? null, duplicate: false };
+    });
+    if (updateResult.duplicate) {
+      res.status(409).json({
+        error: "A product with this barcode already exists",
+        code: "PRODUCT_BARCODE_EXISTS",
+      });
+      return;
+    }
+    const product = updateResult.product;
     if (!product) { res.status(404).json({ error: "Not found" }); return; }
     // Record inventory movement when stock quantity changes
     if (oldStock !== undefined) {
@@ -690,24 +808,34 @@ router.post("/erp/products/:id/barcodes", authenticate, requireStaff, requireSto
     if (!barcode?.trim()) { res.status(400).json({ error: "barcode is required" }); return; }
     const bc = barcode.trim();
 
-    // Check against main barcode field
-    const [inMain] = await db.select({ id: schema.productsTable.id })
-      .from(schema.productsTable)
-      .where(and(eq(schema.productsTable.storeId, storeId), eq(schema.productsTable.barcode, bc)))
-      .limit(1);
-    if (inMain) { res.status(409).json({ error: "Ce code-barres est déjà utilisé par un autre produit" }); return; }
+    const inserted = await db.transaction(async (tx) => {
+      const lockKey = `erp:product-barcode:${bc}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
 
-    // Check against extra barcodes table (globally unique)
-    const [inExtra] = await db.select({ id: schema.productBarcodesTable.id })
-      .from(schema.productBarcodesTable)
-      .where(eq(schema.productBarcodesTable.barcode, bc))
-      .limit(1);
-    if (inExtra) { res.status(409).json({ error: "Ce code-barres est déjà utilisé" }); return; }
+      // A primary barcode is unique within its store; extra barcodes remain
+      // globally unique as enforced by product_barcodes' existing index.
+      const [inMain] = await tx.select({ id: schema.productsTable.id })
+        .from(schema.productsTable)
+        .where(and(eq(schema.productsTable.storeId, storeId), eq(schema.productsTable.barcode, bc)))
+        .limit(1);
+      if (inMain) return { duplicate: true as const };
 
-    const [inserted] = await db.insert(schema.productBarcodesTable)
-      .values({ productId, storeId, barcode: bc })
-      .returning();
-    res.status(201).json(inserted);
+      const [inExtra] = await tx.select({ id: schema.productBarcodesTable.id })
+        .from(schema.productBarcodesTable)
+        .where(eq(schema.productBarcodesTable.barcode, bc))
+        .limit(1);
+      if (inExtra) return { duplicate: true as const };
+
+      const [row] = await tx.insert(schema.productBarcodesTable)
+        .values({ productId, storeId, barcode: bc })
+        .returning();
+      return { duplicate: false as const, row };
+    });
+    if (inserted.duplicate) {
+      res.status(409).json({ error: "Ce code-barres est déjà utilisé" });
+      return;
+    }
+    res.status(201).json(inserted.row);
   } catch (err) { req.log.error(err); res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -873,7 +1001,7 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
             }
           }
 
-          const [newProduct] = await db.insert(schema.productsTable).values({
+          const created = await insertProductWithBarcodeGuard({
             storeId: targetStoreId,
             nameAr: src.nameAr,
             nameEn: src.nameEn,
@@ -906,8 +1034,18 @@ router.post("/erp/products/copy-to-stores", authenticate, requireStaff, requireS
             familyId: targetFamilyId,
             brandId: targetBrandId,
             colorId: targetColorId,
-          }).returning();
+          });
 
+          if (created.duplicateProductId !== null) {
+            results.push({
+              productId,
+              targetStoreId,
+              status: "already_exists",
+              message: "Barcode already exists in target store",
+            });
+            continue;
+          }
+          const newProduct = created.product;
           results.push({ productId, targetStoreId, status: "created", newProductId: newProduct.id });
         } catch (err) {
           req.log.error(err);
@@ -1069,8 +1207,15 @@ router.post(
       if (barcodes.length > 0) {
         const existing = await db.select({ id: schema.productsTable.id, barcode: schema.productsTable.barcode })
           .from(schema.productsTable)
-          .where(and(eq(schema.productsTable.storeId, storeId), inArray(schema.productsTable.barcode, barcodes)));
-        for (const p of existing) { if (p.barcode) existingMap.set(p.barcode, p.id); }
+        .where(and(
+          eq(schema.productsTable.storeId, storeId),
+          inArray(sql`trim(${schema.productsTable.barcode})`, barcodes),
+        ))
+        .orderBy(schema.productsTable.id);
+        for (const p of existing) {
+          const barcode = normalizeProductBarcode(p.barcode);
+          if (barcode && !existingMap.has(barcode)) existingMap.set(barcode, p.id);
+        }
       }
 
       // Load store categories, brands, families, colors — all in parallel
@@ -1100,7 +1245,7 @@ router.post(
         return s;
       };
 
-      const rows: ImportRow[] = dataRows.map((r, i) => {
+      const parsedRows: ImportRow[] = dataRows.map((r, i) => {
         const row = r as unknown[];
         const nameRaw = String(row[colMap!.name] ?? "").trim();
         const codeRaw = String(row[colMap!.code] ?? "").trim();
@@ -1121,7 +1266,6 @@ router.post(
         if (!nameRaw) error = "Désignation manquante";
         else if (!codeRaw) error = "Code manquant";
         else if (isNaN(priceRaw) || priceRaw <= 0) error = "Prix invalide";
-        const isDuplicate = Boolean(codeRaw && existingMap.has(codeRaw));
         // Build the designation the same way the ERP form does:
         // famille + marque + modèle + couleur (parts that are present)
         const computedName = [familyName, brandName, nameRaw, colorName].filter(Boolean).join(" ");
@@ -1131,13 +1275,14 @@ router.post(
           // model = the raw "Modèle" cell so products.model column is populated
           model: nameRaw || null,
           barcode: codeRaw, price: priceRaw, costPrice: costRaw > 0 ? costRaw : null,
-          isDuplicate, existingProductId: isDuplicate ? (existingMap.get(codeRaw) ?? null) : null,
+          isDuplicate: false, existingProductId: null, duplicateTargetIndex: null,
           resolvedCategoryId,
           brandName, familyName, colorName,
           resolvedBrandId, resolvedFamilyId, resolvedColorId,
           error,
         };
       });
+      const rows = classifyProductImportDuplicates(parsedRows, existingMap);
 
       const newCount = rows.filter((r) => !r.isDuplicate && !r.error).length;
       const duplicateCount = rows.filter((r) => r.isDuplicate && !r.error).length;
@@ -1151,8 +1296,8 @@ router.post(
       res.json({
         sessionKey,
         stats: { total: rows.length, new: newCount, duplicates: duplicateCount, errors: errorCount, missingCategoryIds },
-        preview: rows.slice(0, 60).map(({ index, nameEn, barcode, price, costPrice, excelCategoryId, resolvedCategoryId, isDuplicate, error, brandName, familyName, colorName }) =>
-          ({ index, nameEn, barcode, price, costPrice, excelCategoryId, resolvedCategoryId, isDuplicate, error, brandName, familyName, colorName })),
+       preview: rows.slice(0, 60).map(({ index, nameEn, barcode, price, costPrice, excelCategoryId, resolvedCategoryId, isDuplicate, duplicateTargetIndex, error, brandName, familyName, colorName }) =>
+          ({ index, nameEn, barcode, price, costPrice, excelCategoryId, resolvedCategoryId, isDuplicate, duplicateTargetIndex, error, brandName, familyName, colorName })),
       });
     } catch (err) { req.log.error(err); res.status(500).json({ error: "Échec du traitement du fichier" }); }
   }
@@ -1171,8 +1316,9 @@ router.post(
       if (!session) { res.status(400).json({ error: "Session expirée. Veuillez re-uploader le fichier." }); return; }
       if (session.storeId !== storeId) { res.status(403).json({ error: "Store mismatch" }); return; }
 
-      let inserted = 0, updated = 0, skipped = 0, errors = 0;
+      let inserted = 0, updated = 0, skipped = 0, errors = session.errorCount;
       const validRows = session.rows.filter((r) => !r.error);
+      const productIdByImportRow = new Map<number, number>();
 
       // ── Create missing brands / families / colors on the fly ───────────────
       // Deduplicate case-insensitively so "APPAREIL" and "Appareil" collapse to one
@@ -1305,58 +1451,102 @@ router.post(
       const resolveColorId = (r: ImportRow): number | null =>
         r.resolvedColorId ?? (r.colorName ? (newColorIds.get(r.colorName.toLowerCase()) ?? null) : null);
 
-      // Split into new vs duplicates
-      const newRows = validRows.filter((r) => !r.isDuplicate);
-      const dupRows = validRows.filter((r) => r.isDuplicate);
-
-      // Batch insert new rows in chunks of 200
-      const chunkSize = 200;
-      for (let i = 0; i < newRows.length; i += chunkSize) {
-        const chunk = newRows.slice(i, i + chunkSize);
-        try {
-          await db.insert(schema.productsTable).values(
-            chunk.map((r) => ({
-              storeId, nameEn: r.nameEn, nameAr: r.nameAr,
-              // Write model (= the "Modèle" cell) so the products list Modèle column shows it
-              model: r.model,
-              // Write brand/color strings as well as brandId/colorId so the list columns show them
-              brand: r.brandName ?? null,
-              color: r.colorName ?? null,
-              price: String(r.price), costPrice: r.costPrice != null ? String(r.costPrice) : null,
-              barcode: r.barcode || null, categoryId: r.resolvedCategoryId,
-              brandId: resolveBrandId(r), familyId: resolveFamilyId(r), colorId: resolveColorId(r),
-              descriptionAr: "", descriptionEn: "", stock: 0, isActive: true, isExposed: false,
-            }))
-          );
-          inserted += chunk.length;
-        } catch { errors += chunk.length; }
-      }
-
-      // Handle duplicates
       const hasAttr = session.hasAttributeCols;
-      for (const row of dupRows) {
-        if (mode === "update" && row.existingProductId) {
-          try {
-            await db.update(schema.productsTable).set({
-              nameEn: row.nameEn, nameAr: row.nameAr,
-              // model field = the "Modèle" cell value; always update it
-              model: row.model,
-              price: String(row.price),
-              costPrice: row.costPrice != null ? String(row.costPrice) : null,
-              ...(row.resolvedCategoryId != null ? { categoryId: row.resolvedCategoryId } : {}),
-              // Always write attribute columns when the Excel file contained them,
-              // including null — so "Aucune"/empty correctly clears existing values.
-              ...(hasAttr.brand ? { brandId: resolveBrandId(row), brand: row.brandName ?? null } : {}),
-              ...(hasAttr.family ? { familyId: resolveFamilyId(row) } : {}),
-              ...(hasAttr.color ? { colorId: resolveColorId(row), color: row.colorName ?? null } : {}),
-            }).where(and(eq(schema.productsTable.id, row.existingProductId), eq(schema.productsTable.storeId, storeId)));
-            updated++;
-          } catch { errors++; }
-        } else { skipped++; }
+      const applyImportedValues = (row: ImportRow) => ({
+        nameEn: row.nameEn,
+        nameAr: row.nameAr,
+        model: row.model,
+        price: String(row.price),
+        costPrice: row.costPrice != null ? String(row.costPrice) : null,
+        ...(row.resolvedCategoryId != null ? { categoryId: row.resolvedCategoryId } : {}),
+        // When the spreadsheet includes an attribute column, an empty value
+        // intentionally clears the corresponding existing value.
+        ...(hasAttr.brand ? { brandId: resolveBrandId(row), brand: row.brandName ?? null } : {}),
+        ...(hasAttr.family ? { familyId: resolveFamilyId(row) } : {}),
+        ...(hasAttr.color ? { colorId: resolveColorId(row), color: row.colorName ?? null } : {}),
+      });
+
+      for (const row of validRows) {
+        try {
+          if (row.isDuplicate) {
+            const targetProductId = row.existingProductId ??
+              (row.duplicateTargetIndex == null ? undefined : productIdByImportRow.get(row.duplicateTargetIndex));
+            if (mode === "update" && targetProductId != null) {
+              const [updatedProduct] = await db.update(schema.productsTable)
+                .set(applyImportedValues(row))
+                .where(and(
+                  eq(schema.productsTable.id, targetProductId),
+                  eq(schema.productsTable.storeId, storeId),
+                ))
+                .returning({ id: schema.productsTable.id });
+              if (!updatedProduct) {
+                errors++;
+                continue;
+              }
+              productIdByImportRow.set(row.index, targetProductId);
+              updated++;
+            } else if (mode === "update" && row.duplicateTargetIndex != null) {
+              // The first row failed during insertion; do not silently report
+              // this duplicate as updated or create an additional product.
+              errors++;
+            } else {
+              skipped++;
+            }
+            continue;
+          }
+
+          const created = await insertProductWithBarcodeGuard({
+            storeId,
+            nameEn: row.nameEn,
+            nameAr: row.nameAr,
+            model: row.model,
+            brand: row.brandName ?? null,
+            color: row.colorName ?? null,
+            price: String(row.price),
+            costPrice: row.costPrice != null ? String(row.costPrice) : null,
+            barcode: row.barcode || null,
+            categoryId: row.resolvedCategoryId,
+            brandId: resolveBrandId(row),
+            familyId: resolveFamilyId(row),
+            colorId: resolveColorId(row),
+            descriptionAr: "",
+            descriptionEn: "",
+            stock: 0,
+            isActive: true,
+            isExposed: false,
+          });
+
+          if (created.duplicateProductId !== null) {
+            productIdByImportRow.set(row.index, created.duplicateProductId);
+            if (mode === "update") {
+              const [updatedProduct] = await db.update(schema.productsTable)
+                .set(applyImportedValues(row))
+                .where(and(
+                  eq(schema.productsTable.id, created.duplicateProductId),
+                  eq(schema.productsTable.storeId, storeId),
+                ))
+                .returning({ id: schema.productsTable.id });
+              if (!updatedProduct) {
+                errors++;
+                continue;
+              }
+              updated++;
+            } else {
+              skipped++;
+            }
+            continue;
+          }
+
+          productIdByImportRow.set(row.index, created.product.id);
+          inserted++;
+        } catch (err) {
+          req.log.error({ err, rowIndex: row.index }, "Failed to import product row");
+          errors++;
+        }
       }
 
       importSessions.delete(sessionKey);
-      res.json({ inserted, updated, skipped, errors, total: validRows.length + session.errorCount });
+      res.json({ inserted, updated, skipped, errors, total: session.rows.length });
     } catch (err) { req.log.error(err); res.status(500).json({ error: "Échec de l'importation" }); }
   }
 );

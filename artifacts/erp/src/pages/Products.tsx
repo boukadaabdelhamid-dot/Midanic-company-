@@ -798,7 +798,10 @@ export default function Products() {
     };
     const forceRefresh = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey(), refetchType: "all" });
     const readErr = (err: unknown): string => {
-      const e = err as { data?: { error?: string }; message?: string } | undefined;
+      const e = err as { data?: { error?: string; code?: string }; message?: string } | undefined;
+      if (e?.data?.code === "PRODUCT_BARCODE_EXISTS") {
+        return t("Un produit avec ce code existe déjà dans ce magasin.", "يوجد منتج بهذا الباركود في هذا المتجر بالفعل.");
+      }
       return e?.data?.error || e?.message || "Erreur inconnue";
     };
     if (dialog.editing) {
