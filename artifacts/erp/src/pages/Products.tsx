@@ -56,6 +56,7 @@ import CopyToStoresModal from "@/components/CopyToStoresModal";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import ImportExcelModal from "@/components/ImportExcelModal";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useStoreContext } from "@/hooks/use-store";
 
 // ── Store identity ──────────────────────────────────────────────────
 import { getStoreName } from "@/lib/store-settings";
@@ -464,6 +465,8 @@ export default function Products() {
   const { toast } = useToast();
   const { lang } = useLang();
   const { can } = usePermissions();
+  const { currentStoreId, stores } = useStoreContext();
+  const isFactoryUnit = stores.find((store) => store.id === currentStoreId)?.kind === "factory";
   const canViewPurchasePrice = can("products", "view_purchase_price");
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const currency = lang === "ar" ? "دج" : "DA";
@@ -766,7 +769,9 @@ export default function Products() {
       nameAr: form.nameAr,
       descriptionEn: form.descriptionEn || undefined,
       descriptionAr: form.descriptionAr || undefined,
-      price: form.price,
+      // ERP product prices are stored as numeric values. Factory products may
+      // not be for sale, so persist an unset retail price as zero there.
+      price: form.price.trim() || (isFactoryUnit ? "0" : ""),
       stock: parseFloat(form.stock.replace(",", ".")) || 0,
       categoryId: form.categoryId ? parseInt(form.categoryId) : undefined,
       imageUrl: (form.images.find((g) => g.isPrimary)?.url ?? form.images[0]?.url ?? form.imageUrl) || undefined,
@@ -1557,7 +1562,7 @@ export default function Products() {
               )}
               <Button
                 onClick={handleSave}
-                disabled={createProduct.isPending || updateProduct.isPending || !form.nameEn || !form.price}
+                disabled={createProduct.isPending || updateProduct.isPending || !form.nameEn || (!isFactoryUnit && !form.price.trim())}
                 size="sm"
                 data-testid="button-save-product"
                 className="bg-[#1B3057] hover:bg-[#1B3057]/90"
@@ -1867,7 +1872,9 @@ export default function Products() {
                   </div>
                   )}
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("PU Détail", "سعر البيع")} *</Label>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {t("PU Détail", "سعر البيع")}{!isFactoryUnit && " *"}
+                    </Label>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number" min="0" step="0.01"
@@ -1878,6 +1885,11 @@ export default function Products() {
                       />
                       <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">DZD</span>
                     </div>
+                    {isFactoryUnit && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("Optionnel dans l’unité de production.", "اختياري في وحدة الإنتاج.")}
+                      </p>
+                    )}
                     {canViewPurchasePrice && form.costPrice && form.price && (
                       <p className="text-xs text-muted-foreground">
                          {t("Marge :", "الهامش:")} {(((parseFloat(form.price) - parseFloat(form.costPrice)) / parseFloat(form.costPrice)) * 100).toFixed(1)}%
@@ -2142,7 +2154,7 @@ export default function Products() {
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={createProduct.isPending || updateProduct.isPending || !form.nameEn || !form.price}
+                disabled={createProduct.isPending || updateProduct.isPending || !form.nameEn || (!isFactoryUnit && !form.price.trim())}
                 size="sm"
                 data-testid="button-save-product-footer"
                 className="bg-[#1B3057] hover:bg-[#1B3057]/90"
