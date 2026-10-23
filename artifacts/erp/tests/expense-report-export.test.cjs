@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const vm = require("node:vm");
 const { test } = require("node:test");
 const ts = require("typescript");
@@ -270,4 +272,116 @@ test("the dialog filters visible rows, count, subtotal, CSV and print output tog
   assert.ok(harness.captured.html.includes("Recherche: DEUXIEME"));
   assert.match(harness.captured.html, /1[\s\u00a0\u202f]?234,56/);
   assert.ok(!harness.captured.html.includes("نقل"));
+});
+
+function findExecutable(name, candidates = []) {
+  const configured = process.env[`${name.toUpperCase()}_PATH`];
+  if (configured && existsSync(configured)) return configured;
+  const pathMatch = process.env.PATH?.split(path.delimiter)
+    .map((directory) => path.join(directory, name))
+    .find((candidate) => existsSync(candidate));
+  return pathMatch || candidates.find(existsSync);
+}
+
+const chromium = findExecutable("chromium", ["/repl/tools/bin/chromium"]);
+const pdftotext = findExecutable("pdftotext");
+const pdfinfo = findExecutable("pdfinfo");
+const browserToolsAvailable = Boolean(chromium && pdftotext && pdfinfo);
+
+test("Chromium prints long expense reports to complete, multi-page PDFs in Arabic, French and English", {
+  skip: !browserToolsAvailable && "Chromium, pdftotext and pdfinfo are required for the print-layout check",
+  timeout: 120_000,
+}, () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "expense-report-print-"));
+  try {
+    const locales = [
+      { lang: "ar", header: "التاريخ", arabic: true },
+      { lang: "fr", header: "Date", arabic: false },
+      { lang: "en", header: "Date", arabic: false },
+    ];
+    for (const locale of locales) {
+      const items = Array.from({ length: 36 }, (_, index) => {
+        const id = String(index + 1).padStart(3, "0");
+        const longDescription = locale.arabic
+          ? "تفصيل مصروف طويل للتأكد من ظهور النص العربي كاملاً في ملف الطباعة. ".repeat(5)
+          : "Long expense description to confirm wrapped content remains complete in the printed report. ".repeat(5);
+        return {
+          id: index + 1,
+          amount: 1234.56 + index,
+          category: "other",
+          description: `${longDescription}DESCRIPTION-END-${id}`,
+          reference: `REF-${id}-${"X".repeat(135)}-REFERENCE-END-${id}`,
+          createdAt: `2026-10-${String((index % 28) + 1).padStart(2, "0")}T10:30:00.000Z`,
+        };
+      });
+      const html = helpers.buildExpenseReportPrintHtml({
+        ...options,
+        lang: locale.lang,
+        storeName: locale.arabic ? "المتجر الرئيسي" : "Main store",
+        items,
+      });
+      const htmlPath = path.join(tempDir, `expenses-${locale.lang}.html`);
+      const pdfPath = path.join(tempDir, `expenses-${locale.lang}.pdf`);
+      writeFileSync(htmlPath, html, "utf8");
+
+      execFileSync(chromium, [
+        "--headless",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--no-pdf-header-footer",
+        `--print-to-pdf=${pdfPath}`,
+        `file://${htmlPath}`,
+      ], { stdio: "ignore", timeout: 60_000 });
+
+      assert.ok(existsSync(pdfPath), `${locale.lang}: Chromium should save a PDF`);
+      const pageInfo = execFileSync(pdfinfo, [pdfPath], { encoding: "utf8" });
+      const pageCount = Number(pageInfo.match(/^Pages:\s+(\d+)/m)?.[1]);
+      assert.ok(pageCount > 1, `${locale.lang}: long report should span multiple pages`);
+      const paperSize = pageInfo.match(/Page size:\s+([\d.]+) x ([\d.]+) pts \(A4\)/);
+      assert.ok(paperSize, `${locale.lang}: saved PDF should use A4 pages`);
+      assert.ok(Math.abs(Number(paperSize[1]) - 595) < 2 && Math.abs(Number(paperSize[2]) - 842) < 2);
+
+      const extracted = execFileSync(pdftotext, ["-layout", "-enc", "UTF-8", pdfPath, "-"], {
+        encoding: "utf8",
+      });
+      const pages = extracted.split("\f").filter((page) => page.trim());
+      const normalizePdfText = (text) =>
+        text.replace(/[\s\u200e-\u200f\u202a-\u202e\u2066-\u2069]/g, "");
+      const normalizedPages = pages.map(normalizePdfText);
+      assert.equal(pages.length, pageCount, `${locale.lang}: every PDF page should be extractable`);
+      for (const [pageIndex, page] of normalizedPages.entries()) {
+        assert.ok(
+          page.includes(normalizePdfText(locale.header)),
+          `${locale.lang}: table header should repeat on page ${pageIndex + 1}`,
+        );
+      }
+
+      for (let index = 0; index < items.length; index++) {
+        const id = String(index + 1).padStart(3, "0");
+        const containingPages = normalizedPages.filter((page) =>
+          page.includes(`DESCRIPTION-END-${id}`) && page.includes(`REF-${id}-`)
+        );
+        assert.equal(
+          containingPages.length,
+          1,
+          `${locale.lang}: description and reference for row ${id} should both appear on one page`,
+        );
+        if (locale.arabic) {
+          assert.ok(
+            containingPages[0].includes(normalizePdfText("تفصيل مصروف طويل")),
+            `Arabic description for row ${id} should be present in the saved PDF`,
+          );
+        }
+      }
+      const referenceEndings = normalizePdfText(extracted).match(/REFERENCE-END-/g) || [];
+      assert.equal(
+        referenceEndings.length,
+        items.length,
+        `${locale.lang}: all long reference endings should be present in the saved PDF`,
+      );
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });

@@ -135,8 +135,8 @@ export function buildExpenseReportPrintHtml(options: ExportOptions) {
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: start; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
     th { background: #f1f5f9; }
-    thead { display: table-header-group; }
-    tr { break-inside: avoid; }
+    thead { display: table-header-group; break-inside: avoid; page-break-inside: avoid; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
     .number { direction: ltr; text-align: end; font-variant-numeric: tabular-nums; }
     .total { text-align: end; font-size: 15px; font-weight: bold; margin-top: 16px; }
     @media print { .print-button { display: none; } }
