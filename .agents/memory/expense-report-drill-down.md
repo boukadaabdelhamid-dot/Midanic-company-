@@ -8,3 +8,9 @@ When a user opens a monthly Charges amount, show the itemized operating expenses
 **Why:** the user wants to inspect all charges behind the reported amount for the selected period.
 
 **How to apply:** preserve the report's store/date context when opening details, and keep summary and detail filters consistent so the itemized list explains the displayed total.
+
+Reconciliation checks should execute the actual PostgreSQL expense queries against an isolated, disposable database rather than reimplementing their predicates in JavaScript.
+
+**Why:** PostgreSQL timestamp precision, month grouping, and inclusive range boundaries can produce mismatches that simplified database doubles hide, especially at exact next-month midnight.
+
+**How to apply:** include precise day/month boundary fixtures and compare each monthly Charges value with its actual itemized response; never use existing tenant data as accounting test fixtures.

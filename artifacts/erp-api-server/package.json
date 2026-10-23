@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:backup-import": "tsx --test src/lib/database-backup-import.test.ts",
     "test:supplier-statement": "tsx --test src/lib/supplier-statement.test.ts",
+    "test:expense-reports": "tsx --test src/lib/expense-reports.test.ts src/lib/expense-reports-client.test.ts",
     "test:tenant-domain": "tsx --test src/lib/tenant-domain.test.ts src/lib/tenant-authority.test.ts src/lib/tenant-database.test.ts src/lib/tenant-registry.test.ts",
     "test:entitlements": "tsx --test src/lib/entitlement-limits.test.ts src/lib/tenant-domain.test.ts",
     "test:erp-customers": "tsx --test src/lib/erp-customer-isolation.test.ts",

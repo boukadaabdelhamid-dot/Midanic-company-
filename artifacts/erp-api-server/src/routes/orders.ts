@@ -1402,7 +1402,8 @@ router.get("/admin/reports/expenses", authenticate, requireTenantAdmin, requireS
         sql`${schema.transactionsTable.category} <> 'purchase'`,
         sql`(${schema.transactionsTable.reference} IS NULL OR ${schema.transactionsTable.reference} NOT LIKE 'RETOUR-%')`,
         sql`(${schema.transactionsTable.reference} IS NULL OR ${schema.transactionsTable.reference} NOT LIKE 'PO-%')`,
-        sql`${schema.transactionsTable.createdAt} BETWEEN ${from}::timestamp AND (${to}::timestamp + INTERVAL '1 day')`,
+        // Include the selected end day, but never midnight of the following day.
+        sql`${schema.transactionsTable.createdAt} >= ${from}::timestamp AND ${schema.transactionsTable.createdAt} < (${to}::timestamp + INTERVAL '1 day')`,
       ))
       .orderBy(desc(schema.transactionsTable.createdAt), desc(schema.transactionsTable.id));
 
@@ -1430,7 +1431,7 @@ router.get("/admin/reports/monthly", authenticate, requireTenantAdmin, requireSt
       : sql``;
 
     const txDateFilter = from && to
-      ? sql`AND created_at BETWEEN ${from}::timestamp AND (${to}::timestamp + INTERVAL '1 day')`
+      ? sql`AND created_at >= ${from}::timestamp AND created_at < (${to}::timestamp + INTERVAL '1 day')`
       : sql``;
 
     const retourDateFilter = from && to
