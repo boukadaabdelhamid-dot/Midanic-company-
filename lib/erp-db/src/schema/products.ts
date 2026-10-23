@@ -60,9 +60,11 @@ export const productBarcodesTable = pgTable("product_barcodes", {
   id: serial("id").primaryKey(),
   productId: integer("product_id").references(() => productsTable.id, { onDelete: "cascade" }).notNull(),
   storeId: integer("store_id").references(() => storesTable.id).notNull(),
-  barcode: text("barcode").notNull().unique(),
+  barcode: text("barcode").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  barcodeUniquePerStore: uniqueIndex("product_barcodes_store_barcode_uq").on(t.storeId, t.barcode),
+}));
 
 // Multiple images per product. Exactly one row should have isPrimary=true
 // (enforced at-most-one via the partial unique index below; app logic

@@ -166,6 +166,53 @@ export async function linkLegacySharedCatalogCopies(options: {
   });
 }
 
+export async function resolveSharedCatalogProductCopies(options: {
+  productId: number;
+  storeId: number;
+  tenantId: number;
+  sharedCatalogId: string | null;
+  barcode: string | null;
+}): Promise<{ sharedCatalogId: string | null; productIds: number[]; ambiguous: boolean }> {
+  const sharedCatalogId = await linkLegacySharedCatalogCopies(options);
+  if (!sharedCatalogId) {
+    const barcode = options.barcode?.trim();
+    if (!barcode) {
+      return { sharedCatalogId: null, productIds: [options.productId], ambiguous: true };
+    }
+    const matches = await db.select({
+      id: schema.productsTable.id,
+    })
+      .from(schema.productsTable)
+      .innerJoin(schema.storesTable, eq(schema.storesTable.id, schema.productsTable.storeId))
+      .where(and(
+        eq(schema.storesTable.platformTenantId, options.tenantId),
+        eq(schema.storesTable.kind, "store"),
+        eq(schema.storesTable.isActive, true),
+        sql`trim(${schema.productsTable.barcode}) = ${barcode}`,
+      ));
+    return {
+      sharedCatalogId: null,
+      productIds: [options.productId],
+      ambiguous: matches.length > 1,
+    };
+  }
+
+  const copies = await db.select({ id: schema.productsTable.id })
+    .from(schema.productsTable)
+    .innerJoin(schema.storesTable, eq(schema.storesTable.id, schema.productsTable.storeId))
+    .where(and(
+      eq(schema.productsTable.sharedCatalogId, sharedCatalogId),
+      eq(schema.storesTable.platformTenantId, options.tenantId),
+      eq(schema.storesTable.kind, "store"),
+      eq(schema.storesTable.isActive, true),
+    ));
+  return {
+    sharedCatalogId,
+    productIds: [...new Set([options.productId, ...copies.map((copy) => copy.id)])],
+    ambiguous: false,
+  };
+}
+
 async function mapCategoryId(sourceCategoryId: number | null, targetStoreId: number): Promise<number | null> {
   if (sourceCategoryId == null) return null;
   const [source] = await db.select().from(schema.categoriesTable)

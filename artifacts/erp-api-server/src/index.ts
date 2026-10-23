@@ -568,7 +568,7 @@ CREATE TABLE IF NOT EXISTS "product_barcodes" (
         "store_id" integer NOT NULL,
         "barcode" text NOT NULL,
         "created_at" timestamp DEFAULT now() NOT NULL,
-        CONSTRAINT "product_barcodes_barcode_unique" UNIQUE("barcode")
+        CONSTRAINT "product_barcodes_store_barcode_uq" UNIQUE("store_id", "barcode")
 );--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "supplier_operations" (
         "id" serial PRIMARY KEY NOT NULL,
