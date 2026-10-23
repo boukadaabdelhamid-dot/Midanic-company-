@@ -30,3 +30,9 @@ A Git push can succeed remotely but exit with an error when Replit blocks the su
 **Why:** The authenticated internal GitHub transport accepted a push before the workspace guard rejected `origin/main.lock`; the live remote already pointed at the requested commit.
 
 **How to apply:** Verify the remote branch with `git ls-remote` and compare it with the intended local commit before retrying a failed push. Do not bypass the local Git guard merely to repeat an already successful remote write.
+
+Shell Git staging/commit may be rejected before running by the workspace's `.git/index.lock` guard, even for an explicitly authorized push. This is distinct from a post-push tracking-ref failure.
+
+**Why:** An authorized `git add` was blocked with an instruction to prefix the write with `DANGEROUSLY_ALLOW_GIT=1`; the explicitly prefixed staging and commit completed normally.
+
+**How to apply:** When an authorized write is blocked before it runs, prefix that specific Git write command and check its result. Never use the override to repeat a push that already reached the remote; verify `git ls-remote` first.
