@@ -11,15 +11,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useLang } from "@/hooks/use-lang";
 import { useStoreContext } from "@/hooks/use-store";
 import { usePermissions } from "@/hooks/use-permissions";
-import { buildExpenseReportCsv, buildExpenseReportPrintHtml, getExpenseCategoryLabel } from "@/lib/expense-report-export";
+import { buildExpenseReportCsv, buildExpenseReportPrintHtml, filterExpenseReportItems, getExpenseCategoryLabel } from "@/lib/expense-report-export";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, Legend,
 } from "recharts";
-import { Package, Users, Truck, TrendingUp, TrendingDown, CalendarDays, Download, Printer } from "lucide-react";
+import { Package, Users, Truck, TrendingUp, TrendingDown, CalendarDays, Download, Printer, Search } from "lucide-react";
 
 const TODAY = new Date().toISOString().split("T")[0];
 const MONTH_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -51,6 +52,10 @@ function fmt(v: number) {
   return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
+function fmtExactAmount(v: number) {
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function Reports() {
   const { lang } = useLang();
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
@@ -65,6 +70,8 @@ export default function Reports() {
   const [activePreset, setActivePreset] = useState<number | null>(30);
   const [chargePeriod, setChargePeriod] = useState<{ month: string; from: string; to: string; storeName: string } | null>(null);
   const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
+  const [chargeSearch, setChargeSearch] = useState("");
+  const [chargeCategory, setChargeCategory] = useState("all");
 
   const applyPreset = (days: number) => {
     setFrom(daysAgo(days));
@@ -90,6 +97,8 @@ export default function Reports() {
     const monthStart = `${month}-01`;
     const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
     const store = stores.find((item) => item.id === currentStoreId);
+    setChargeSearch("");
+    setChargeCategory("all");
     setChargePeriod({
       month,
       from: from > monthStart ? from : monthStart,
@@ -101,10 +110,16 @@ export default function Reports() {
 
   const canExportExpenses = !!chargePeriod && expenseDetails !== undefined &&
     !loadingExpenseDetails && !expenseDetailsError;
+  const filteredExpenseDetails = filterExpenseReportItems(expenseDetails ?? [], chargeSearch, chargeCategory);
+  const filteredExpenseTotal = filteredExpenseDetails.reduce((sum, item) => sum + Number(item.amount), 0);
+  const expenseCategories = Array.from(new Set((expenseDetails ?? []).map((item) => item.category).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right));
 
   const downloadExpenses = () => {
     if (!canExportExpenses || !chargePeriod || !expenseDetails) return;
-    const csv = buildExpenseReportCsv({ ...chargePeriod, lang, items: expenseDetails });
+    const csv = buildExpenseReportCsv({
+      ...chargePeriod, lang, items: filteredExpenseDetails, categoryFilter: chargeCategory, search: chargeSearch,
+    });
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     const link = document.createElement("a");
     link.href = url;
@@ -128,7 +143,9 @@ export default function Reports() {
     }
     printWindow.opener = null;
     printWindow.document.open();
-    printWindow.document.write(buildExpenseReportPrintHtml({ ...chargePeriod, lang, items: expenseDetails }));
+    printWindow.document.write(buildExpenseReportPrintHtml({
+      ...chargePeriod, lang, items: filteredExpenseDetails, categoryFilter: chargeCategory, search: chargeSearch,
+    }));
     printWindow.document.close();
   };
 
@@ -654,6 +671,34 @@ export default function Reports() {
             </Button>
           </div>
 
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={chargeSearch}
+                onChange={(event) => setChargeSearch(event.target.value)}
+                placeholder={t3(
+                  "Rechercher dans le détail ou la référence",
+                  "ابحث في التفصيل أو المرجع",
+                  "Search description or reference",
+                )}
+                aria-label={t3("Rechercher", "بحث", "Search")}
+                className="ps-9"
+              />
+            </div>
+            <select
+              value={chargeCategory}
+              onChange={(event) => setChargeCategory(event.target.value)}
+              aria-label={t3("Filtrer par catégorie", "تصفية حسب الفئة", "Filter by category")}
+              className="h-9 min-w-[190px] rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="all">{t3("Toutes les catégories", "كل الفئات", "All categories")}</option>
+              {expenseCategories.map((category) => (
+                <option key={category} value={category}>{getExpenseCategoryLabel(category, lang)}</option>
+              ))}
+            </select>
+          </div>
+
           {expenseDetailsError ? (
             <p className="py-8 text-center text-sm text-destructive">
               {t3("Impossible de charger les charges.", "تعذر تحميل المصاريف.", "Could not load expenses.")}
@@ -666,11 +711,12 @@ export default function Reports() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
                 <span className="text-sm text-muted-foreground">
-                  {expenseDetails?.length ?? 0} {t3("charge(s)", "مصروف", "expense(s)")}
+                  {filteredExpenseDetails.length} / {expenseDetails?.length ?? 0}{" "}
+                  {t3("résultats", "نتيجة", "results")}
                 </span>
                 <span className="font-semibold text-red-600">
                   {t3("Total", "الإجمالي", "Total")}:{" "}
-                  {fmt((expenseDetails ?? []).reduce((sum, item) => sum + Number(item.amount), 0))} {currency}
+                  {fmtExactAmount(filteredExpenseTotal)} {currency}
                 </span>
               </div>
               <div className="min-h-0 flex-1 overflow-auto rounded-md border">
@@ -685,7 +731,7 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(expenseDetails ?? []).map((expense) => {
+                    {filteredExpenseDetails.map((expense) => {
                       return (
                         <tr key={expense.id} className="border-b last:border-0">
                           <td className="whitespace-nowrap px-3 py-2.5">{expense.createdAt.slice(0, 10)}</td>
@@ -693,15 +739,17 @@ export default function Reports() {
                           <td className="max-w-sm px-3 py-2.5">{expense.description || "—"}</td>
                           <td className="px-3 py-2.5 text-muted-foreground">{expense.reference || "—"}</td>
                           <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium text-red-600">
-                            {fmt(Number(expense.amount))} {currency}
+                            {fmtExactAmount(Number(expense.amount))} {currency}
                           </td>
                         </tr>
                       );
                     })}
-                    {!expenseDetails?.length && (
+                    {!filteredExpenseDetails.length && (
                       <tr>
                         <td colSpan={5} className="py-10 text-center text-muted-foreground">
-                          {t3("Aucune charge pour cette période.", "لا توجد مصاريف في هذه الفترة.", "No expenses in this period.")}
+                          {expenseDetails?.length
+                            ? t3("Aucun résultat pour ces filtres.", "لا توجد نتائج لهذه الفلاتر.", "No results match these filters.")
+                            : t3("Aucune charge pour cette période.", "لا توجد مصاريف في هذه الفترة.", "No expenses in this period.")}
                         </td>
                       </tr>
                     )}

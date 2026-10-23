@@ -37,11 +37,13 @@ const options = {
 };
 
 test("CSV contains the selected period, store, all entries and exact monetary total", async () => {
-  const csv = helpers.buildExpenseReportCsv(options);
+  const csv = helpers.buildExpenseReportCsv({ ...options, categoryFilter: "rent", search: "loyer" });
   const bytes = Buffer.from(await new Blob([csv]).arrayBuffer());
   assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
   assert.ok(csv.includes('"Du";"2026-10-03";"Au";"2026-10-19"'));
   assert.ok(csv.includes('"Magasin";"Magasin principal"'));
+  assert.ok(csv.includes('"Filtre catégorie";"Loyer"'));
+  assert.ok(csv.includes('"Recherche";"loyer"'));
   assert.ok(csv.includes('"Date";"Catégorie";"Détail";"Référence";"Montant (DA)"'));
   assert.ok(csv.includes('"2026-10-05";"Loyer";"Location; ""octobre""\nDeuxième ligne";"RENT-1";"1234.56"'));
   assert.ok(csv.includes('"2026-10-09";"Autre";"نقل";"—";"0.05"'));
@@ -76,9 +78,10 @@ test("print document escapes untrusted fields and includes full period, entries 
 });
 
 test("Arabic and English exports use localized headers and categories; empty reports remain printable", () => {
-  const ar = helpers.buildExpenseReportPrintHtml({ ...options, lang: "ar" });
+  const ar = helpers.buildExpenseReportPrintHtml({ ...options, lang: "ar", categoryFilter: "rent", search: "إيجار" });
   assert.ok(ar.includes('lang="ar" dir="rtl"'));
   assert.ok(ar.includes("تفاصيل المصاريف") && ar.includes("إيجار"));
+  assert.ok(ar.includes("تصفية الفئة: إيجار") && ar.includes("البحث: إيجار"));
   const en = helpers.buildExpenseReportCsv({ ...options, lang: "en" });
   assert.ok(en.includes('"Date";"Category";"Description";"Reference";"Amount (DA)"'));
   assert.ok(en.includes('"Rent"'));
@@ -87,8 +90,32 @@ test("Arabic and English exports use localized headers and categories; empty rep
   assert.ok(helpers.buildExpenseReportCsv({ ...options, items: [] }).endsWith('"0.00"'));
 });
 
+test("search matches description and reference case-insensitively and ignores Latin accents", () => {
+  assert.deepEqual(
+    helpers.filterExpenseReportItems(options.items, "DEUXIEME", "rent").map((item) => item.id),
+    [1],
+  );
+  assert.deepEqual(
+    helpers.filterExpenseReportItems(options.items, "rent-1", "all").map((item) => item.id),
+    [1],
+  );
+  assert.deepEqual(helpers.filterExpenseReportItems(options.items, "location", "other"), []);
+  assert.deepEqual(helpers.filterExpenseReportItems(options.items, "   ", "all").map((item) => item.id), [1, 2]);
+});
+
+test("filtering never changes the source list or its unfiltered monthly expense total", () => {
+  const source = options.items.map((item) => ({ ...item }));
+  const sourceTotal = source.reduce((sum, item) => sum + item.amount, 0);
+  const filtered = helpers.filterExpenseReportItems(source, "DEUXIEME", "rent");
+  assert.equal(filtered.reduce((sum, item) => sum + item.amount, 0), 1234.56);
+  assert.equal(source.reduce((sum, item) => sum + item.amount, 0), sourceTotal);
+  assert.equal(source.length, 2);
+});
+
 function reportHarness(query = { data: options.items, isLoading: false, isError: false }, popupBlocked = false) {
-  const state = [options.from, options.to, 30, { month: "2026-10", ...options }, true];
+  const state = [options.from, options.to, 30, { month: "2026-10", ...options }, true, "", "all"];
+  let stateCursor = 0;
+  let currentNodes = [];
   const captured = {};
   const react = {
     createElement: (type, props, ...children) => ({ type, props: { ...props, children } }),
@@ -108,7 +135,12 @@ function reportHarness(query = { data: options.items, isLoading: false, isError:
     require: (name) => {
       if (name === "react") return {
         __esModule: true, default: react,
-        useState: () => [state.shift(), () => {}],
+        useState: () => {
+          const index = stateCursor++;
+          return [state[index], (value) => {
+            state[index] = typeof value === "function" ? value(state[index]) : value;
+          }];
+        },
       };
       if (name === "@/lib/expense-report-export") return helpers;
       if (name === "@/hooks/use-lang") return { useLang: hook };
@@ -139,23 +171,27 @@ function reportHarness(query = { data: options.items, isLoading: false, isError:
     },
     Blob,
   });
-  const tree = component.default();
-  const nodes = [];
-  const walk = (node) => {
-    if (Array.isArray(node)) return node.forEach(walk);
-    if (node && typeof node === "object") {
-      nodes.push(node);
-      walk(node.props?.children);
-    }
+  const render = () => {
+    stateCursor = 0;
+    currentNodes = [];
+    const walk = (node) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (node && typeof node === "object") {
+        currentNodes.push(node);
+        walk(node.props?.children);
+      }
+    };
+    walk(component.default());
+    return currentNodes;
   };
-  walk(tree);
-  const buttons = nodes.filter((node) => node.type === "Button");
-  return { captured, printWindow, buttons };
+  render();
+  const buttons = () => currentNodes.filter((node) => node.type === "Button");
+  return { captured, printWindow, buttons, render, get nodes() { return currentNodes; } };
 }
 
 test("the dialog CSV button downloads the displayed data and releases the blob URL", async () => {
   const { buttons, captured } = reportHarness();
-  const download = buttons.find((button) => button.props.onClick.name === "downloadExpenses");
+  const download = buttons().find((button) => button.props.onClick.name === "downloadExpenses");
   assert.ok(download && !download.props.disabled);
   download.props.onClick();
   assert.equal(captured.filename, "expenses-2026-10-03-2026-10-19-fr.csv");
@@ -168,13 +204,13 @@ test("the dialog CSV button downloads the displayed data and releases the blob U
 
 test("the print button opens an isolated complete document and handles blocked popups explicitly", () => {
   const normal = reportHarness();
-  normal.buttons.find((button) => button.props.onClick.name === "printExpenses").props.onClick();
+  normal.buttons().find((button) => button.props.onClick.name === "printExpenses").props.onClick();
   assert.equal(normal.printWindow.opener, null);
   assert.equal(normal.captured.opened, true);
   assert.equal(normal.captured.closed, true);
   assert.ok(normal.captured.html.includes(options.from) && normal.captured.html.includes(options.to));
   const blocked = reportHarness(undefined, true);
-  blocked.buttons.find((button) => button.props.onClick.name === "printExpenses").props.onClick();
+  blocked.buttons().find((button) => button.props.onClick.name === "printExpenses").props.onClick();
   assert.ok(blocked.captured.alert.includes("fenêtres contextuelles"));
   assert.equal(blocked.captured.html, undefined);
 });
@@ -186,12 +222,52 @@ test("exports are disabled while loading, on errors or without data, but allow a
     { data: options.items, isLoading: false, isError: true },
   ]) {
     const { buttons, captured } = reportHarness(query);
-    for (const button of buttons) {
+    for (const button of buttons()) {
       assert.equal(button.props.disabled, true);
       button.props.onClick();
     }
     assert.equal(captured.downloaded, undefined);
     assert.equal(captured.html, undefined);
   }
-  assert.ok(reportHarness({ data: [], isLoading: false, isError: false }).buttons.every((button) => !button.props.disabled));
+  assert.ok(reportHarness({ data: [], isLoading: false, isError: false }).buttons().every((button) => !button.props.disabled));
+});
+
+test("the dialog filters visible rows, count, subtotal, CSV and print output together", async () => {
+  const harness = reportHarness();
+  const search = harness.nodes.find((node) => node.type === "Input" && node.props["aria-label"] === "Rechercher");
+  assert.ok(search);
+  search.props.onChange({ target: { value: "DEUXIEME" } });
+  harness.render();
+
+  const category = harness.nodes.find((node) => node.type === "select");
+  assert.ok(category);
+  category.props.onChange({ target: { value: "rent" } });
+  harness.render();
+
+  const expenseRows = harness.nodes.filter((node) =>
+    node.type === "tr" && node.props.className === "border-b last:border-0",
+  );
+  assert.equal(expenseRows.length, 1);
+  const resultCount = harness.nodes.find((node) =>
+    node.type === "span" && node.props.className === "text-sm text-muted-foreground",
+  );
+  assert.deepEqual(resultCount.props.children.slice(0, 3), [1, " / ", 2]);
+  const subtotal = harness.nodes.find((node) =>
+    node.type === "span" && node.props.className === "font-semibold text-red-600",
+  );
+  assert.match(JSON.stringify(subtotal.props.children), /1[\s,]?234[.]56/);
+
+  harness.buttons().find((button) => button.props.onClick.name === "downloadExpenses").props.onClick();
+  const csv = await harness.captured.blob.text();
+  assert.ok(csv.includes('"Filtre catégorie";"Loyer"'));
+  assert.ok(csv.includes('"Recherche";"DEUXIEME"'));
+  assert.ok(csv.includes('"1234.56"'));
+  assert.ok(!csv.includes('"نقل"'));
+  assert.ok(csv.endsWith('"Total (DA)";"";"";"";"1234.56"'));
+
+  harness.buttons().find((button) => button.props.onClick.name === "printExpenses").props.onClick();
+  assert.ok(harness.captured.html.includes("Filtre catégorie: Loyer"));
+  assert.ok(harness.captured.html.includes("Recherche: DEUXIEME"));
+  assert.match(harness.captured.html, /1[\s\u00a0\u202f]?234,56/);
+  assert.ok(!harness.captured.html.includes("نقل"));
 });

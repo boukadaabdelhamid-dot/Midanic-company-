@@ -6,6 +6,8 @@ type ExportOptions = {
   lang: string;
   storeName: string;
   items: ExpenseReportItem[];
+  categoryFilter?: string;
+  search?: string;
 };
 
 const translations = {
@@ -13,19 +15,22 @@ const translations = {
     title: "Détail des charges", from: "Du", to: "Au", store: "Magasin",
     date: "Date", category: "Catégorie", description: "Détail", reference: "Référence",
     amount: "Montant (DA)", total: "Total (DA)", empty: "Aucune charge pour cette période.",
-    print: "Imprimer / PDF",
+    print: "Imprimer / PDF", categoryFilter: "Filtre catégorie", allCategories: "Toutes les catégories",
+    search: "Recherche", allResults: "Tous les résultats",
   },
   ar: {
     title: "تفاصيل المصاريف", from: "من", to: "إلى", store: "المتجر",
     date: "التاريخ", category: "الفئة", description: "التفصيل", reference: "المرجع",
     amount: "المبلغ (دج)", total: "الإجمالي (دج)", empty: "لا توجد مصاريف في هذه الفترة.",
-    print: "طباعة / PDF",
+    print: "طباعة / PDF", categoryFilter: "تصفية الفئة", allCategories: "كل الفئات",
+    search: "البحث", allResults: "كل النتائج",
   },
   en: {
     title: "Expense details", from: "From", to: "To", store: "Store",
     date: "Date", category: "Category", description: "Description", reference: "Reference",
     amount: "Amount (DA)", total: "Total (DA)", empty: "No expenses in this period.",
-    print: "Print / PDF",
+    print: "Print / PDF", categoryFilter: "Category filter", allCategories: "All categories",
+    search: "Search", allResults: "All results",
   },
 };
 
@@ -42,6 +47,23 @@ export function getExpenseCategoryLabel(category: string, lang: string) {
   return labels ? labels[lang === "ar" ? 1 : lang === "en" ? 2 : 0] : category;
 }
 
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+}
+
+export function filterExpenseReportItems(
+  items: ExpenseReportItem[],
+  search: string,
+  category: string,
+) {
+  const query = normalizeSearch(search.trim());
+  return items.filter((item) => {
+    if (category !== "all" && item.category !== category) return false;
+    if (!query) return true;
+    return normalizeSearch(`${item.description ?? ""} ${item.reference ?? ""}`).includes(query);
+  });
+}
+
 function getReport(options: ExportOptions) {
   const lang = options.lang === "ar" || options.lang === "en" ? options.lang : "fr";
   const labels = translations[lang];
@@ -54,7 +76,10 @@ function getReport(options: ExportOptions) {
     Number(item.amount),
   ]);
   const total = options.items.reduce((sum, item) => sum + Number(item.amount), 0);
-  return { lang, labels, headers, rows, total };
+  const selectedCategory = options.categoryFilter && options.categoryFilter !== "all"
+    ? getExpenseCategoryLabel(options.categoryFilter, lang) : labels.allCategories;
+  const search = options.search?.trim() || labels.allResults;
+  return { lang, labels, headers, rows, total, selectedCategory, search };
 }
 
 function csvCell(value: string | number) {
@@ -66,11 +91,13 @@ function csvCell(value: string | number) {
 }
 
 export function buildExpenseReportCsv(options: ExportOptions) {
-  const { labels, headers, rows, total } = getReport(options);
+  const { labels, headers, rows, total, selectedCategory, search } = getReport(options);
   const data = [
     [labels.title, "", "", "", ""],
     [labels.store, options.storeName, "", "", ""],
     [labels.from, options.from, labels.to, options.to, ""],
+    [labels.categoryFilter, selectedCategory, "", "", ""],
+    [labels.search, search, "", "", ""],
     headers,
     ...rows,
     [labels.total, "", "", "", total],
@@ -85,7 +112,7 @@ function escapeHtml(value: string) {
 }
 
 export function buildExpenseReportPrintHtml(options: ExportOptions) {
-  const { lang, labels, headers, rows, total } = getReport(options);
+  const { lang, labels, headers, rows, total, selectedCategory, search } = getReport(options);
   const direction = lang === "ar" ? "rtl" : "ltr";
   const money = (value: number) => value.toLocaleString(
     lang === "ar" ? "ar-DZ" : lang === "en" ? "en-GB" : "fr-DZ",
@@ -121,6 +148,8 @@ export function buildExpenseReportPrintHtml(options: ExportOptions) {
   <div class="meta">
     <div>${escapeHtml(labels.store)}: ${escapeHtml(options.storeName)}</div>
     <div>${escapeHtml(labels.from)}: ${escapeHtml(options.from)} — ${escapeHtml(labels.to)}: ${escapeHtml(options.to)}</div>
+    <div>${escapeHtml(labels.categoryFilter)}: ${escapeHtml(selectedCategory)}</div>
+    <div>${escapeHtml(labels.search)}: ${escapeHtml(search)}</div>
   </div>
   <table>
     <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
