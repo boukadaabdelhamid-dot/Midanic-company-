@@ -43,3 +43,4 @@
 - [Production unit identity](production-unit-visual-identity.md) — production units should have a distinct visual identity from ordinary stores.
 - [Expense report drill-down](expense-report-drill-down.md) — charge details must stay scoped to the selected store and period and reconcile with the monthly total.
 - [Expense report PDF checks](expense-report-pdf-testing.md) — Poppler text extraction can reorder mixed RTL/LTR content; normalize bidi controls and whitespace when checking browser-generated PDFs.
+- [Global cash transfers](global-cash-transfers.md) — Employee cash transfers follow their personal caisse across stores; the originating store is accounting context, not an access boundary.

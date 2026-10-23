@@ -141,10 +141,9 @@ async function canSeeCaisse(req: AuthRequest, c: { ownerUserId: number | null })
   return c.ownerUserId !== null && c.ownerUserId === req.user.id;
 }
 
-// Caisse transfers still record the store context where they were initiated.
-// This guard prevents using one store's JWT to act on a transfer raised in a
-// different store context. Transfers without a store context (storeId null)
-// are not store-restricted.
+// Store-scoped legacy caisse movement views still use this guard.
+// Transfers between global caisses are authorized by sender/recipient ownership,
+// not their originating store. Their storeId is retained for accounting history.
 function isInCurrentStore(req: AuthRequest, storeId: number | null): boolean {
   return storeId === null || req.currentStoreId === storeId;
 }
@@ -391,7 +390,7 @@ router.get("/erp/caisse-transfers", authenticate, requireStaff, requireStore, as
     const { box, status } = req.query as Record<string, string | undefined>;
     const myCaisse = await ensureCaisse(storeId, userId);
 
-    const conditions = [eq(schema.caisseTransfersTable.storeId, storeId)];
+    const conditions = [];
     if (!isCaisseAdmin(req)) {
       conditions.push(or(
         eq(schema.caisseTransfersTable.senderCaisseId, myCaisse.id),
@@ -555,9 +554,6 @@ router.post("/erp/caisse-transfers/:id/accept", authenticate, requireStaff, requ
     const [t] = await db.select().from(schema.caisseTransfersTable)
       .where(eq(schema.caisseTransfersTable.id, id)).limit(1);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
-    if (t.storeId !== null && (!isInCurrentStore(req, t.storeId) || !(await userHasStoreAccess(req, t.storeId)))) {
-      res.status(403).json({ error: "Forbidden" }); return;
-    }
     const [recipientCaisse] = await db.select().from(schema.caissesTable)
       .where(eq(schema.caissesTable.id, t.recipientCaisseId)).limit(1);
     if (!recipientCaisse) { res.status(404).json({ error: "Recipient caisse not found" }); return; }
@@ -664,9 +660,6 @@ router.post("/erp/caisse-transfers/:id/reject", authenticate, requireStaff, requ
     const [t] = await db.select().from(schema.caisseTransfersTable)
       .where(eq(schema.caisseTransfersTable.id, id)).limit(1);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
-    if (t.storeId !== null && (!isInCurrentStore(req, t.storeId) || !(await userHasStoreAccess(req, t.storeId)))) {
-      res.status(403).json({ error: "Forbidden" }); return;
-    }
     const [recipientCaisse] = await db.select().from(schema.caissesTable)
       .where(eq(schema.caissesTable.id, t.recipientCaisseId)).limit(1);
     if (!recipientCaisse) { res.status(404).json({ error: "Recipient caisse not found" }); return; }
@@ -725,9 +718,6 @@ router.post("/erp/caisse-transfers/:id/cancel", authenticate, requireStaff, requ
     const [t] = await db.select().from(schema.caisseTransfersTable)
       .where(eq(schema.caisseTransfersTable.id, id)).limit(1);
     if (!t) { res.status(404).json({ error: "Transfer not found" }); return; }
-    if (t.storeId !== null && (!isInCurrentStore(req, t.storeId) || !(await userHasStoreAccess(req, t.storeId)))) {
-      res.status(403).json({ error: "Forbidden" }); return;
-    }
     const [senderCaisse] = await db.select().from(schema.caissesTable)
       .where(eq(schema.caissesTable.id, t.senderCaisseId)).limit(1);
     const ownsTransfer = senderCaisse?.ownerUserId === userId ||
