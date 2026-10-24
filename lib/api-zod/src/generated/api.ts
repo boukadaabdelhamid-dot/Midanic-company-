@@ -142,7 +142,7 @@ export const LogoutResponse = zod.void()
 
 
 /**
- * @summary List all published products
+ * @summary List published software independently of ERP inventory and login state
  */
 export const ListProductsQueryParams = zod.object({
   "category": zod.coerce.string().optional(),

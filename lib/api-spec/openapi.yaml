@@ -207,11 +207,11 @@ paths:
           description: Logged out successfully
 
   # ── PRODUCTS ─────────────────────────────────────────────────────────────────
-  /products:
+  /catalog/products:
     get:
       operationId: listProducts
       tags: [products]
-      summary: List all published products
+      summary: List published software independently of ERP inventory and login state
       parameters:
         - in: query
           name: category

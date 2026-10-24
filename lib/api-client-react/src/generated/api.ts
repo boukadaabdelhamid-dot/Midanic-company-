@@ -614,11 +614,11 @@ export const getListProductsUrl = (params?: ListProductsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/products?${stringifiedParams}` : `/api/products`
+  return stringifiedParams.length > 0 ? `/api/catalog/products?${stringifiedParams}` : `/api/catalog/products`
 }
 
 /**
- * @summary List all published products
+ * @summary List published software independently of ERP inventory and login state
  */
 export const listProducts = async (params?: ListProductsParams, options?: Parameters<typeof customFetch>[1]): Promise<Product[]> => {
 
@@ -637,7 +637,7 @@ export const listProducts = async (params?: ListProductsParams, options?: Parame
 
 export const getListProductsQueryKey = (params?: ListProductsParams,) => {
     return [
-    `/api/products`, ...(params ? [params] : [])
+    `/api/catalog/products`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -665,7 +665,7 @@ export type ListProductsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all published products
+ * @summary List published software independently of ERP inventory and login state
  */
 
 export function useListProducts<TData = Awaited<ReturnType<typeof listProducts>>, TError = ErrorType<unknown>>(

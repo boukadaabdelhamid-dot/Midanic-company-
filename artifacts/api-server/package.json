@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:erp-owner-password": "node test-erp-owner-password.mjs"
+    "test:erp-owner-password": "node test-erp-owner-password.mjs",
+    "test:public-catalog": "node --test test-public-catalog.mjs"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

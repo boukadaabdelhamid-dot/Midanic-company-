@@ -9,7 +9,9 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/products", async (req, res): Promise<void> => {
+// Public software must not share the authenticated ERP compatibility route.
+// Keep the anonymous legacy alias for older clients; new clients use /catalog/products.
+router.get(["/catalog/products", "/products"], async (req, res): Promise<void> => {
   const { category, featured } = req.query;
   let conditions = [eq(productsTable.published, true)];
   if (category && typeof category === "string") {

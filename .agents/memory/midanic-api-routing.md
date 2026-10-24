@@ -12,3 +12,9 @@ The frontend session restore endpoint is `/api/profile`; `/api/my/profile` does 
 **Why:** The CRM failure first produced HTML with HTTP 200 because the browser request reached the frontend fallback, then exposed a second server-side failure caused by the mismatched join column types. The admin refresh issue similarly came from a client/server route mismatch.
 
 **How to apply:** Keep same-origin frontend requests (`/api/...`), retain the Vite `/api` proxy for development, use `/api/profile` for session restoration, cast `products.id` when joining trial/demo requests, and verify `/api/healthz`, `/api/profile`, and authenticated CRM endpoints after each deployment or routing change.
+
+Public software catalog requests must remain independent of ERP inventory and login state.
+
+**Why:** The public website automatically sends a saved bearer token. Reusing a legacy ERP endpoint made signed-in visitors receive ERP inventory or permission errors instead of the published software catalog, even when anonymous browsing worked.
+
+**How to apply:** Keep public catalog and authenticated ERP inventory in separate endpoint namespaces, including their client cache keys. Check public catalog responses both anonymously and with an Authorization header. Preserve legacy ERP consumers, and deploy the new API route before switching production frontend callers.
