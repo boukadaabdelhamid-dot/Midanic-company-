@@ -10,7 +10,7 @@ import { planTenantStoreBootstrap } from "./lib/tenant-store-mapping";
  * Creates ONLY the bare minimum required for a fresh ERP database:
  *   1. Magasin Principal (slug = "principal")
  *   2. Caisse Principale  (kind = "main")
- *   3. System-wide lookup tables: product types, price tiers, customer classifications
+ *   3. Shared-database defaults: product types, price tiers, customer classifications
  *
  * Nothing else is created — no demo products, employees, suppliers,
  * customers, orders, transactions, or coupons.
@@ -133,17 +133,20 @@ export async function bootstrap() {
     balance: "0",
   }).onConflictDoNothing();
 
-  // ── 4. Lookup tables (system-wide, always safe to insert) ─────────────────
+  // ── 4. Default lookup data ────────────────────────────────────────────────
 
-  // Product types
-  await db.insert(schema.productTypesTable).values([
-    { nameFr: "ARTICLE",    nameAr: "مقال" },
-    { nameFr: "PRODUITS",   nameAr: "منتجات" },
-    { nameFr: "APPAREIL",   nameAr: "جهاز" },
-    { nameFr: "ACCESSOIRE", nameAr: "إكسسوار" },
-    { nameFr: "SERVICE",    nameAr: "خدمة" },
-    { nameFr: "Vrac",       nameAr: "مجزأ" },
-  ]).onConflictDoNothing();
+  // Product types are a customer-managed catalog, so tenant databases start
+  // empty. Keep defaults only in the standalone/shared database.
+  if (shouldSeedDefaultProductTypes(tenantContext)) {
+    await db.insert(schema.productTypesTable).values([
+      { nameFr: "ARTICLE",    nameAr: "مقال" },
+      { nameFr: "PRODUITS",   nameAr: "منتجات" },
+      { nameFr: "APPAREIL",   nameAr: "جهاز" },
+      { nameFr: "ACCESSOIRE", nameAr: "إكسسوار" },
+      { nameFr: "SERVICE",    nameAr: "خدمة" },
+      { nameFr: "Vrac",       nameAr: "مجزأ" },
+    ]).onConflictDoNothing();
+  }
 
   // Price tiers
   await db.insert(schema.priceTiersTable).values([
@@ -161,6 +164,12 @@ export async function bootstrap() {
     { labelFr: "Fidèle",      labelAr: "مخلص",          color: "#10B981", sortOrder: 4 },
     { labelFr: "Occasionnel", labelAr: "عرضي",          color: "#6B7280", sortOrder: 5 },
   ]).onConflictDoNothing();
+}
+
+export function shouldSeedDefaultProductTypes(
+  tenantContext = getTenantDatabaseContext(),
+): boolean {
+  return tenantContext === undefined;
 }
 
 /**

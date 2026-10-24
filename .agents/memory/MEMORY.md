@@ -12,6 +12,7 @@
 - [Admin settings persistence](admin-settings-persistence.md) — Store panel appearance in PostgreSQL and background images as object-storage URLs, never browser-only or binary DB data
 - [ERP control plane](erp-control-plane.md) — Midanic Super Admin is the source of truth for ERP tenant lifecycle, trial access, suspension, and support entry
 - [Idempotent core catalog](idempotent-core-catalog.md) — Never gate later product seed data on the original admin seed; long-lived databases need safe catalog repair on startup
+- [Tenant product types](tenant-product-types.md) — New company ERP databases start with an empty product-type list; keep legacy tenant data untouched.
 - [ERP API isolation](erp-api-isolation.md) — The full ERP source API must run as a separate artifact on PostgreSQL schema `erp`, never against Midanic's public schema
 - [Railway monorepo builds](railway-monorepo-builds.md) — Railway service Dockerfiles use the repository root as context; never clone a stale external repository during builds
 - [Railway redeploy verification](railway-redeploy-verification.md) — A current GitHub commit does not prove Railway deployed it; compare live HTML asset hashes and verify the service trigger separately
