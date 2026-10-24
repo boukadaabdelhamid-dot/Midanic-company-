@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useLang } from "@/hooks/use-lang";
 import { usePermissions } from "@/hooks/use-permissions";
+import { formatStockQuantity } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import SupplierPurchaseOrderDialog from "@/components/SupplierPurchaseOrderDialog";
 import ProductSaleOrderDialog from "@/components/ProductSaleOrderDialog";
@@ -356,7 +357,7 @@ export default function ProductDetailsDialog({ product, onClose }: Props) {
                   <InfoRow label={t("Code-barres", "الباركود")}            value={product.barcode ?? "—"} />
                   <InfoRow label={t("Catalogue", "التصنيف")}               value={product.catalogueType ?? "—"} />
                   <InfoRow label={t("Marque", "العلامة التجارية")}         value={product.brand ?? "—"} />
-                  <InfoRow label={t("Stock actuel", "المخزون الحالي")}     value={String(product.stock ?? 0)} highlight />
+                  <InfoRow label={t("Stock actuel", "المخزون الحالي")}     value={formatStockQuantity(product.stock, useLang.locale(lang))} highlight />
                   <InfoRow label={t("Prix de vente", "سعر البيع")}         value={`${num(product.price)} ${t("DA", "دج")}`} highlight />
                   {canViewPurchasePrice && <InfoRow label={t("Prix de revient", "سعر التكلفة")} value={product.costPrice ? `${num(product.costPrice)} ${t("DA", "دج")}` : "—"} />}
                   <InfoRow label={t("Prix en gros", "سعر الجملة")}         value={product.priceGros ? `${num(product.priceGros)} ${t("DA", "دج")}` : "—"} />

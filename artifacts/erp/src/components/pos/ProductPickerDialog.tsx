@@ -6,7 +6,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ShoppingCart } from "lucide-react";
 import { useLang } from "@/hooks/use-lang";
-import { resolveImg } from "@/lib/utils";
+import { formatStockQuantity, resolveImg } from "@/lib/utils";
 
 export function ProductPickerDialog({
   open, onOpenChange, products, onPick, extraBarcodesMap = new Map(),
@@ -16,6 +16,7 @@ export function ProductPickerDialog({
   extraBarcodesMap?: Map<string, number>;
 }) {
   const { lang } = useLang();
+  const numberLocale = lang === "ar" ? "ar-DZ" : lang === "en" ? "en-DZ" : "fr-DZ";
   const t = (fr: string, ar: string) => useLang.translate(lang, fr, ar);
   const [q, setQ] = useState("");
   useEffect(() => { if (open) setQ(""); }, [open]);
@@ -64,7 +65,7 @@ export function ProductPickerDialog({
                     {parseFloat(p.price ?? "0").toLocaleString("fr-DZ", { minimumFractionDigits: 2 })} DZD
                   </div>
                 </div>
-                <div className="text-sm font-bold text-slate-600 ml-2">{p.stock}</div>
+                <div className="text-sm font-bold text-slate-600 ml-2">{formatStockQuantity(p.stock, numberLocale)}</div>
               </button>
             ))
           )}

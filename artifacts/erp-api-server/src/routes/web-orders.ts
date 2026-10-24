@@ -8,6 +8,7 @@ import { db, schema } from "../lib/db";
 import { authenticate, requireStaff, requireStore, requirePermission, type AuthRequest } from "../lib/auth";
 import { resolvePublicStore } from "../lib/store-context";
 import { normalizeCustomerPhone, normalizedPhoneSql } from "../lib/customer-phone";
+import { STOCK_ZERO_EPSILON } from "../lib/stock-quantity";
 import { broadcastToStaffByStores } from "../lib/ws";
 
 const router = Router();
@@ -91,7 +92,7 @@ router.post("/orders", orderLimiter, optionalAuth, resolvePublicStore, async (re
           !p
           || !p.isExposed
           || (store?.kind === "factory" && p.manufacturingRole === "raw_material")
-          || p.stock < quantity
+          || p.stock + STOCK_ZERO_EPSILON < quantity
         ) {
           throw new OrderError(409, "A product is unavailable or has insufficient stock.");
         }
@@ -153,7 +154,14 @@ router.post("/orders", orderLimiter, optionalAuth, resolvePublicStore, async (re
       for (const [id, quantity] of lines) {
         const p = products.find(p => p.id === id)!;
         await tx.insert(schema.orderItemsTable).values({ orderId: order.id, productId: id, quantity, unitPrice: p.price, costPrice: p.costPrice });
-        await tx.update(schema.productsTable).set({ stock: sql`${schema.productsTable.stock} - ${quantity}` }).where(eq(schema.productsTable.id, id));
+        await tx.update(schema.productsTable)
+          .set({
+            stock: sql`CASE
+              WHEN ABS(${schema.productsTable.stock} - ${quantity}) <= ${STOCK_ZERO_EPSILON} THEN 0
+              ELSE GREATEST(0, ${schema.productsTable.stock} - ${quantity})
+            END`,
+          })
+          .where(eq(schema.productsTable.id, id));
         await tx.insert(schema.inventoryMovementsTable).values({
           storeId, productId: id, type: "out", quantity, reason: "Web order reservation", reference: `WEB-${order.id}`,
         });

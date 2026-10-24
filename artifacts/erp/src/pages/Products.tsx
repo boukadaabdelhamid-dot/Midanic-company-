@@ -14,7 +14,7 @@ import {
 } from "@workspace/erp-api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/hooks/use-lang";
-import { resolveImg } from "@/lib/utils";
+import { formatStockQuantity, resolveImg } from "@/lib/utils";
 import JsBarcode from "jsbarcode";
 import { useQueryClient, keepPreviousData, useQuery, useMutation as useRQMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1361,8 +1361,8 @@ export default function Products() {
                       )}
                       {col("stock")        && (
                         <TableCell>
-                          <span className={`text-sm font-semibold ${(p.stock ?? 0) === 0 ? "text-red-600" : (p.stock ?? 0) < 5 ? "text-amber-600" : "text-emerald-600"}`}>
-                            {p.stock ?? 0}
+                          <span className={`text-sm font-semibold ${(p.stock ?? 0) <= 1e-12 ? "text-red-600" : (p.stock ?? 0) < 5 ? "text-amber-600" : "text-emerald-600"}`}>
+                            {formatStockQuantity(p.stock, useLang.locale(lang))}
                           </span>
                         </TableCell>
                       )}

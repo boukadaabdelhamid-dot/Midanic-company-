@@ -13,6 +13,7 @@ import { applyCaisseDelta } from "../lib/balance-sync";
 import { ensureCaisse } from "./caisses";
 import { broadcastCaisseChanged, broadcastToAdmins, broadcastToStaffByStores } from "../lib/ws";
 import { mutateCustomerBalance } from "../lib/balance-sync";
+import { clampTinyStockToZero, STOCK_ZERO_EPSILON } from "../lib/stock-quantity";
 
 const router = Router();
 const pid = (req: { params: Record<string, string | string[]> }, key: string): number =>
@@ -498,7 +499,7 @@ router.post("/erp/pos/drafts/:id/confirm", authenticate, requireStaff, requireSt
           .where(and(eq(schema.productsTable.id, item.productId), eq(schema.productsTable.storeId, storeId)))
           .for("update").limit(1);
         if (!product) throw Object.assign(new Error(`Produit ${item.productId} introuvable`), { status: 400 });
-        if (product.stock < item.quantity) {
+        if (product.stock + STOCK_ZERO_EPSILON < item.quantity) {
           throw Object.assign(
             new Error(`Stock insuffisant pour ${product.nameEn}: ${product.stock} disponible`),
             { status: 400 },
@@ -523,7 +524,7 @@ router.post("/erp/pos/drafts/:id/confirm", authenticate, requireStaff, requireSt
 
       // Stock deduction + inventory movements
       for (const item of enrichedItems) {
-        const newStock = item.product.stock - item.quantity;
+        const newStock = clampTinyStockToZero(item.product.stock - item.quantity);
         await tx.update(schema.productsTable)
           .set({ stock: newStock })
           .where(eq(schema.productsTable.id, item.productId));

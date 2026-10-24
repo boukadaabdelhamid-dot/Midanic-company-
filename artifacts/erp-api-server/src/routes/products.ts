@@ -16,6 +16,7 @@ import {
   type AuthRequest,
 } from "../lib/auth";
 import { resolvePublicStore } from "../lib/store-context";
+import { STOCK_ZERO_EPSILON } from "../lib/stock-quantity";
 import { getProductExposureFilter, isProductStaffRole } from "../lib/product-visibility";
 import { classifyProductImportDuplicates } from "../lib/product-import-duplicates";
 import { addBarcodeToProductCopies, removeBarcodeFromProductCopies } from "../lib/product-barcodes";
@@ -495,7 +496,7 @@ router.get(
       conditions.push(sql`${schema.productsTable.stock}::text ILIKE ${`%${filterStock}%`}`);
     }
     if (inStockOnly === "true") {
-      conditions.push(gt(schema.productsTable.stock, 0));
+      conditions.push(gt(schema.productsTable.stock, STOCK_ZERO_EPSILON));
     }
     if (filterId) {
       conditions.push(sql`${schema.productsTable.id}::text ILIKE ${`%${filterId}%`}`);

@@ -19,3 +19,9 @@ export function resolveImg(url: string | null | undefined): string | undefined {
   if (url.startsWith("/")) return `${API_BASE}${url}`;
   return url;
 }
+
+export function formatStockQuantity(value: number | null | undefined, locale = "fr-DZ"): string {
+  const quantity = Number(value ?? 0);
+  const safeQuantity = !Number.isFinite(quantity) || Math.abs(quantity) <= 1e-12 ? 0 : quantity;
+  return safeQuantity.toLocaleString(locale, { maximumFractionDigits: 8 });
+}

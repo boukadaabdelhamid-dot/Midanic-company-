@@ -22,6 +22,7 @@ import {
   type DbLike,
 } from "../lib/balance-sync";
 import { normalizeSaleUnitLine } from "../lib/sale-order-units";
+import { STOCK_ZERO_EPSILON } from "../lib/stock-quantity";
 
 const router = Router();
 
@@ -6285,7 +6286,10 @@ router.put("/erp/sale-orders/:id/cloture", authenticate, requireStaff, requireSt
       for (const item of lineItems) {
         await tx.execute(sql`
           UPDATE products
-          SET stock = GREATEST(0, COALESCE(stock, 0) - ${item.quantity})
+          SET stock = CASE
+            WHEN ABS(COALESCE(stock, 0) - ${item.quantity}) <= ${STOCK_ZERO_EPSILON} THEN 0
+            ELSE GREATEST(0, COALESCE(stock, 0) - ${item.quantity})
+          END
           WHERE id = ${item.product_id} AND store_id = ${storeId}
         `);
       }

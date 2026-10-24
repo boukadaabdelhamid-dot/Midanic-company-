@@ -38,6 +38,7 @@
 - [Primary product barcode integrity](primary-product-barcode-integrity.md) — preserve legacy duplicate records; block new same-store barcode collisions transactionally instead of adding a unique index.
 - [Stock transfer workflows](stock-transfer-simplification.md) — direct sends skip destination pre-approval; ordinary requests retain approval and final receipt confirmation.
 - [Wholesale sale units](wholesale-sale-units.md) — product unit sales are configurable per item and currently apply only to Bon de vente, with inventory stored in base pieces.
+- [Fractional stock precision](fractional-stock-precision.md) — preserve legitimate fractional stock; treat only tiny floating-point residue as zero.
 - [Shared product catalogs](shared-product-catalog.md) — data, prices, CUMP and barcodes sync across linked ordinary stores; stock stays local and factories remain isolated.
 - [Smart purchase cross-store availability](smart-purchase-cross-store-availability.md) — exclude a retail purchase suggestion only when the same product has positive stock in another active store in that company.
 - [ERP store setup](erp-store-setup.md) — provision the requested stores at onboarding; company owners can rename, but not create or delete, and existing stores remain untouched.
