@@ -14,6 +14,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const { lang } = useLang();
+  const isFr = lang === "fr";
   const { toast } = useToast();
   const addToCart = useStoreCart();
   const { showPrices, showStock, acceptOrders } = useStoreConfig();
@@ -21,13 +22,13 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = () => {
     addToCart.add(product, 1).then(() => {
           toast({
-            title: lang === "ar" ? "تمت الإضافة إلى السلة" : "Added to Cart",
+            title: lang === "ar" ? "تمت الإضافة إلى السلة" : isFr ? "Ajouté au panier" : "Added to Cart",
             description: lang === "ar" ? product.nameAr : product.nameEn,
           });
         }).catch((err: Error) => {
           toast({
-            title: lang === 'ar' ? 'خطأ' : 'Error',
-            description: err.message || (lang === 'ar' ? 'تعذّرت الإضافة إلى السلة' : 'Could not add to cart'),
+            title: lang === 'ar' ? 'خطأ' : isFr ? "Erreur" : 'Error',
+            description: err.message || (lang === 'ar' ? 'تعذّرت الإضافة إلى السلة' : isFr ? "Impossible d’ajouter au panier" : 'Could not add to cart'),
             variant: "destructive"
           });
         });
@@ -37,12 +38,12 @@ export function ProductCard({ product }: ProductCardProps) {
   const canOrder = acceptOrders && !outOfStock;
   const productName = lang === "ar" ? product.nameAr : product.nameEn;
   const formattedPrice = Number.isFinite(Number(product.price))
-    ? new Intl.NumberFormat(lang === "ar" ? "ar-DZ" : "en-US", { maximumFractionDigits: 2 }).format(Number(product.price))
+    ? new Intl.NumberFormat(lang === "ar" ? "ar-DZ" : lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 2 }).format(Number(product.price))
     : product.price;
 
   return (
     <article className="store-product-card group flex min-w-0 flex-col gap-3" data-testid={`card-product-${product.id}`}>
-      <Link href={`/products/${product.id}`} className="store-product-image-link" aria-label={`${lang === "ar" ? "عرض تفاصيل" : "View details"}: ${productName}`}>
+      <Link href={`/products/${product.id}`} className="store-product-image-link" aria-label={`${lang === "ar" ? "عرض تفاصيل" : isFr ? "Voir le détail" : "View details"}: ${productName}`}>
         <div className="store-product-image relative aspect-[4/5] overflow-hidden rounded-lg bg-muted/30">
           {(product.primaryImage ?? product.imageUrl) ? (
             <img
@@ -53,18 +54,18 @@ export function ProductCard({ product }: ProductCardProps) {
             />
           ) : (
             <span className="store-no-image grid h-full w-full place-items-center text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد صورة" : "No image"}
+              {lang === "ar" ? "لا توجد صورة" : isFr ? "Aucune image" : "No image"}
             </span>
           )}
           {showStock && (
             <span className={`store-stock-tag absolute start-2 top-2 rounded bg-background/90 px-2 py-1 text-[10px]${outOfStock ? " is-out" : ""}`}>
               {outOfStock
-                ? (lang === "ar" ? "نفد من المخزون" : "Out of stock")
-                : (lang === "ar" ? "متوفر" : "In stock")}
+                ? (lang === "ar" ? "نفد من المخزون" : isFr ? "Épuisé" : "Out of stock")
+                : (lang === "ar" ? "متوفر" : isFr ? "En stock" : "In stock")}
             </span>
           )}
           <span className="store-card-quick absolute inset-x-3 bottom-3 flex min-h-10 items-center justify-center bg-background/95 text-xs opacity-0 transition-opacity group-hover:opacity-100">
-            {lang === "ar" ? "التفاصيل" : "View details"}
+            {lang === "ar" ? "التفاصيل" : isFr ? "Voir le produit" : "View details"}
           </span>
         </div>
       </Link>
@@ -88,14 +89,14 @@ export function ProductCard({ product }: ProductCardProps) {
           >
             <Plus className="h-4 w-4" />
             <span>{!acceptOrders
-              ? (lang === "ar" ? "الطلبات متوقفة" : "Orders paused")
+              ? (lang === "ar" ? "الطلبات متوقفة" : isFr ? "Commandes suspendues" : "Orders paused")
               : outOfStock
-                ? (lang === "ar" ? "نفد من المخزون" : "Out of stock")
-                : (lang === "ar" ? "أضف إلى السلة" : "Add to bag")}</span>
+                ? (lang === "ar" ? "نفد من المخزون" : isFr ? "Épuisé" : "Out of stock")
+                : (lang === "ar" ? "أضف إلى السلة" : isFr ? "Ajouter au panier" : "Add to bag")}</span>
           </Button>
         </div>
         {showStock && !outOfStock && (
-          <span className="store-stock-note text-xs text-muted-foreground">{lang === "ar" ? `متوفر: ${product.stock}` : `${product.stock} available`}</span>
+          <span className="store-stock-note text-xs text-muted-foreground">{lang === "ar" ? `متوفر: ${product.stock}` : isFr ? `En stock : ${product.stock}` : `${product.stock} available`}</span>
         )}
       </div>
     </article>

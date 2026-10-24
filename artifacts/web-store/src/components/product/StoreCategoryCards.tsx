@@ -20,32 +20,33 @@ type Props = {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
-  lang: "ar" | "en";
+  lang: "ar" | "en" | "fr";
 };
 
 export function StoreCategoryCards({ categories, featuredCategoryIds, products, isLoading, isError, onRetry, lang }: Props) {
   const isAr = lang === "ar";
+  const isFr = lang === "fr";
   const visibleCategories = featuredCategoryIds.length > 0
     ? featuredCategoryIds.flatMap((id) => {
         const category = categories.find((item) => item.id === id);
         return category ? [category] : [];
       })
     : categories;
-  const allLabel = isAr ? "كل المنتجات" : "All products";
-  const errorLabel = isAr ? "تعذّر تحميل الفئات." : "Categories could not be loaded.";
-  const emptyLabel = isAr ? "لا توجد فئات متاحة حالياً." : "No categories are available right now.";
-  const retryLabel = isAr ? "إعادة المحاولة" : "Try again";
+  const allLabel = isAr ? "كل المنتجات" : isFr ? "Tous les produits" : "All products";
+  const errorLabel = isAr ? "تعذّر تحميل الفئات." : isFr ? "Impossible de charger les catégories." : "Categories could not be loaded.";
+  const emptyLabel = isAr ? "لا توجد فئات متاحة حالياً." : isFr ? "Aucune catégorie disponible pour le moment." : "No categories are available right now.";
+  const retryLabel = isAr ? "إعادة المحاولة" : isFr ? "Réessayer" : "Try again";
 
   return (
     <section className="sf-categories" id="store-categories" aria-labelledby="store-category-title">
       <div className="sf-section-heading">
         <div>
-          <span className="sf-kicker">{isAr ? "اكتشف حسب الفئة" : "EXPLORE THE COLLECTION"}</span>
-          <h2 id="store-category-title">{isAr ? "فئات المنتجات" : "Shop by category"}</h2>
+          <span className="sf-kicker">{isAr ? "اكتشف حسب الفئة" : isFr ? "DÉCOUVREZ LA COLLECTION" : "EXPLORE THE COLLECTION"}</span>
+          <h2 id="store-category-title">{isAr ? "فئات المنتجات" : isFr ? "Acheter par catégorie" : "Shop by category"}</h2>
         </div>
       </div>
       {isLoading ? (
-        <div className="sf-category-grid" aria-label={isAr ? "جارٍ تحميل الفئات" : "Loading categories"}>
+        <div className="sf-category-grid" aria-label={isAr ? "جارٍ تحميل الفئات" : isFr ? "Chargement des catégories" : "Loading categories"}>
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-[86px] rounded-2xl" />
           ))}
@@ -65,7 +66,7 @@ export function StoreCategoryCards({ categories, featuredCategoryIds, products, 
             <span className="sf-category-arrow" aria-hidden="true">{isAr ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}</span>
           </Link>
           {visibleCategories.map((category) => {
-            const label = isAr ? category.nameAr : category.nameFr || category.nameEn || "";
+            const label = isAr ? category.nameAr : isFr ? category.nameFr || category.nameEn || "" : category.nameEn || "";
             const filterValue = category.nameFr || category.nameEn || "";
             const matchingProduct = products.find((product) =>
               product.catalogueType?.trim().toLocaleLowerCase() === filterValue.trim().toLocaleLowerCase(),

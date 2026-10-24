@@ -20,6 +20,7 @@ const FALLBACK_HERO = "https://images.unsplash.com/photo-1556228578-0d85b1a4d571
 export default function Home() {
   const { lang } = useLang();
   const isAr = lang === "ar";
+  const isFr = lang === "fr";
   const [, setLocation] = useLocation();
   const {
     bannerUrl,
@@ -76,28 +77,29 @@ export default function Home() {
   const heroImage = resolveImg(bannerUrl) ?? FALLBACK_HERO;
   const storeName = isAr ? nameAr : nameEn;
   const copy = {
-    eyebrow: isAr ? "اختيارات تناسبك" : "A collection for you",
-    heroTitle: isAr ? `اكتشف منتجات ${storeName}` : `Discover ${storeName}`,
+    eyebrow: isAr ? "اختيارات تناسبك" : isFr ? "UNE SÉLECTION POUR VOUS" : "A collection for you",
+    heroTitle: isAr ? `اكتشف منتجات ${storeName}` : isFr ? `Découvrez ${storeName}` : `Discover ${storeName}`,
     intro: isAr
       ? "تصفّح مجموعة المتجر واكتشف ما يناسبك."
+      : isFr ? "Parcourez la sélection de la boutique et trouvez vos favoris."
       : "Explore the store collection and find what works for you.",
-    browse: isAr ? "تصفّح المنتجات" : "Browse products",
+    browse: isAr ? "تصفّح المنتجات" : isFr ? "Voir les produits" : "Browse products",
     featured: featuredProductIds.length > 0
-      ? (isAr ? "اختيارات المتجر" : "The store edit")
-      : (isAr ? "منتجات المتجر" : "Store products"),
+      ? (isAr ? "اختيارات المتجر" : isFr ? "La sélection de la boutique" : "The store edit")
+      : (isAr ? "منتجات المتجر" : isFr ? "Produits de la boutique" : "Store products"),
     featuredHint: featuredProductIds.length > 0
-      ? (isAr ? "منتجات مختارة من المتجر" : "A selection from this store")
-      : (isAr ? "تصفّح المنتجات المتاحة في المتجر" : "Browse the products available in this store"),
-    allProducts: isAr ? "كل المنتجات" : "View all products",
-    searchPlaceholder: isAr ? "ابحث عن منتج..." : "Search products...",
-    searchLabel: isAr ? "بحث المنتجات" : "Search products",
-    stockNote: isAr ? "تصفح بسهولة، واختر ما يناسبك" : "Browse easily. Find your favorites.",
-    productsError: isAr ? "تعذّر تحميل المنتجات." : "Products could not be loaded.",
-    retry: isAr ? "إعادة المحاولة" : "Try again",
+      ? (isAr ? "منتجات مختارة من المتجر" : isFr ? "Une sélection de cette boutique" : "A selection from this store")
+      : (isAr ? "تصفّح المنتجات المتاحة في المتجر" : isFr ? "Parcourez les produits disponibles dans cette boutique" : "Browse the products available in this store"),
+    allProducts: isAr ? "كل المنتجات" : isFr ? "Tous les produits" : "View all products",
+    searchPlaceholder: isAr ? "ابحث عن منتج..." : isFr ? "Rechercher des produits…" : "Search products...",
+    searchLabel: isAr ? "بحث المنتجات" : isFr ? "Rechercher des produits" : "Search products",
+    stockNote: isAr ? "تصفح بسهولة، واختر ما يناسبك" : isFr ? "Parcourez la boutique et trouvez vos favoris." : "Browse easily. Find your favorites.",
+    productsError: isAr ? "تعذّر تحميل المنتجات." : isFr ? "Impossible de charger les produits." : "Products could not be loaded.",
+    retry: isAr ? "إعادة المحاولة" : isFr ? "Réessayer" : "Try again",
     emptyProducts: featuredProductIds.length > 0
-      ? (isAr ? "لا توجد منتجات مميزة حالياً." : "No featured products are available right now.")
-      : (isAr ? "لا توجد منتجات متاحة حالياً." : "No products are available right now."),
-    ordersPaused: isAr ? "الطلبات متوقفة مؤقتاً. يمكنك متابعة تصفح المنتجات." : "Orders are temporarily paused. You can continue browsing.",
+      ? (isAr ? "لا توجد منتجات مميزة حالياً." : isFr ? "Aucun produit mis en avant pour le moment." : "No featured products are available right now.")
+      : (isAr ? "لا توجد منتجات متاحة حالياً." : isFr ? "Aucun produit disponible pour le moment." : "No products are available right now."),
+    ordersPaused: isAr ? "الطلبات متوقفة مؤقتاً. يمكنك متابعة تصفح المنتجات." : isFr ? "Les commandes sont temporairement suspendues. Vous pouvez continuer à parcourir les produits." : "Orders are temporarily paused. You can continue browsing.",
   };
 
   const scrollToProducts = () => document.getElementById("store-products")?.scrollIntoView({ behavior: "smooth" });
@@ -141,7 +143,7 @@ export default function Home() {
       <section className="sf-collection" id="store-products">
         <div className="sf-collection-heading">
           <div>
-            <span className="sf-kicker">{isAr ? "المجموعة" : "THE COLLECTION"}</span>
+            <span className="sf-kicker">{isAr ? "المجموعة" : isFr ? "LA COLLECTION" : "THE COLLECTION"}</span>
             <h2>{copy.featured}</h2>
             <p>{copy.featuredHint}</p>
           </div>
@@ -154,15 +156,15 @@ export default function Home() {
           <form className="sf-search" onSubmit={openSearch} role="search">
             <Search size={18} aria-hidden="true" />
             <input name="search" type="search" placeholder={copy.searchPlaceholder} aria-label={copy.searchLabel} />
-            <button type="submit" aria-label={copy.searchLabel}>{isAr ? "بحث" : "Search"}</button>
+            <button type="submit" aria-label={copy.searchLabel}>{isAr ? "بحث" : isFr ? "Rechercher" : "Search"}</button>
           </form>
           <span className="sf-result-count" aria-live="polite">
-            {productsLoading ? (isAr ? "جارٍ التحميل…" : "Loading…") : products.length}
+            {productsLoading ? (isAr ? "جارٍ التحميل…" : isFr ? "Chargement…" : "Loading…") : products.length}
           </span>
         </div>
 
         {productsLoading ? (
-          <div className="sf-product-grid" aria-label={isAr ? "جارٍ تحميل المنتجات" : "Loading products"}>
+          <div className="sf-product-grid" aria-label={isAr ? "جارٍ تحميل المنتجات" : isFr ? "Chargement des produits" : "Loading products"}>
             {Array.from({ length: 4 }).map((_, index) => (
               <div className="sf-skeleton-card" key={index}>
                 <Skeleton className="aspect-[4/5] w-full rounded-xl" />

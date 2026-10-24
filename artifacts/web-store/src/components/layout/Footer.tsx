@@ -19,6 +19,7 @@ export function Footer() {
   } = useStoreConfig();
   const { lang } = useLang();
   const isAr = lang === "ar";
+  const isFr = lang === "fr";
   const storeName = isAr ? nameAr : nameEn;
   const year = new Date().getFullYear();
 
@@ -33,14 +34,14 @@ export function Footer() {
           {description && <p>{description}</p>}
         </div>
         <div className="sf-footer-links">
-          <h2>{isAr ? "روابط سريعة" : "Explore"}</h2>
-          <Link href="/">{isAr ? "الرئيسية" : "Home"}</Link>
-          <Link href="/products">{isAr ? "المنتجات" : "Products"}</Link>
-          <Link href="/cart">{isAr ? "سلة التسوق" : "Shopping bag"}</Link>
+          <h2>{isAr ? "روابط سريعة" : isFr ? "Explorer" : "Explore"}</h2>
+          <Link href="/">{isAr ? "الرئيسية" : isFr ? "Accueil" : "Home"}</Link>
+          <Link href="/products">{isAr ? "المنتجات" : isFr ? "Produits" : "Products"}</Link>
+          <Link href="/cart">{isAr ? "سلة التسوق" : isFr ? "Panier" : "Shopping bag"}</Link>
         </div>
         {(facebookUrl || instagramUrl || tiktokUrl || whatsappNumber) && (
           <div className="sf-footer-social">
-            <h2>{isAr ? "تابعنا وتواصل معنا" : "Connect with us"}</h2>
+            <h2>{isAr ? "تابعنا وتواصل معنا" : isFr ? "Suivez-nous et contactez-nous" : "Connect with us"}</h2>
             <div>
               {facebookUrl && (
                 <a href={facebookUrl} target="_blank" rel="noopener noreferrer" aria-label="Facebook">
@@ -71,7 +72,7 @@ export function Footer() {
       </div>
       <div className="sf-footer-legal">
         <span>© {year} {storeName}</span>
-        <span>{isAr ? "جميع الحقوق محفوظة." : "All rights reserved."}</span>
+        <span>{isAr ? "جميع الحقوق محفوظة." : isFr ? "Tous droits réservés." : "All rights reserved."}</span>
       </div>
     </footer>
   );

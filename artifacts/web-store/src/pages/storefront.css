@@ -164,6 +164,11 @@
 .store-app .sf-main-nav a:first-child::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--sf-gold); content: ""; }
 .store-app .sf-header-actions { display: flex; align-items: center; gap: clamp(7px, 1.2vw, 16px); }
 .store-app .sf-header-actions .sf-language-button { display: inline-flex; align-items: center; gap: 6px; padding: 0 7px; color: var(--sf-ink); font-size: 11px; }
+.sf-language-menu { position: relative; }
+.sf-language-menu summary::-webkit-details-marker { display: none; }
+.sf-language-options { position: absolute; z-index: 60; top: calc(100% + 8px); inset-inline-end: 0; min-width: 145px; padding: 5px; border: 1px solid var(--sf-line); border-radius: 9px; background: var(--sf-card); box-shadow: 0 10px 30px rgba(23, 52, 58, .16); }
+.sf-language-option { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 10px; border: 0; border-radius: 5px; color: var(--sf-ink); background: transparent; text-align: start; font: inherit; font-size: 13px; cursor: pointer; }
+.sf-language-option:hover, .sf-language-option:focus-visible { outline: none; background: var(--sf-sage); }
 .store-app .sf-cart-link { min-height: 40px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px; border-radius: 4px; color: var(--sf-deep); background: #f2eee4; font-size: 11px; font-weight: 600; text-decoration: none; }
 .store-app .sf-cart-link b { min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: #f7f5ef; background: var(--sf-deep); font-size: 10px; }
 .store-app .sf-profile-link,

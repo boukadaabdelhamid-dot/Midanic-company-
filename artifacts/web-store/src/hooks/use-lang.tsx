@@ -1,21 +1,22 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 
+export type StoreLanguage = "en" | "ar" | "fr";
+
 type LangContextType = {
-  lang: "en" | "ar";
-  toggleLang: () => void;
+  lang: StoreLanguage;
+  setLang: (lang: StoreLanguage) => void;
 };
 
 const LangContext = createContext<LangContextType | null>(null);
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<"en" | "ar">(() => {
+  const [lang, setLangState] = useState<StoreLanguage>(() => {
     const saved = localStorage.getItem("midanic_lang");
-    return (saved as "en" | "ar") || "en";
+    return saved === "ar" || saved === "fr" || saved === "en" ? saved : "en";
   });
 
-  const toggleLang = () => {
-    const next = lang === "en" ? "ar" : "en";
-    setLang(next);
+  const setLang = (next: StoreLanguage) => {
+    setLangState(next);
     localStorage.setItem("midanic_lang", next);
   };
 
@@ -25,7 +26,7 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   }, [lang]);
 
   return (
-    <LangContext.Provider value={{ lang, toggleLang }}>
+    <LangContext.Provider value={{ lang, setLang }}>
       {children}
     </LangContext.Provider>
   );

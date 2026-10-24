@@ -54,6 +54,7 @@ export default function Checkout() {
   const couponCode = searchParams.get("coupon") || undefined;
   const { toast } = useToast();
   const { lang } = useLang();
+  const isFr = lang === "fr";
   const { user } = useAuth();
 
   const { acceptOrders, minOrderAmount, showPrices } = useStoreConfig();
@@ -101,9 +102,10 @@ export default function Checkout() {
     const missingProduct = cartItems.find((item: CartItem) => !item.product?.id);
     if (missingProduct) {
       toast({
-        title: lang === "ar" ? "خطأ" : "Error",
+        title: lang === "ar" ? "خطأ" : isFr ? "Erreur" : "Error",
           description: lang === "ar" ? "توجد بيانات منتج ناقصة. حدّث الصفحة ثم أعد المحاولة." :
-            "One or more cart items are missing product information. Please refresh and try again.",
+            isFr ? "Les informations d’un ou plusieurs produits sont manquantes. Actualisez la page et réessayez."
+              : "One or more cart items are missing product information. Please refresh and try again.",
         variant: "destructive",
       });
       return;
@@ -149,13 +151,13 @@ export default function Checkout() {
             title:
               lang === "ar"
                 ? "تم تقديم الطلب بنجاح!"
-                : "Order Placed Successfully!",
+                : isFr ? "Commande passée avec succès !" : "Order Placed Successfully!",
           });
           setLocation(`/orders/${order.id}`);
         },
         onError: (err: Error) => {
           toast({
-            title: lang === "ar" ? "خطأ" : "Error",
+            title: lang === "ar" ? "خطأ" : isFr ? "Erreur" : "Error",
             description: err.message,
             variant: "destructive",
           });
@@ -164,10 +166,10 @@ export default function Checkout() {
     );
   };
 
-  if (isLoading) return <p className="p-12 text-center">{lang === "ar" ? "جارٍ تحميل السلة…" : "Loading your basket…"}</p>;
+  if (isLoading) return <p className="p-12 text-center">{lang === "ar" ? "جارٍ تحميل السلة…" : isFr ? "Chargement du panier…" : "Loading your basket…"}</p>;
   if (cartError) return <div className="p-12 text-center space-y-4" role="alert">
-    <p>{lang === "ar" ? "تعذّر تحميل سلة الحساب. أعد تحميل الصفحة قبل إتمام الطلب." : "Your account basket could not be loaded. Reload before placing an order."}</p>
-    <Button onClick={() => window.location.reload()}>{lang === "ar" ? "إعادة المحاولة" : "Retry"}</Button>
+    <p>{lang === "ar" ? "تعذّر تحميل سلة الحساب. أعد تحميل الصفحة قبل إتمام الطلب." : isFr ? "Impossible de charger votre panier. Actualisez la page avant de passer commande." : "Your account basket could not be loaded. Reload before placing an order."}</p>
+    <Button onClick={() => window.location.reload()}>{lang === "ar" ? "إعادة المحاولة" : isFr ? "Réessayer" : "Retry"}</Button>
   </div>;
   if (cartItems.length === 0) return null;
   return (
@@ -177,21 +179,23 @@ export default function Checkout() {
           <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-8 text-sm" dir={lang === "ar" ? "rtl" : "ltr"}>
             <AlertTriangle className="h-4 w-4 shrink-0" />
             {!acceptOrders
-              ? (lang === "ar" ? "الطلبات معلقة مؤقتاً. لا يمكن تأكيد الطلب في هذا الوقت." : "Orders are temporarily suspended. You cannot place an order right now.")
+              ? (lang === "ar" ? "الطلبات معلقة مؤقتاً. لا يمكن تأكيد الطلب في هذا الوقت." : isFr ? "Les commandes sont temporairement suspendues. Vous ne pouvez pas commander pour le moment." : "Orders are temporarily suspended. You cannot place an order right now.")
               : (lang === "ar"
                   ? showPrices
                     ? `الحد الأدنى للطلب هو دج ${minOrderAmount.toFixed(2)}. يرجى إضافة المزيد من المنتجات.`
                     : "لم يتم استيفاء الحد الأدنى للطلب. أضف المزيد من المنتجات."
                   : showPrices
-                    ? `Minimum order is دج ${minOrderAmount.toFixed(2)}. Please add more items to your cart.`
-                    : "The minimum order requirement is not met. Add more products.")}
+                    ? isFr ? `Le montant minimum de commande est de ${minOrderAmount.toFixed(2)} DZD. Ajoutez des articles.`
+                      : `Minimum order is دج ${minOrderAmount.toFixed(2)}. Please add more items to your cart.`
+                    : isFr ? "Le montant minimum de commande n’est pas atteint. Ajoutez des produits."
+                      : "The minimum order requirement is not met. Add more products.")}
           </div>
         )}
         <h1
           className="text-4xl md:text-5xl font-serif font-bold mb-12 text-center"
           dir={lang === "ar" ? "rtl" : "ltr"}
         >
-          {lang === "ar" ? "إتمام الطلب" : "Checkout"}
+          {lang === "ar" ? "إتمام الطلب" : isFr ? "Passer la commande" : "Checkout"}
         </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -203,10 +207,10 @@ export default function Checkout() {
                 dir={lang === "ar" ? "rtl" : "ltr"}
               >
                 {!user && <p className="rounded-lg bg-primary/5 p-3 text-sm">
-                  {lang === "ar" ? "يمكنك الطلب مباشرة دون حساب. التسجيل اختياري." : "You can order directly without an account. Registration is optional."}{" "}
-                  <Link href="/auth/register" className="underline">{lang === "ar" ? "إنشاء حساب" : "Create an account"}</Link>
+                  {lang === "ar" ? "يمكنك الطلب مباشرة دون حساب. التسجيل اختياري." : isFr ? "Vous pouvez commander sans compte. L’inscription est facultative." : "You can order directly without an account. Registration is optional."}{" "}
+                  <Link href="/auth/register" className="underline">{lang === "ar" ? "إنشاء حساب" : isFr ? "Créer un compte" : "Create an account"}</Link>
                 </p>}
-                {lang === "ar" ? "معلومات التوصيل" : "Shipping Information"}
+                {lang === "ar" ? "معلومات التوصيل" : isFr ? "Informations de livraison" : "Shipping Information"}
               </h2>
 
               <form
@@ -217,7 +221,7 @@ export default function Checkout() {
               >
                 <div className="space-y-2">
                   <Label htmlFor="customerName" className="text-sm font-semibold">
-                    {lang === "ar" ? "الاسم الكامل" : "Full Name"}
+                    {lang === "ar" ? "الاسم الكامل" : isFr ? "Nom complet" : "Full Name"}
                   </Label>
                   <Input
                     id="customerName"
@@ -230,7 +234,7 @@ export default function Checkout() {
                       setFormData({ ...formData, customerName: e.target.value })
                     }
                     placeholder={
-                      lang === "ar" ? "أدخل اسمك الكامل" : "Your full name"
+                      lang === "ar" ? "أدخل اسمك الكامل" : isFr ? "Votre nom complet" : "Your full name"
                     }
                     className="h-12 bg-background"
                   />
@@ -238,7 +242,7 @@ export default function Checkout() {
 
                 <div className="space-y-2">
                   <Label htmlFor="customerPhone" className="text-sm font-semibold">
-                    {lang === "ar" ? "رقم الهاتف" : "Phone Number"}
+                    {lang === "ar" ? "رقم الهاتف" : isFr ? "Téléphone" : "Phone Number"}
                   </Label>
                   <Input
                     id="customerPhone"
@@ -264,7 +268,7 @@ export default function Checkout() {
                   >
                     {lang === "ar"
                       ? "عنوان التوصيل التفصيلي"
-                      : "Detailed Shipping Address"}
+                      : isFr ? "Adresse complète de livraison" : "Detailed Shipping Address"}
                   </Label>
                   <Textarea
                     id="customerAddress"
@@ -280,7 +284,8 @@ export default function Checkout() {
                     placeholder={
                       lang === "ar"
                         ? "المدينة، الحي، الشارع، رقم المبنى..."
-                        : "City, District, Street, Building..."
+                        : isFr ? "Ville, quartier, rue, numéro du bâtiment…"
+                          : "City, District, Street, Building..."
                     }
                     className="resize-none bg-background p-4"
                   />
@@ -296,7 +301,7 @@ export default function Checkout() {
                 className="text-xl font-serif font-bold mb-6 pb-4 border-b"
                 dir={lang === "ar" ? "rtl" : "ltr"}
               >
-                {lang === "ar" ? "ملخص الطلب" : "Order Summary"}
+                {lang === "ar" ? "ملخص الطلب" : isFr ? "Récapitulatif de la commande" : "Order Summary"}
               </h2>
 
               <div
@@ -321,7 +326,7 @@ export default function Checkout() {
                           : item.product?.nameEn}
                       </p>
                       <p className="text-muted-foreground text-xs mt-1">
-                        {showPrices ? `${item.quantity} x دج ${item.product?.price}` : `${item.quantity} ${lang === "ar" ? "قطعة" : "items"}`}
+                        {showPrices ? `${item.quantity} x ${item.product?.price} DZD` : `${item.quantity} ${lang === "ar" ? "قطعة" : isFr ? "articles" : "items"}`}
                       </p>
                     </div>
                     {showPrices && (
@@ -341,13 +346,13 @@ export default function Checkout() {
                 dir={lang === "ar" ? "rtl" : "ltr"}
               >
                 <div className="flex justify-between text-muted-foreground">
-                  <span>{lang === "ar" ? "المجموع الفرعي" : "Subtotal"}</span>
+                  <span>{lang === "ar" ? "المجموع الفرعي" : isFr ? "Sous-total" : "Subtotal"}</span>
                   <span>دج {subtotal.toFixed(2)}</span>
                 </div>
                 {couponCode && (
                   <div className="flex justify-between text-green-600">
                     <span>
-                      {lang === "ar" ? "كود الخصم المطبق" : "Coupon Applied"}
+                      {lang === "ar" ? "كود الخصم المطبق" : isFr ? "Code promo appliqué" : "Coupon Applied"}
                     </span>
                     <span className="uppercase text-xs border border-green-200 bg-green-50 px-2 rounded-full py-0.5">
                       {couponCode}
@@ -355,7 +360,7 @@ export default function Checkout() {
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-xl pt-4 border-t mt-4 text-primary">
-                  <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
+                  <span>{lang === "ar" ? "الإجمالي" : isFr ? "Total" : "Total"}</span>
                   <span>دج {subtotal.toFixed(2)}</span>
                 </div>
               </div>}
@@ -368,11 +373,11 @@ export default function Checkout() {
                 data-testid="button-place-order"
               >
                 {createOrder.isPending ? (
-                  lang === "ar" ? "جاري التأكيد..." : "Processing..."
+                  lang === "ar" ? "جاري التأكيد..." : isFr ? "Commande en cours…" : "Processing..."
                 ) : (
                   <>
                     <ShieldCheck className="mr-2 h-5 w-5" />
-                    {lang === "ar" ? "تأكيد الطلب" : "Place Order"}
+                    {lang === "ar" ? "تأكيد الطلب" : isFr ? "Confirmer la commande" : "Place Order"}
                   </>
                 )}
               </Button>
@@ -383,7 +388,8 @@ export default function Checkout() {
               >
                 {lang === "ar"
                   ? 'بالنقر على "تأكيد الطلب"، فإنك توافق على الشروط والأحكام الخاصة بنا.'
-                  : 'By placing your order, you agree to our Terms & Conditions.'}
+                  : isFr ? 'En passant votre commande, vous acceptez nos conditions générales.'
+                    : 'By placing your order, you agree to our Terms & Conditions.'}
               </p>
             </div>
           </div>

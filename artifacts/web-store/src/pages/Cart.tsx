@@ -25,6 +25,7 @@ export default function Cart() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { lang } = useLang();
+  const isFr = lang === "fr";
   const { acceptOrders, minOrderAmount, showPrices } = useStoreConfig();
   const queryClient = useQueryClient();
   const [couponCode, setCouponCode] = useState("");
@@ -37,12 +38,12 @@ export default function Cart() {
   const handleUpdateQuantity = (productId: number, newQuantity: number) => {
     if (newQuantity < 1) return;
     storeCart.update(productId, newQuantity).catch((err: Error) =>
-      toast({ title: lang === "ar" ? "خطأ" : "Error", description: err.message, variant: "destructive" }));
+      toast({ title: lang === "ar" ? "خطأ" : isFr ? "Erreur" : "Error", description: err.message, variant: "destructive" }));
   };
 
   const handleRemove = (productId: number) => {
     storeCart.remove(productId).catch((err: Error) =>
-      toast({ title: lang === "ar" ? "خطأ" : "Error", description: err.message, variant: "destructive" }));
+      toast({ title: lang === "ar" ? "خطأ" : isFr ? "Erreur" : "Error", description: err.message, variant: "destructive" }));
   };
 
   const items = (cart ?? []) as CartItem[];
@@ -63,13 +64,13 @@ export default function Cart() {
         onSuccess: (res) => {
           if (res.valid && res.type) {
             setDiscount({ type: res.type, value: parseFloat(res.discount ?? "0"), code: couponCode });
-            toast({ title: lang === 'ar' ? "تم تطبيق الكوبون بنجاح" : "Coupon Applied Successfully" });
+            toast({ title: lang === 'ar' ? "تم تطبيق الكوبون بنجاح" : isFr ? "Code promo appliqué" : "Coupon Applied Successfully" });
           } else {
             setDiscount(null);
-            toast({ title: lang === 'ar' ? "كوبون غير صالح" : "Invalid Coupon", variant: "destructive" });
+            toast({ title: lang === 'ar' ? "كوبون غير صالح" : isFr ? "Code promo invalide" : "Invalid Coupon", variant: "destructive" });
           }
         },
-        onError: () => toast({ title: lang === 'ar' ? "حدث خطأ" : "Error validating coupon", variant: "destructive" })
+        onError: () => toast({ title: lang === 'ar' ? "حدث خطأ" : isFr ? "Erreur lors de la validation du code promo" : "Error validating coupon", variant: "destructive" })
       }
     );
   };
@@ -97,14 +98,14 @@ export default function Cart() {
           <ShoppingBag className="h-12 w-12 text-muted-foreground opacity-50" />
         </div>
         <h2 className="text-3xl font-serif font-bold mb-4 text-foreground">
-          {lang === 'ar' ? 'سلة التسوق فارغة' : 'Your cart is empty'}
+          {lang === 'ar' ? 'سلة التسوق فارغة' : isFr ? 'Votre panier est vide' : 'Your cart is empty'}
         </h2>
         <p className="text-muted-foreground text-lg mb-8 max-w-md mx-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-          {lang === 'ar' ? 'لم تقم بإضافة أي منتجات إلى سلة التسوق الخاصة بك بعد. تصفح مجموعتنا الفاخرة.' : "You haven't added any products to your cart yet. Browse our premium collection."}
+          {lang === 'ar' ? 'لم تقم بإضافة أي منتجات إلى سلة التسوق الخاصة بك بعد. تصفح مجموعتنا الفاخرة.' : isFr ? "Vous n’avez pas encore ajouté de produits à votre panier. Découvrez notre collection." : "You haven't added any products to your cart yet. Browse our premium collection."}
         </p>
         <Link href="/products">
           <Button size="lg" className="rounded-full px-10 h-14 text-lg">
-            {lang === 'ar' ? 'مواصلة التسوق' : 'Continue Shopping'}
+            {lang === 'ar' ? 'مواصلة التسوق' : isFr ? 'Continuer mes achats' : 'Continue Shopping'}
           </Button>
         </Link>
       </div>
@@ -117,19 +118,19 @@ export default function Cart() {
       {!acceptOrders && (
         <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-8 text-sm" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          {lang === 'ar' ? 'الطلبات معلقة مؤقتاً. لا يمكن إتمام الشراء في هذا الوقت.' : 'Orders are temporarily suspended. Checkout is unavailable right now.'}
+          {lang === 'ar' ? 'الطلبات معلقة مؤقتاً. لا يمكن إتمام الشراء في هذا الوقت.' : isFr ? "Les commandes sont temporairement suspendues. L’achat n’est pas disponible pour le moment." : 'Orders are temporarily suspended. Checkout is unavailable right now.'}
         </div>
       )}
       <h1 className="text-4xl md:text-5xl font-serif font-bold mb-12" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-        {lang === 'ar' ? 'سلة التسوق' : 'Shopping Cart'}
+        {lang === 'ar' ? 'سلة التسوق' : isFr ? 'Mon panier' : 'Shopping Cart'}
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8 space-y-6">
           <div className={`hidden md:grid ${showPrices ? "grid-cols-12" : "grid-cols-9"} gap-4 pb-4 border-b text-sm font-semibold text-muted-foreground uppercase tracking-wider`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-            <div className="col-span-6">{lang === 'ar' ? 'المنتج' : 'Product'}</div>
-            <div className="col-span-3 text-center">{lang === 'ar' ? 'الكمية' : 'Quantity'}</div>
-            {showPrices && <div className="col-span-3 text-right">{lang === 'ar' ? 'المجموع' : 'Total'}</div>}
+            <div className="col-span-6">{lang === 'ar' ? 'المنتج' : isFr ? 'Produit' : 'Product'}</div>
+            <div className="col-span-3 text-center">{lang === 'ar' ? 'الكمية' : isFr ? 'Quantité' : 'Quantity'}</div>
+            {showPrices && <div className="col-span-3 text-right">{lang === 'ar' ? 'المجموع' : isFr ? 'Total' : 'Total'}</div>}
           </div>
           
           <div className="space-y-6 md:space-y-0 md:divide-y">
@@ -156,7 +157,7 @@ export default function Cart() {
                       dir={lang === 'ar' ? 'rtl' : 'ltr'}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      {lang === 'ar' ? 'إزالة' : 'Remove'}
+                      {lang === 'ar' ? 'إزالة' : isFr ? 'Supprimer' : 'Remove'}
                     </button>
                   </div>
                 </div>
@@ -185,7 +186,7 @@ export default function Cart() {
                 {/* Total */}
                 {showPrices && (
                   <div className="col-span-3 flex justify-between md:justify-end w-full font-bold text-lg text-primary pt-4 border-t md:border-0 md:pt-0">
-                    <span className="md:hidden text-muted-foreground">{lang === 'ar' ? 'المجموع:' : 'Total:'}</span>
+                    <span className="md:hidden text-muted-foreground">{lang === 'ar' ? 'المجموع:' : isFr ? 'Total :' : 'Total:'}</span>
                     دج {(parseFloat(item.product?.price ?? "0") * item.quantity).toFixed(2)}
                   </div>
                 )}
@@ -197,24 +198,24 @@ export default function Cart() {
         <div className="lg:col-span-4">
           <div className="bg-card p-8 rounded-2xl border shadow-sm sticky top-24">
             <h2 className="text-2xl font-serif font-bold mb-6 pb-4 border-b" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-              {lang === 'ar' ? 'ملخص الطلب' : 'Order Summary'}
+              {lang === 'ar' ? 'ملخص الطلب' : isFr ? 'Récapitulatif' : 'Order Summary'}
             </h2>
 
             {showPrices && <div className="space-y-4 text-base mb-8">
               <div className="flex justify-between text-muted-foreground" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                <span>{lang === 'ar' ? 'المجموع الفرعي' : 'Subtotal'}</span>
+                <span>{lang === 'ar' ? 'المجموع الفرعي' : isFr ? 'Sous-total' : 'Subtotal'}</span>
                 <span className="font-medium text-foreground">دج {subtotal.toFixed(2)}</span>
               </div>
               
               {discountAmount > 0 && (
                 <div className="flex justify-between text-green-600 font-medium" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                  <span>{lang === 'ar' ? 'الخصم' : 'Discount'} ({discount?.code})</span>
+                  <span>{lang === 'ar' ? 'الخصم' : isFr ? 'Remise' : 'Discount'} ({discount?.code})</span>
                   <span>- دج {discountAmount.toFixed(2)}</span>
                 </div>
               )}
               
               <div className="flex justify-between font-bold text-2xl pt-4 border-t mt-4" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                <span>{lang === 'ar' ? 'الإجمالي' : 'Total'}</span>
+                <span>{lang === 'ar' ? 'الإجمالي' : isFr ? 'Total' : 'Total'}</span>
                 <span className="text-primary">دج {total.toFixed(2)}</span>
               </div>
               {belowMinOrder && (
@@ -222,6 +223,7 @@ export default function Cart() {
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   {lang === 'ar'
                     ? `الحد الأدنى للطلب هو دج ${minOrderAmount.toFixed(2)}. يرجى إضافة منتجات أخرى.`
+                    : isFr ? `Le montant minimum de commande est de ${minOrderAmount.toFixed(2)} DZD. Ajoutez des articles.`
                     : `Minimum order amount is دج ${minOrderAmount.toFixed(2)}. Please add more items.`}
                 </div>
               )}
@@ -231,19 +233,20 @@ export default function Cart() {
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 {lang === 'ar'
                   ? 'لم يتم استيفاء الحد الأدنى للطلب. أضف المزيد من المنتجات.'
+                  : isFr ? 'Le montant minimum de commande n’est pas atteint. Ajoutez des produits.'
                   : 'The minimum order requirement is not met. Add more products.'}
               </div>
             )}
 
             <div className="space-y-3 mb-8">
               <label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground block" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                {lang === 'ar' ? 'كود الخصم' : 'Coupon Code'}
+                {lang === 'ar' ? 'كود الخصم' : isFr ? 'Code promo' : 'Coupon Code'}
               </label>
               <div className="flex gap-2" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                 <Input
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
-                  placeholder={lang === 'ar' ? "أدخل الكود" : "Enter code"}
+                  placeholder={lang === 'ar' ? "أدخل الكود" : isFr ? "Saisir le code" : "Enter code"}
                   className="h-12 bg-background focus-visible:ring-primary"
                 />
                 <Button
@@ -252,7 +255,7 @@ export default function Cart() {
                   onClick={handleApplyCoupon}
                   disabled={validateCoupon.isPending || !couponCode}
                 >
-                  {lang === 'ar' ? 'تطبيق' : 'Apply'}
+                  {lang === 'ar' ? 'تطبيق' : isFr ? 'Appliquer' : 'Apply'}
                 </Button>
               </div>
             </div>
@@ -263,13 +266,13 @@ export default function Cart() {
               disabled={checkoutBlocked}
               data-testid="button-checkout"
             >
-              {lang === 'ar' ? 'إتمام الطلب' : 'Checkout'}
+              {lang === 'ar' ? 'إتمام الطلب' : isFr ? 'Passer la commande' : 'Checkout'}
               {lang === 'ar' ? <ArrowLeft className="ml-2 h-5 w-5" /> : <ArrowRight className="ml-2 h-5 w-5" />}
             </Button>
             
             <div className="mt-6 text-center">
               <Link href="/products" className="text-sm text-muted-foreground hover:text-primary underline underline-offset-4 transition-colors" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                {lang === 'ar' ? 'أو مواصلة التسوق' : 'or Continue Shopping'}
+                {lang === 'ar' ? 'أو مواصلة التسوق' : isFr ? 'ou continuer mes achats' : 'or Continue Shopping'}
               </Link>
             </div>
           </div>

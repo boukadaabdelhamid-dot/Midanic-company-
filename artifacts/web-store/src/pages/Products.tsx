@@ -16,6 +16,7 @@ type ProductType = { id: number; nameFr?: string; nameEn?: string; nameAr: strin
 
 export default function Products() {
   const { lang } = useLang();
+  const isFr = lang === "fr";
   const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const initialType = searchParams.get("type") || undefined;
 
@@ -54,7 +55,9 @@ export default function Products() {
   const products = productsRes?.products ?? [];
   const total = productsRes?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const categoryLabel = (type: ProductType) => type.nameFr || type.nameEn || "";
+  const categoryLabel = (type: ProductType) => isFr
+    ? type.nameFr || type.nameEn || ""
+    : type.nameEn || type.nameFr || "";
 
   // Hiding the last product on a page must not strand visitors on an empty page.
   useEffect(() => {
@@ -65,10 +68,10 @@ export default function Products() {
     <div className="container mx-auto px-4 py-12 md:py-20" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div className="mb-16 text-center max-w-2xl mx-auto">
         <h1 className="text-4xl md:text-5xl font-serif font-bold mb-4 text-foreground">
-          {lang === 'ar' ? 'مجموعتنا' : 'Our Collection'}
+          {lang === 'ar' ? 'مجموعتنا' : isFr ? 'Notre collection' : 'Our Collection'}
         </h1>
         <p className="text-lg text-muted-foreground">
-          {lang === 'ar' ? 'تصفّح المنتجات المتاحة في هذا المتجر.' : 'Browse products available from this store.'}
+          {lang === 'ar' ? 'تصفّح المنتجات المتاحة في هذا المتجر.' : isFr ? 'Découvrez les produits disponibles dans cette boutique.' : 'Browse products available from this store.'}
         </p>
       </div>
 
@@ -78,7 +81,7 @@ export default function Products() {
           <div className="relative">
             <Search className={`absolute ${lang === "ar" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground`} />
             <Input
-              placeholder={lang === 'ar' ? "بحث..." : "Search..."}
+              placeholder={lang === 'ar' ? "بحث..." : isFr ? "Rechercher…" : "Search..."}
               className={`${lang === "ar" ? "pr-10" : "pl-10"} h-12 bg-background border-border/60 focus-visible:border-primary`}
               dir={lang === "ar" ? "rtl" : "ltr"}
               value={search}
@@ -91,7 +94,7 @@ export default function Products() {
             <div className="flex items-center gap-2 mb-4 pb-2 border-b">
               <Filter className="h-5 w-5 text-primary" />
               <h3 className="font-serif font-semibold text-lg">
-                {lang === 'ar' ? 'الفئات' : 'Categories'}
+                {lang === 'ar' ? 'الفئات' : isFr ? 'Catégories' : 'Categories'}
               </h3>
             </div>
             <div className="flex flex-col gap-1">
@@ -101,7 +104,7 @@ export default function Products() {
                 onClick={() => { setActiveType(undefined); setPage(1); }}
                 data-testid="btn-category-all"
               >
-                {lang === 'ar' ? 'جميع المنتجات' : 'All Products'}
+                {lang === 'ar' ? 'جميع المنتجات' : isFr ? 'Tous les produits' : 'All Products'}
               </Button>
               {productTypes?.map((type) => (
                 <Button
@@ -118,10 +121,10 @@ export default function Products() {
               ))}
               {isTypesError && (
                 <div className="mt-2 text-sm text-destructive" role="alert">
-                  <p>{lang === "ar" ? "تعذّر تحميل الفئات." : "Categories could not be loaded."}</p>
+                  <p>{lang === "ar" ? "تعذّر تحميل الفئات." : isFr ? "Impossible de charger les catégories." : "Categories could not be loaded."}</p>
                   <Button type="button" variant="link" className="h-auto px-0" onClick={() => { void refetchTypes(); }}>
                     <RotateCw className="mr-1 h-3 w-3" />
-                    {lang === "ar" ? "إعادة المحاولة" : "Try again"}
+                    {lang === "ar" ? "إعادة المحاولة" : isFr ? "Réessayer" : "Try again"}
                   </Button>
                 </div>
               )}
@@ -144,7 +147,7 @@ export default function Products() {
           ) : isError ? (
             <div className="text-center py-32 bg-muted/20 border border-border/40 rounded-xl flex flex-col items-center justify-center">
               <p className="text-xl text-muted-foreground font-serif mb-6" role="alert">
-                {lang === 'ar' ? 'تعذّر تحميل المنتجات حالياً.' : 'Products could not be loaded right now.'}
+                {lang === 'ar' ? 'تعذّر تحميل المنتجات حالياً.' : isFr ? 'Impossible de charger les produits pour le moment.' : 'Products could not be loaded right now.'}
               </p>
               <Button
                 variant="outline"
@@ -153,13 +156,13 @@ export default function Products() {
                 onClick={() => { void refetch(); }}
               >
                 <RotateCw className="mr-2 h-4 w-4" />
-                {lang === 'ar' ? 'إعادة المحاولة' : 'Try again'}
+                {lang === 'ar' ? 'إعادة المحاولة' : isFr ? 'Réessayer' : 'Try again'}
               </Button>
             </div>
           ) : products.length === 0 ? (
             <div className="text-center py-32 bg-muted/20 border border-border/40 rounded-xl flex flex-col items-center justify-center">
               <p className="text-xl text-muted-foreground font-serif mb-6">
-                {lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : 'No products found matching your criteria.'}
+                {lang === 'ar' ? 'لم يتم العثور على منتجات تطابق بحثك.' : isFr ? 'Aucun produit ne correspond à votre recherche.' : 'No products found matching your criteria.'}
               </p>
               <Button
                 variant="outline"
@@ -167,7 +170,7 @@ export default function Products() {
                 className="rounded-full px-8"
                 onClick={() => { setSearch(""); setActiveType(undefined); setPage(1); }}
               >
-                {lang === 'ar' ? 'مسح الفلاتر' : 'Clear Filters'}
+                {lang === 'ar' ? 'مسح الفلاتر' : isFr ? 'Effacer les filtres' : 'Clear Filters'}
               </Button>
             </div>
           ) : (
@@ -180,7 +183,7 @@ export default function Products() {
           {!isLoading && !isError && total > 0 && (
             <nav
               className="mt-10 flex flex-wrap items-center justify-center gap-4"
-              aria-label={lang === "ar" ? "صفحات المنتجات" : "Product pages"}
+              aria-label={lang === "ar" ? "صفحات المنتجات" : isFr ? "Pages de produits" : "Product pages"}
               dir={lang === "ar" ? "rtl" : "ltr"}
             >
               <Button
@@ -189,11 +192,12 @@ export default function Products() {
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 data-testid="products-previous-page"
               >
-                {lang === "ar" ? "السابق" : "Previous"}
+                {lang === "ar" ? "السابق" : isFr ? "Précédent" : "Previous"}
               </Button>
               <span className="text-sm text-muted-foreground" aria-live="polite" data-testid="products-page-status">
                 {lang === "ar"
                   ? `الصفحة ${page} من ${totalPages} — ${total} منتجًا`
+                  : isFr ? `Page ${page} sur ${totalPages} — ${total} produits`
                   : `Page ${page} of ${totalPages} — ${total} products`}
               </span>
               <Button
@@ -202,7 +206,7 @@ export default function Products() {
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 data-testid="products-next-page"
               >
-                {lang === "ar" ? "التالي" : "Next"}
+                {lang === "ar" ? "التالي" : isFr ? "Suivant" : "Next"}
               </Button>
             </nav>
           )}
