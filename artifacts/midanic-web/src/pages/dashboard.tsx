@@ -7,53 +7,35 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Copy, Check, Download, RefreshCw, KeyRound, Package,
+  Copy, Check, Download, KeyRound, Package,
   Clock, ShieldAlert, ShieldOff, Shield, BriefcaseBusiness, ExternalLink,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+const STATUS_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
   active: {
-    label: 'Active',
     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     icon: <Shield className="h-3.5 w-3.5" />,
   },
   expired: {
-    label: 'Expired',
     color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     icon: <ShieldAlert className="h-3.5 w-3.5" />,
   },
   suspended: {
-    label: 'Suspended',
     color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
     icon: <ShieldOff className="h-3.5 w-3.5" />,
   },
   revoked: {
-    label: 'Revoked',
     color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
     icon: <ShieldOff className="h-3.5 w-3.5" />,
   },
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  trial: 'Trial',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  semi_annual: '6 Months',
-  yearly: 'Yearly',
-  lifetime: 'Lifetime ∞',
-};
-
 function daysUntil(date: string | null): number | null {
   if (!date) return null;
   return Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000);
-}
-
-function formatExpiry(date: string | null): string {
-  if (!date) return 'Never';
-  return new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function isExpiringSoon(license: MyLicense): boolean {
@@ -64,6 +46,7 @@ function isExpiringSoon(license: MyLicense): boolean {
 
 // ── Copy key ─────────────────────────────────────────────────────────────────
 function CopyKey({ value }: { value: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(value);
@@ -74,7 +57,7 @@ function CopyKey({ value }: { value: string }) {
     <button
       onClick={copy}
       className="flex items-center gap-2 font-mono text-sm bg-muted rounded-md px-3 py-1.5 hover:bg-muted/80 transition-colors w-full"
-      title="Click to copy"
+      title={t('dashboard.copy_key')}
     >
       <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <span className="truncate flex-1 text-left">{value}</span>
@@ -87,6 +70,7 @@ function CopyKey({ value }: { value: string }) {
 
 // ── License card ─────────────────────────────────────────────────────────────
 function LicenseCard({ license, downloads }: { license: MyLicense; downloads: MyDownload[] }) {
+  const { t, i18n } = useTranslation();
   const days = daysUntil(license.expiresAt);
   const expiringSoon = isExpiringSoon(license);
   const status = STATUS_CONFIG[license.status] ?? STATUS_CONFIG.active;
@@ -108,15 +92,15 @@ function LicenseCard({ license, downloads }: { license: MyLicense; downloads: My
           </div>
           <Badge className={`text-xs shrink-0 flex items-center gap-1 ${status.color}`}>
             {status.icon}
-            {status.label}
+            {t(`dashboard.status.${license.status}`)}
           </Badge>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <Badge variant="outline" className="text-xs">{TYPE_LABELS[license.type] ?? license.type}</Badge>
+          <Badge variant="outline" className="text-xs">{t(`dashboard.type.${license.type}`, { defaultValue: license.type })}</Badge>
           {expiringSoon && days !== null && (
             <span className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              Expires in {days} day{days !== 1 ? 's' : ''}
+              {t('dashboard.expires_in', { days })}
             </span>
           )}
         </div>
@@ -129,11 +113,11 @@ function LicenseCard({ license, downloads }: { license: MyLicense; downloads: My
         {/* Meta row */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Expires</p>
-            <p className="font-medium">{formatExpiry(license.expiresAt)}</p>
+            <p className="text-xs text-muted-foreground mb-0.5">{t('dashboard.expires')}</p>
+            <p className="font-medium">{license.expiresAt ? new Date(license.expiresAt).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' }) : t('dashboard.never')}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Devices</p>
+            <p className="text-xs text-muted-foreground mb-0.5">{t('dashboard.devices')}</p>
             <p className={`font-medium ${license.activatedDevices >= (license.maxDevices ?? 1) ? 'text-red-500' : ''}`}>
               {license.activatedDevices} / {license.maxDevices ?? 1}
             </p>
@@ -143,7 +127,7 @@ function LicenseCard({ license, downloads }: { license: MyLicense; downloads: My
         {/* Downloads for this product */}
         {license.status === 'active' && productDownloads.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Downloads</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t('dashboard.downloads')}</p>
             <div className="space-y-1.5">
               {productDownloads.map(d => (
                 <a
@@ -171,13 +155,6 @@ function LicenseCard({ license, downloads }: { license: MyLicense; downloads: My
           </div>
         )}
 
-        {/* Renew button for expired / expiring soon */}
-        {(license.status === 'expired' || expiringSoon) && (
-          <Button variant="outline" size="sm" className="w-full gap-2" disabled>
-            <RefreshCw className="h-3.5 w-3.5" />
-            {license.status === 'expired' ? 'Renew License' : 'Renew Before Expiry'}
-          </Button>
-        )}
       </CardContent>
     </Card>
   );
@@ -187,7 +164,7 @@ function LicenseCard({ license, downloads }: { license: MyLicense; downloads: My
 export default function Dashboard() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
 
   const [licenses, setLicenses] = useState<MyLicense[]>([]);
@@ -216,7 +193,7 @@ export default function Dashboard() {
         setErpAccesses(erpRes);
       })
       .catch((e: Error) => {
-        toast({ title: 'Error loading data', description: e.message, variant: 'destructive' });
+          toast({ title: t('dashboard.load_error'), description: e.message, variant: 'destructive' });
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, toast]);
@@ -236,7 +213,7 @@ export default function Dashboard() {
             {t('nav.dashboard')}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back, {user?.firstName}. Here are your licenses and downloads.
+            {t('dashboard.welcome', { name: user?.firstName })}
           </p>
         </div>
 
@@ -245,13 +222,13 @@ export default function Dashboard() {
           <Card>
             <CardContent className="pt-6">
               <p className="text-2xl font-bold">{activeLicenses.length}</p>
-              <p className="text-sm text-muted-foreground mt-1">Active Licenses</p>
+              <p className="text-sm text-muted-foreground mt-1">{t('dashboard.active_licenses')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <p className="text-2xl font-bold">{downloads.length}</p>
-              <p className="text-sm text-muted-foreground mt-1">Available Downloads</p>
+              <p className="text-sm text-muted-foreground mt-1">{t('dashboard.available_downloads')}</p>
             </CardContent>
           </Card>
           <Card className="col-span-2 sm:col-span-1">
@@ -259,16 +236,16 @@ export default function Dashboard() {
               <p className="text-2xl font-bold">
                 {licenses.filter(l => isExpiringSoon(l)).length}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">Expiring Soon</p>
+              <p className="text-sm text-muted-foreground mt-1">{t('dashboard.expiring_soon')}</p>
             </CardContent>
           </Card>
         </div>
 
         {/* ERP access */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Your ERP companies</h2>
+          <h2 className="text-lg font-semibold">{t('dashboard.erp_companies')}</h2>
           {loading && erpAccesses.length === 0 ? (
-            <Card><CardContent className="p-5 text-sm text-muted-foreground">Checking your ERP access...</CardContent></Card>
+            <Card><CardContent className="p-5 text-sm text-muted-foreground">{t('dashboard.checking_erp')}</CardContent></Card>
           ) : erpAccesses.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {erpAccesses.map((erpAccess) => (
@@ -279,19 +256,19 @@ export default function Dashboard() {
                         <BriefcaseBusiness className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-semibold">{erpAccess.companyName || 'Midanic ERP'}</h3>
+                        <h3 className="font-semibold">{erpAccess.companyName || t('dashboard.erp')}</h3>
                         {erpAccess.canAccess ? (
                           <>
-                            <p className="mt-1 text-sm text-muted-foreground">Your ERP workspace is ready.</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{t('dashboard.erp_ready')}</p>
                             {erpAccess.trialEndsAt && (
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Trial ends {formatExpiry(erpAccess.trialEndsAt)}
+                                {t('dashboard.trial_ends', { date: new Date(erpAccess.trialEndsAt).toLocaleDateString(i18n.language) })}
                               </p>
                             )}
                           </>
                         ) : (
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {erpAccess.message ?? 'Your ERP access is not ready yet.'}
+                            {erpAccess.message ?? t('dashboard.erp_not_ready')}
                           </p>
                         )}
                       </div>
@@ -299,7 +276,7 @@ export default function Dashboard() {
                     {erpAccess.canAccess && (
                       <Button asChild className="shrink-0 gap-2">
                         <a href={erpAccess.launchUrl}>
-                          Open ERP
+                          {t('dashboard.open_erp')}
                           <ExternalLink className="h-4 w-4" />
                         </a>
                       </Button>
@@ -312,7 +289,7 @@ export default function Dashboard() {
             <Card>
               <CardContent className="flex items-center gap-3 p-5">
                 <BriefcaseBusiness className="h-5 w-5 text-primary" />
-                <p className="text-sm text-muted-foreground">Your ERP access link will appear here after approval.</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.erp_pending')}</p>
               </CardContent>
             </Card>
           )}
@@ -320,7 +297,7 @@ export default function Dashboard() {
 
         {/* Active licenses */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Active Licenses</h2>
+          <h2 className="text-lg font-semibold">{t('dashboard.active_licenses')}</h2>
           {loading ? (
             <div className="grid sm:grid-cols-2 gap-4">
               {[1, 2].map(i => (
@@ -337,10 +314,10 @@ export default function Dashboard() {
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <KeyRound className="h-8 w-8 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No active licenses</p>
-                <p className="text-sm mt-1">Contact us or browse our products to get started.</p>
-                <Link href="/products">
-                  <Button variant="outline" size="sm" className="mt-4">Browse Products</Button>
+                <p className="font-medium">{t('dashboard.no_active_licenses')}</p>
+                <p className="text-sm mt-1">{t('dashboard.no_licenses_description')}</p>
+                <Link href="/products" className="mt-4 inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  {t('dashboard.browse_products')}
                 </Link>
               </CardContent>
             </Card>
@@ -357,7 +334,7 @@ export default function Dashboard() {
         {!loading && inactiveLicenses.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-muted-foreground">
-              License History ({inactiveLicenses.length})
+              {t('dashboard.license_history', { count: inactiveLicenses.length })}
             </h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {inactiveLicenses.map(l => (

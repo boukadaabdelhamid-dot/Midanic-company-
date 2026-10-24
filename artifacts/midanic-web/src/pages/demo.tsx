@@ -148,7 +148,7 @@ export default function Demo() {
                           <Select onValueChange={(value) => { field.onChange(value); setCustomAnswers({}); }} value={field.value ? field.value.toString() : undefined}>
                           <FormControl>
                             <SelectTrigger data-testid="select-product">
-                              <SelectValue />
+                              <SelectValue placeholder={t('demo.product')} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>

@@ -6,7 +6,7 @@ import { useListDownloads } from '@workspace/api-client-react';
 
 export default function Downloads() {
   const { t } = useTranslation();
-  const { data: downloads, isLoading } = useListDownloads();
+  const { data: downloads, isLoading, isError, refetch } = useListDownloads();
 
   return (
     <div className="min-h-[100dvh] w-full py-24">
@@ -21,8 +21,13 @@ export default function Downloads() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-12 text-muted-foreground" data-testid="text-loading">
-            {t('common.loading')}
+          <div className="grid gap-5 md:grid-cols-3" data-testid="text-loading">
+            {[0, 1, 2].map((item) => <div key={item} className="h-60 animate-pulse rounded-2xl border bg-card" />)}
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl border border-dashed p-12 text-center">
+            <p className="mb-4 text-muted-foreground">{t('common.error')}</p>
+            <Button onClick={() => refetch()}>{t('common.try_again')}</Button>
           </div>
         ) : downloads && downloads.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

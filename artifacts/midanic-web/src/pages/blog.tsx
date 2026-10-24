@@ -10,7 +10,7 @@ import { useState } from 'react';
 export default function Blog() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useListBlogPosts({ page, limit: 9 });
+  const { data, isLoading, isError, refetch } = useListBlogPosts({ page, limit: 9 });
 
   return (
     <div className="min-h-[100dvh] w-full py-24">
@@ -25,8 +25,13 @@ export default function Blog() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-12 text-muted-foreground" data-testid="text-loading">
-            {t('blog.loading')}
+          <div className="grid gap-5 md:grid-cols-3" data-testid="text-loading">
+            {[0, 1, 2].map((item) => <div key={item} className="h-72 animate-pulse rounded-2xl border bg-card" />)}
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl border border-dashed p-12 text-center">
+            <p className="mb-4 text-muted-foreground">{t('common.error')}</p>
+            <Button onClick={() => refetch()}>{t('common.try_again')}</Button>
           </div>
         ) : data && data.posts.length > 0 ? (
           <>
@@ -77,7 +82,7 @@ export default function Blog() {
                 {t('common.previous')}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {page} of {Math.ceil(data.total / 9)}
+                {t('common.page_of', { current: page, total: Math.ceil(data.total / 9) })}
               </span>
               <Button
                 variant="outline"

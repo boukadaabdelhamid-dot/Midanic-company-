@@ -180,7 +180,7 @@ export default function Trial() {
                           <Select onValueChange={(value) => { field.onChange(value); setCustomAnswers({}); }} value={field.value ? field.value.toString() : undefined}>
                           <FormControl>
                             <SelectTrigger data-testid="select-product">
-                              <SelectValue />
+                              <SelectValue placeholder={t('trial.product')} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>

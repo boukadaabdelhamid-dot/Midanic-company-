@@ -89,7 +89,7 @@ export default function Pricing() {
 
         <div className="mt-16 text-center">
           <p className="text-muted-foreground mb-4">
-            All plans include full access to product features and local support.
+            {t('pricing.note')}
           </p>
           <Link href="/contact" data-testid="link-contact-sales">
             <Button size="lg" variant="outline">

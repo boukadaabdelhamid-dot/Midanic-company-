@@ -66,7 +66,7 @@ export function Navbar() {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center hover:opacity-80 transition-opacity" data-testid="link-home" aria-label="Midanic home">
+          <Link href="/" className="flex items-center hover:opacity-80 transition-opacity" data-testid="link-home" aria-label={`${t('nav.home')} — Midanic`}>
             <img
               src="/midanic-logo.png"
               alt="Midanic"
@@ -117,7 +117,7 @@ export function Navbar() {
             </DropdownMenu>
 
             {/* Theme Toggle */}
-            <Button variant="ghost" size="sm" onClick={toggleTheme} data-testid="button-theme">
+            <Button variant="ghost" size="sm" onClick={toggleTheme} aria-label={theme === 'light' ? t('common.switch_dark') : t('common.switch_light')} data-testid="button-theme">
               {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </Button>
 
@@ -142,7 +142,7 @@ export function Navbar() {
                     <Link href="/admin">
                       <DropdownMenuItem data-testid="link-admin">
                         <ShieldCheck className="w-4 h-4 mr-2" />
-                        Admin
+                        {t('nav.admin')}
                       </DropdownMenuItem>
                     </Link>
                   ) : (
@@ -180,9 +180,7 @@ export function Navbar() {
             variant="ghost"
             size="sm"
             className="md:hidden"
-            aria-label={mobileMenuOpen
-              ? (i18n.language.startsWith('ar') ? 'إغلاق قائمة الحساب' : 'Close account menu')
-              : (i18n.language.startsWith('ar') ? 'الحساب واللغة' : 'Account and language')}
+              aria-label={mobileMenuOpen ? t('nav.close_menu') : t('nav.open_menu')}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             data-testid="button-mobile-menu"
           >
@@ -244,7 +242,7 @@ export function Navbar() {
                 data-testid="button-mobile-theme"
               >
                 {theme === 'light' ? <Moon className="w-4 h-4 mr-2" /> : <Sun className="w-4 h-4 mr-2" />}
-                {theme === 'light' ? 'Dark' : 'Light'}
+                {theme === 'light' ? t('common.dark') : t('common.light')}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -269,7 +267,7 @@ export function Navbar() {
                   <Link href="/admin" onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="ghost" size="sm" className="w-full justify-start" data-testid="link-mobile-admin">
                       <ShieldCheck className="w-4 h-4 mr-2" />
-                      Admin
+                      {t('nav.admin')}
                     </Button>
                   </Link>
                 ) : (

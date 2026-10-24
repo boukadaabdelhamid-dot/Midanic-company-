@@ -11,6 +11,7 @@
 - [R2 browser upload CORS](r2-browser-upload-cors.md) — Direct browser PUT uploads require an explicit CORS policy on the Cloudflare R2 bucket
 - [Admin settings persistence](admin-settings-persistence.md) — Store panel appearance in PostgreSQL and background images as object-storage URLs, never browser-only or binary DB data
 - [ERP control plane](erp-control-plane.md) — Midanic Super Admin is the source of truth for ERP tenant lifecycle, trial access, suspension, and support entry
+- [Seeded demo domain conflicts](seeded-demo-domains.md) — only assign reserved demo hostnames when free; an occupied tenant domain must never block API startup or be reassigned.
 - [Idempotent core catalog](idempotent-core-catalog.md) — Never gate later product seed data on the original admin seed; long-lived databases need safe catalog repair on startup
 - [Tenant product types](tenant-product-types.md) — New company ERP databases start with an empty product-type list; keep legacy tenant data untouched.
 - [ERP API isolation](erp-api-isolation.md) — The full ERP source API must run as a separate artifact on PostgreSQL schema `erp`, never against Midanic's public schema

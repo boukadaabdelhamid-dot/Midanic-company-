@@ -14,7 +14,10 @@
     "register": "Register",
     "logout": "Logout",
     "profile": "Profile",
-    "dashboard": "My Dashboard"
+    "dashboard": "My Dashboard",
+    "admin": "Admin",
+    "open_menu": "Open menu",
+    "close_menu": "Close menu"
   },
   "home": {
     "hero_title": "Business Software Built for Modern Teams",
@@ -113,7 +116,8 @@
     "lifetime": "Lifetime",
     "lifetime_desc": "One-time payment, forever",
     "contact_sales": "Contact Sales",
-    "request_quote": "Request Quote"
+    "request_quote": "Request Quote",
+    "note": "Ask our team about the available terms for each product."
   },
   "about": {
     "page_title": "About Midanic",
@@ -128,7 +132,9 @@
     "support": "Support",
     "support_desc": "Dedicated local support for every customer.",
     "integrity": "Integrity",
-    "integrity_desc": "Transparent pricing, reliable service, honest communication."
+    "integrity_desc": "Transparent pricing, reliable service, honest communication.",
+    "story_copy": "Midanic works with businesses looking for practical software for day-to-day operations. Our focus is helping teams explore relevant tools and find a clear next step.",
+    "mission_copy": "We aim to make software discovery and adoption more approachable, with a local team available to understand each business's needs."
   },
   "contact": {
     "page_title": "Contact Us",
@@ -146,7 +152,13 @@
   "faq": {
     "page_title": "Frequently Asked Questions",
     "page_subtitle": "Find answers to common questions about our products and services",
-    "no_results": "No questions found"
+    "no_results": "No questions found",
+    "items": [
+      { "question": "How can I learn more about a product?", "answer": "Explore the product page for the available description, versions, and downloads. You can also request a demonstration or contact the team." },
+      { "question": "Can I request a trial?", "answer": "When a product offers a trial, its product page includes a request option. Submit the form and the team can follow up with you." },
+      { "question": "How do I ask about pricing?", "answer": "Visit the pricing page for the listed license terms, then contact the team to discuss a product." },
+      { "question": "How do I get in touch?", "answer": "Use the contact form to send the team your question and preferred contact details." }
+    ]
   },
   "help": {
     "page_title": "Help Center",
@@ -155,7 +167,12 @@
     "getting_started": "Getting Started",
     "documentation": "Documentation",
     "video_tutorials": "Video Tutorials",
-    "contact_support": "Contact Support"
+    "contact_support": "Contact Support",
+    "faq_title": "Find a clear answer",
+    "faq_description": "Browse practical answers about products, trials, and getting in touch with the Midanic team.",
+    "browse_faq": "Browse frequently asked questions",
+    "contact_title": "Talk to a person",
+    "contact_description": "Tell us what your business is looking for and the team will take it from there."
   },
   "blog": {
     "page_title": "Blog",
@@ -212,6 +229,71 @@
     "required_product_fields": "Please complete the required product details.",
     "success": "Demo request submitted! We'll contact you to schedule.",
     "error": "Failed to submit request. Please try again."
+  },
+  "dashboard": {
+    "status": { "active": "Active", "expired": "Expired", "suspended": "Suspended", "revoked": "Revoked" },
+    "type": { "trial": "Trial", "monthly": "Monthly", "quarterly": "Quarterly", "semi_annual": "6 months", "yearly": "Yearly", "lifetime": "Lifetime" },
+    "copy_key": "Copy license key",
+    "expires_in": "Expires in {{days}} days",
+    "expires": "Expires",
+    "devices": "Devices",
+    "downloads": "Downloads",
+    "never": "Never",
+    "load_error": "Could not load your account information",
+    "welcome": "Welcome back, {{name}}. Here are your licenses and downloads.",
+    "active_licenses": "Active licenses",
+    "available_downloads": "Available downloads",
+    "expiring_soon": "Expiring soon",
+    "erp_companies": "Your ERP companies",
+    "checking_erp": "Checking your ERP access…",
+    "erp": "Midanic ERP",
+    "erp_ready": "Your ERP workspace is ready.",
+    "trial_ends": "Trial ends {{date}}",
+    "erp_not_ready": "Your ERP access is not ready yet.",
+    "open_erp": "Open ERP",
+    "erp_pending": "Your ERP access link will appear here after approval.",
+    "no_active_licenses": "No active licenses",
+    "no_licenses_description": "Contact us or browse our products to get started.",
+    "browse_products": "Browse products",
+    "license_history": "License history ({{count}})"
+  },
+  "privacy": {
+    "title": "Privacy policy",
+    "updated": "Last updated: {{date}}",
+    "intro_title": "Introduction",
+    "intro_body": "Midanic (\"we\", \"our\", or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our software products and services.",
+    "collect_title": "Information we collect",
+    "collect_body": "We collect information that you provide directly to us, including: name, email address, and contact information; company information and billing details; account credentials and preferences; communications with our support team; and usage data and analytics.",
+    "use_title": "How information is used",
+    "use_body": "We use the information we collect to provide, maintain, and improve our services; process transactions and send related information; send technical notices and support messages; respond to your comments and questions; and protect against fraudulent or illegal activity.",
+    "security_title": "Data security",
+    "security_body": "We implement appropriate technical and organizational measures to protect your personal data against unauthorized or unlawful processing, accidental loss, destruction, or damage. All data is encrypted in transit and at rest.",
+    "rights_title": "Your rights",
+    "rights_body": "You have the right to access your personal data; correct inaccurate data; request deletion of your data; object to processing of your data; and export your data.",
+    "contact_title": "Contact",
+    "contact_body": "For questions about this policy, contact privacy@midanic.dz."
+  },
+  "terms": {
+    "title": "Terms of service",
+    "updated": "Last updated: {{date}}",
+    "agreement_title": "Agreement to terms",
+    "agreement_body": "By accessing or using Midanic's software products and services, you agree to be bound by these Terms of Service. If you disagree with any part of these terms, you may not access our services.",
+    "license_title": "License grant",
+    "license_body": "Subject to your compliance with these Terms, Midanic grants you a limited, non-exclusive, non-transferable license to use our software products in accordance with your purchased license type.",
+    "types_title": "License types",
+    "types_body": "Trial: Limited-time evaluation license with full features. Monthly/Quarterly/Semi-Annual/Yearly: Subscription licenses with automatic renewal. Lifetime: Perpetual license with ongoing updates.",
+    "restrictions_title": "Restrictions",
+    "restrictions_body": "You may not modify, reverse engineer, or decompile the software; distribute or resell the software without authorization; use the software for illegal purposes; remove or alter any proprietary notices; or exceed the usage limits of your license.",
+    "payment_title": "Payment and billing",
+    "payment_body": "All fees are due as specified in your invoice. Subscription licenses will automatically renew unless cancelled at least 7 days before the renewal date. Refunds are handled on a case-by-case basis.",
+    "support_title": "Support and updates",
+    "support_body": "Active licenses include access to software updates and technical support. Support is provided in English, French, and Arabic during business hours (Algeria timezone).",
+    "termination_title": "Termination",
+    "termination_body": "We may terminate or suspend your license immediately if you breach these Terms. Upon termination, you must cease all use of the software and destroy all copies.",
+    "liability_title": "Limitation of liability",
+    "liability_body": "Midanic shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of our software or services.",
+    "contact_title": "Contact",
+    "contact_body": "For questions about these terms, contact legal@midanic.dz."
   },
   "auth": {
     "login_title": "Welcome Back",
@@ -349,6 +431,15 @@
     "next": "Next",
     "previous": "Previous",
     "submit": "Submit",
-    "required": "Required"
+    "required": "Required",
+    "page_of": "Page {{current}} of {{total}}",
+    "dark": "Dark",
+    "light": "Light",
+    "switch_dark": "Switch to dark theme",
+    "switch_light": "Switch to light theme",
+    "page_not_found": "Page not found",
+    "page_not_found_description": "The page you’re looking for doesn’t exist or has been moved.",
+    "go_home": "Go home",
+    "go_back": "Go back"
   }
 }

@@ -11,7 +11,7 @@ export default function Products() {
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [featuredOnly, setFeaturedOnly] = useState(false);
 
-  const { data: products, isLoading } = useListProducts(
+  const { data: products, isLoading, isError, refetch } = useListProducts(
     { category, featured: featuredOnly || undefined },
   );
 
@@ -71,8 +71,13 @@ export default function Products() {
 
         {/* Products Grid */}
         {isLoading ? (
-          <div className="text-center py-12 text-muted-foreground" data-testid="text-loading">
-            {t('products.loading')}
+          <div className="grid gap-5 md:grid-cols-3" data-testid="text-loading">
+            {[0, 1, 2].map((item) => <div key={item} className="h-72 animate-pulse rounded-2xl border bg-card" />)}
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl border border-dashed p-12 text-center">
+            <p className="mb-4 text-muted-foreground">{t('common.error')}</p>
+            <Button onClick={() => refetch()}>{t('common.try_again')}</Button>
           </div>
         ) : products && products.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

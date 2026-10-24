@@ -14,7 +14,10 @@
     "register": "S'inscrire",
     "logout": "Déconnexion",
     "profile": "Profil",
-    "dashboard": "Mon Tableau de Bord"
+    "dashboard": "Mon Tableau de Bord",
+    "admin": "Administration",
+    "open_menu": "Ouvrir le menu",
+    "close_menu": "Fermer le menu"
   },
   "home": {
     "hero_title": "Des logiciels de gestion pour les entreprises modernes",
@@ -113,7 +116,8 @@
     "lifetime": "À Vie",
     "lifetime_desc": "Paiement unique, pour toujours",
     "contact_sales": "Contacter les Ventes",
-    "request_quote": "Demander un Devis"
+    "request_quote": "Demander un Devis",
+    "note": "Contactez notre équipe pour connaître les conditions disponibles pour chaque produit."
   },
   "about": {
     "page_title": "À Propos de Midanic",
@@ -128,7 +132,9 @@
     "support": "Support",
     "support_desc": "Support local dédié pour chaque client.",
     "integrity": "Intégrité",
-    "integrity_desc": "Prix transparents, service fiable, communication honnête."
+    "integrity_desc": "Prix transparents, service fiable, communication honnête.",
+    "story_copy": "Midanic accompagne les entreprises qui recherchent des logiciels pratiques pour leurs opérations quotidiennes. Notre priorité : aider les équipes à découvrir des outils pertinents et à choisir une prochaine étape claire.",
+    "mission_copy": "Nous souhaitons rendre la découverte et l'adoption des logiciels plus accessibles, avec une équipe locale à l'écoute des besoins de chaque entreprise."
   },
   "contact": {
     "page_title": "Contactez-Nous",
@@ -146,7 +152,13 @@
   "faq": {
     "page_title": "Questions Fréquemment Posées",
     "page_subtitle": "Trouvez des réponses aux questions courantes sur nos produits et services",
-    "no_results": "Aucune question trouvée"
+    "no_results": "Aucune question trouvée",
+    "items": [
+      { "question": "Comment en savoir plus sur un produit ?", "answer": "Consultez la page du produit pour découvrir sa description, ses versions et ses téléchargements disponibles. Vous pouvez aussi demander une démonstration ou contacter l'équipe." },
+      { "question": "Puis-je demander un essai ?", "answer": "Lorsqu'un produit propose un essai, une option de demande figure sur sa page. Envoyez le formulaire et l'équipe pourra vous répondre." },
+      { "question": "Comment poser une question sur les tarifs ?", "answer": "Consultez la page Tarification pour les conditions affichées, puis contactez l'équipe au sujet d'un produit." },
+      { "question": "Comment contacter l'équipe ?", "answer": "Utilisez le formulaire de contact pour transmettre votre question et vos coordonnées." }
+    ]
   },
   "help": {
     "page_title": "Centre d'Aide",
@@ -155,7 +167,12 @@
     "getting_started": "Commencer",
     "documentation": "Documentation",
     "video_tutorials": "Tutoriels Vidéo",
-    "contact_support": "Contacter le Support"
+    "contact_support": "Contacter le Support",
+    "faq_title": "Une réponse claire",
+    "faq_description": "Parcourez des réponses pratiques sur les produits, les essais et la manière de joindre l'équipe Midanic.",
+    "browse_faq": "Consulter les questions fréquentes",
+    "contact_title": "Échangez avec une personne",
+    "contact_description": "Expliquez ce que votre entreprise recherche ; notre équipe prendra le relais."
   },
   "blog": {
     "page_title": "Blog",
@@ -212,6 +229,71 @@
     "required_product_fields": "Veuillez compléter les informations obligatoires du produit.",
     "success": "Demande de démo soumise ! Nous vous contacterons pour planifier.",
     "error": "Échec de la soumission de la demande. Veuillez réessayer."
+  },
+  "dashboard": {
+    "status": { "active": "Active", "expired": "Expirée", "suspended": "Suspendue", "revoked": "Révoquée" },
+    "type": { "trial": "Essai", "monthly": "Mensuel", "quarterly": "Trimestriel", "semi_annual": "6 mois", "yearly": "Annuel", "lifetime": "À vie" },
+    "copy_key": "Copier la clé de licence",
+    "expires_in": "Expire dans {{days}} jours",
+    "expires": "Expiration",
+    "devices": "Appareils",
+    "downloads": "Téléchargements",
+    "never": "Jamais",
+    "load_error": "Impossible de charger les informations de votre compte",
+    "welcome": "Bon retour, {{name}}. Voici vos licences et téléchargements.",
+    "active_licenses": "Licences actives",
+    "available_downloads": "Téléchargements disponibles",
+    "expiring_soon": "Expirant bientôt",
+    "erp_companies": "Vos entreprises ERP",
+    "checking_erp": "Vérification de votre accès ERP…",
+    "erp": "Midanic ERP",
+    "erp_ready": "Votre espace ERP est prêt.",
+    "trial_ends": "L'essai se termine le {{date}}",
+    "erp_not_ready": "Votre accès ERP n'est pas encore prêt.",
+    "open_erp": "Ouvrir ERP",
+    "erp_pending": "Votre lien d'accès ERP apparaîtra ici après approbation.",
+    "no_active_licenses": "Aucune licence active",
+    "no_licenses_description": "Contactez-nous ou parcourez nos produits pour commencer.",
+    "browse_products": "Parcourir les produits",
+    "license_history": "Historique des licences ({{count}})"
+  },
+  "privacy": {
+    "title": "Politique de confidentialité",
+    "updated": "Dernière mise à jour : {{date}}",
+    "intro_title": "Introduction",
+    "intro_body": "Midanic (« nous », « notre » ou « nos ») s'engage à protéger votre vie privée. La présente politique explique comment nous recueillons, utilisons, divulguons et protégeons vos informations lorsque vous utilisez nos logiciels et services.",
+    "collect_title": "Informations recueillies",
+    "collect_body": "Nous recueillons les informations que vous nous fournissez directement, notamment : votre nom, votre adresse e-mail et vos coordonnées ; les informations sur votre entreprise et vos données de facturation ; les identifiants et préférences de votre compte ; vos échanges avec notre équipe d'assistance ; ainsi que les données d'utilisation et d'analyse.",
+    "use_title": "Utilisation des informations",
+    "use_body": "Nous utilisons les informations recueillies pour fournir, maintenir et améliorer nos services ; traiter les transactions et transmettre les informations associées ; envoyer des avis techniques et des messages d'assistance ; répondre à vos commentaires et questions ; et lutter contre les activités frauduleuses ou illégales.",
+    "security_title": "Sécurité des données",
+    "security_body": "Nous mettons en œuvre des mesures techniques et organisationnelles appropriées pour protéger vos données personnelles contre tout traitement non autorisé ou illicite, toute perte accidentelle, destruction ou détérioration. Toutes les données sont chiffrées en transit et au repos.",
+    "rights_title": "Vos droits",
+    "rights_body": "Vous avez le droit d'accéder à vos données personnelles ; de corriger les données inexactes ; de demander la suppression de vos données ; de vous opposer à leur traitement ; et d'exporter vos données.",
+    "contact_title": "Contact",
+    "contact_body": "Pour toute question sur cette politique, contactez privacy@midanic.dz."
+  },
+  "terms": {
+    "title": "Conditions d'utilisation",
+    "updated": "Dernière mise à jour : {{date}}",
+    "agreement_title": "Acceptation des conditions",
+    "agreement_body": "En accédant aux logiciels et services de Midanic ou en les utilisant, vous acceptez d'être lié par les présentes conditions d'utilisation. Si vous n'acceptez pas une partie de ces conditions, vous ne pouvez pas accéder à nos services.",
+    "license_title": "Licence d'utilisation",
+    "license_body": "Sous réserve du respect des présentes conditions, Midanic vous accorde une licence limitée, non exclusive et non transférable vous autorisant à utiliser ses logiciels conformément au type de licence acheté.",
+    "types_title": "Types de licence",
+    "types_body": "Essai : licence d'évaluation à durée limitée avec toutes les fonctionnalités. Mensuelle/Trimestrielle/Semestrielle/Annuelle : licences par abonnement avec renouvellement automatique. À vie : licence perpétuelle avec mises à jour continues.",
+    "restrictions_title": "Restrictions",
+    "restrictions_body": "Vous ne pouvez pas modifier, procéder à l'ingénierie inverse ou décompiler le logiciel ; le distribuer ou le revendre sans autorisation ; l'utiliser à des fins illégales ; supprimer ou modifier les mentions de propriété ; ni dépasser les limites d'utilisation de votre licence.",
+    "payment_title": "Paiement et facturation",
+    "payment_body": "Tous les frais sont dus selon les indications de votre facture. Les licences par abonnement sont renouvelées automatiquement, sauf annulation au moins 7 jours avant la date de renouvellement. Les remboursements sont traités au cas par cas.",
+    "support_title": "Assistance et mises à jour",
+    "support_body": "Les licences actives donnent accès aux mises à jour logicielles et à l'assistance technique. L'assistance est fournie en anglais, en français et en arabe pendant les heures ouvrables (fuseau horaire de l'Algérie).",
+    "termination_title": "Résiliation",
+    "termination_body": "Nous pouvons résilier ou suspendre immédiatement votre licence si vous enfreignez les présentes conditions. Après la résiliation, vous devez cesser toute utilisation du logiciel et en détruire toutes les copies.",
+    "liability_title": "Limitation de responsabilité",
+    "liability_body": "Midanic ne saurait être tenue responsable des dommages indirects, accessoires, spéciaux, consécutifs ou punitifs résultant de votre utilisation de nos logiciels ou services.",
+    "contact_title": "Contact",
+    "contact_body": "Pour toute question sur ces conditions, contactez legal@midanic.dz."
   },
   "auth": {
     "login_title": "Bon Retour",
@@ -349,6 +431,15 @@
     "next": "Suivant",
     "previous": "Précédent",
     "submit": "Soumettre",
-    "required": "Requis"
+    "required": "Requis",
+    "page_of": "Page {{current}} sur {{total}}",
+    "dark": "Sombre",
+    "light": "Clair",
+    "switch_dark": "Passer au thème sombre",
+    "switch_light": "Passer au thème clair",
+    "page_not_found": "Page introuvable",
+    "page_not_found_description": "La page recherchée n’existe pas ou a été déplacée.",
+    "go_home": "Accueil",
+    "go_back": "Retour"
   }
 }

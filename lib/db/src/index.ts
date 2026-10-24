@@ -373,18 +373,39 @@ async function ensureErpDemoData(): Promise<void> {
     );
     tenantId = created.rows[0].id;
   }
-  // Keep the built-in evaluation tenant immediately reachable from Platform.
-  // The notes predicate prevents this demo repair from touching a real tenant.
+  // Keep the built-in evaluation tenant reachable when its reserved domain is
+  // available; never claim a hostname or subdomain already owned by another
+  // tenant. The notes predicate limits this repair to the seeded demo tenant.
   await pool.query(
-    `UPDATE erp_tenants
-     SET subdomain = COALESCE(subdomain, 'demo'),
-         hostname = COALESCE(hostname, 'demo.midanic.com'),
-         domain_status = 'active',
-         domain_activated_at = COALESCE(domain_activated_at, now()),
+    `WITH demo_domain AS (
+       SELECT
+         NOT EXISTS (
+           SELECT 1 FROM erp_tenants existing
+           WHERE existing.subdomain = 'demo' AND existing.id <> $1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM erp_tenants existing
+           WHERE existing.hostname = 'demo.midanic.com' AND existing.id <> $1
+         ) AS available
+     )
+     UPDATE erp_tenants
+     SET subdomain = COALESCE(subdomain, CASE WHEN demo_domain.available THEN 'demo' END),
+         hostname = COALESCE(hostname, CASE WHEN demo_domain.available THEN 'demo.midanic.com' END),
+         domain_status = CASE
+           WHEN (subdomain IS NOT NULL AND hostname IS NOT NULL) OR demo_domain.available
+             THEN 'active'
+           ELSE domain_status
+         END,
+         domain_activated_at = CASE
+           WHEN (subdomain IS NOT NULL AND hostname IS NOT NULL) OR demo_domain.available
+             THEN COALESCE(domain_activated_at, now())
+           ELSE domain_activated_at
+         END,
          status = 'active',
          trial_started_at = COALESCE(trial_started_at, now()),
          trial_ends_at = now() + interval '7 days',
          updated_at = now()
+     FROM demo_domain
      WHERE id = $1 AND notes = 'Demo tenant created for ERP evaluation'`,
     [tenantId],
   );

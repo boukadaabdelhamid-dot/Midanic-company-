@@ -47,9 +47,7 @@ export default function About() {
             </h2>
             <div className="prose dark:prose-invert max-w-none">
               <p className="text-lg text-muted-foreground leading-relaxed">
-                Midanic was founded with a clear vision: to provide Algerian businesses with professional-grade software
-                that meets international standards while understanding local market needs. We build tools that help
-                businesses operate more efficiently, scale confidently, and compete globally.
+                {t('about.story_copy')}
               </p>
             </div>
           </section>
@@ -60,9 +58,7 @@ export default function About() {
             </h2>
             <div className="prose dark:prose-invert max-w-none">
               <p className="text-lg text-muted-foreground leading-relaxed">
-                Our mission is to empower Algerian enterprises with reliable, innovative, and user-friendly software
-                solutions. We believe that local businesses deserve world-class tools, supported by people who understand
-                their unique challenges and opportunities.
+                {t('about.mission_copy')}
               </p>
             </div>
           </section>

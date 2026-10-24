@@ -12,7 +12,7 @@ export default function ProductDetail() {
   const params = useParams();
   const slug = params.slug || '';
 
-  const { data: product, isLoading } = useGetProduct(slug);
+  const { data: product, isLoading, isError, refetch } = useGetProduct(slug);
 
   if (isLoading) {
     return (
@@ -22,10 +22,11 @@ export default function ProductDetail() {
     );
   }
 
-  if (!product) {
+  if (isError || !product) {
     return (
-      <div className="min-h-[100dvh] w-full flex items-center justify-center" data-testid="text-not-found">
-        {t('common.error')}
+      <div className="min-h-[70dvh] w-full flex flex-col items-center justify-center gap-4" data-testid="text-not-found">
+        <p>{t('common.error')}</p>
+        <Button onClick={() => refetch()}>{t('common.try_again')}</Button>
       </div>
     );
   }
